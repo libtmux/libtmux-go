@@ -300,3 +300,46 @@ func TestLayoutPreflightColdAndEmptyDaemon(t *testing.T) {
 		t.Fatalf("live empty daemon: %v", err)
 	}
 }
+
+// The gates that open at 3.8 must open on the 3.8 candidates, which report the
+// same JSON layout and the same new format fields as the release.
+//
+//libtmux:real-tmux
+func TestThreeEightGatesOpenOnTheCandidates(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := tmuxtest.NewServer(ctx, t)
+	version, err := server.Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, err := tmux.ParseVersion("3.8-rc2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantJSON := version.AtLeast(gate)
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatalf("Panes() = %d, %v", len(panes), err)
+	}
+	result, err := server.Cmd(ctx, "display-message", "-p", "-t", panes[0].ID().String(), "#{window_layout}")
+	if err != nil || len(result.Stdout) != 1 {
+		t.Fatalf("window_layout = %v, %v", result.Stdout, err)
+	}
+	if got := strings.HasPrefix(result.Stdout[0], "{"); got != wantJSON {
+		t.Fatalf("tmux %s reports JSON layout = %t (%q), want %t", version, got, result.Stdout[0], wantJSON)
+	}
+	if wantJSON {
+		if err := server.ValidateLayouts(ctx, func(yield func(string, int) bool) {
+			yield(result.Stdout[0], 1)
+		}); err != nil {
+			t.Fatalf("tmux %s refused the JSON layout it reported: %v", version, err)
+		}
+	}
+
+	_, offered := panes[0].Formats().HistoryGeneration()
+	if offered != wantJSON {
+		t.Fatalf("tmux %s offers history_generation = %t, want %t", version, offered, wantJSON)
+	}
+}

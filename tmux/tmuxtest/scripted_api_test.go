@@ -82,6 +82,37 @@ func TestScriptedTmuxRefusesWhatItWasNotGiven(t *testing.T) {
 	}
 }
 
+func TestScriptedTmuxHonorsAnExplicitDaemonVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"3.2a", "3.3", "3.3a"} {
+		t.Run(version, func(t *testing.T) {
+			binary := tmuxtest.ScriptedTmux(t,
+				tmuxtest.ScriptedCommand{Contains: []string{"-V"}, Stdout: "tmux 3.7\n"},
+				tmuxtest.ScriptedCommand{
+					Contains: []string{"#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="},
+					Stdout:   "123|456|/scripted/socket|" + version + "=\n",
+				},
+				tmuxtest.ScriptedCommand{Contains: []string{"list-sessions"}, Stdout: "$5\n"},
+			)
+			server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := server.Cmd(t.Context(), "list-sessions")
+			if version != "3.3a" {
+				if !errors.Is(err, tmux.ErrVersionTooLow) {
+					t.Fatalf("old scripted daemon error = %v, want version refusal", err)
+				}
+				return
+			}
+			if err != nil || result.ExitCode != 0 || string(result.RawStdout) != "$5\n" {
+				t.Fatalf("supported scripted daemon = %+v %v", result, err)
+			}
+		})
+	}
+}
+
 func ExampleScriptedTmux() {
 	// A real test passes its own *testing.T. This example asserts rather than
 	// only compiling, so it needs one that works outside a test: a bare T

@@ -11,9 +11,9 @@ func TestGeneratedOptionMetadataCountsAndVersions(t *testing.T) {
 	if generatedOptionSourceTag != "3.7b" {
 		t.Fatalf("generatedOptionSourceTag = %q, want 3.7b", generatedOptionSourceTag)
 	}
-	if generatedOptionFeatureFloor.String() != "3.2a" || generatedOptionFeatureCeiling.String() != "3.7" {
+	if generatedOptionFeatureFloor.String() != "3.3a" || generatedOptionFeatureCeiling.String() != "3.7" {
 		t.Fatalf(
-			"generated feature range = %s..%s, want 3.2a..3.7",
+			"generated feature range = %s..%s, want 3.3a..3.7",
 			generatedOptionFeatureFloor,
 			generatedOptionFeatureCeiling,
 		)
@@ -36,7 +36,7 @@ func TestGeneratedOptionMetadataCountsAndVersions(t *testing.T) {
 		generatedWindowHookCount,
 		generatedPaneHookCount,
 	}
-	want := [...]int{25, 54, 74, 19, 57, 57, 13, 7}
+	want := [...]int{25, 54, 74, 19, 57, 57, 11, 7}
 	if counts != want {
 		t.Fatalf("generated scope counts = %v, want %v", counts, want)
 	}

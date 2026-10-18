@@ -22,7 +22,7 @@ func TestParseVersionPreservesTokenAndComponents(t *testing.T) {
 		{name: "patch", raw: "3.10.2", major: 3, minor: 10, patch: 2},
 		{name: "release candidate", raw: "3.3-rc2", major: 3, minor: 3},
 		{name: "next", raw: "next-3.8", major: 3, minor: 8},
-		{name: "master", raw: "master", major: 3, minor: 7},
+		{name: "master", raw: "master", major: 3, minor: 8},
 		{name: "versioned master", raw: "3.6a-master", major: 3, minor: 6},
 		{name: "OpenBSD base", raw: "openbsd-7.8"},
 	}
@@ -113,13 +113,15 @@ func TestVersionCompareUsesNumericCoreAndDevelopmentOrder(t *testing.T) {
 		{name: "release letters share feature level", left: "3.7b", right: "3.7", want: 0},
 		{name: "numeric comparison", left: "3.10", right: "3.9", want: 1},
 		{name: "older", left: "3.2a", right: "3.3", want: -1},
-		{name: "master follows tested release", left: "master", right: "3.7", want: 1},
-		{name: "master precedes next numeric release", left: "master", right: "next-3.8", want: -1},
+		{name: "master follows tested release", left: "master", right: "3.8", want: 1},
+		{name: "master precedes next numeric release", left: "master", right: "next-3.9", want: -1},
 		{name: "next release precedes the release it names", left: "next-3.8", right: "3.8", want: -1},
 		{name: "next release follows the release before it", left: "next-3.8", right: "3.7", want: 1},
 		{name: "versioned master follows its core", left: "3.6a-master", right: "3.6", want: 1},
 		{name: "versioned master precedes next core", left: "3.6a-master", right: "3.7", want: -1},
-		{name: "non-master qualifier shares feature level", left: "3.3-rc2", right: "3.3", want: 0},
+		{name: "patch letter shares feature level", left: "3.3a", right: "3.3", want: 0},
+		{name: "candidate precedes its release", left: "3.3-rc2", right: "3.3", want: -1},
+		{name: "candidates order by number", left: "3.3-rc", right: "3.3-rc2", want: -1},
 	}
 
 	for _, test := range tests {

@@ -18,6 +18,65 @@ Modules are tagged per directory, so each carries its own version: the core as
   Markdown to a subcommand and flags that exist, and the `mcp` tests do the
   same for `libtmux-mcp` flags and the `LIBTMUX_` variables a command sets.
 
+### tmux
+
+- Require tmux 3.3a or newer. Every operation refuses an older daemon or
+  executable, including unpatched 3.3 and anything before 3.2, with
+  `ErrVersionTooLow` before sending anything, and a `Plan` leaves its
+  operations skipped. Upgrade tmux and restart its server, or pin the previous
+  release. (#59)
+- Check the selected daemon, not only the executable, in `Server.RequireVersion`
+  and `Server.Cmd`. A cold handle sends one extra read-only probe on its first
+  dispatch. `Server.Version` on an unbound handle and `Cmd` with `-V` or `-h`
+  still report the executable. (#59)
+- Refuse a version that names no release, such as a bare `master`, an OpenBSD
+  token or a `-dev` suffix, as unrecognized instead of too low. Releases with
+  one patch letter, `-rc` and `-rcN` candidates, and `next-X.Y` builds are
+  accepted, and candidates and development builds rank below the release they
+  name. (#59)
+- Rank `X.Y-rc` and `X.Y-rcN` below `X.Y` in `Version.Compare` and
+  `Version.AtLeast`, as `next-X.Y` already ranked, so a feature gate opens on a
+  candidate only when it names that candidate. (#59)
+- Open the JSON layout, the 3.8 format fields and the control-client popup
+  refusal from 3.8-rc2, the earliest build measured, instead of 3.8. (#59)
+- Remove `WindowHookValues.WindowLinked` and `WindowUnlinked`, which tmux
+  before 3.3 kept as window hooks. This is a breaking change for anything
+  calling them; read the hooks from `SessionHookValues`. (#59)
+- Return `3.3a` from `ControlNotificationKind.MinimumVersion` for a
+  notification every supported tmux emits, where it returned `3.2a` or `3.3`.
+  Pass the result to `Server.RequireVersion` unchanged; compare it against
+  `MinimumSupportedVersion`, not a literal. (#59)
+- Raise `MaximumTestedVersion` to `3.8`, the level a bare `master` build now
+  reports. (#59)
+- Add `ErrVersionCheckFailed`, which matches any failure of the version check;
+  a command that fails with it was never sent. (#59)
+- Add `VersionTooLowError.Reason`, the refusal without the advice to upgrade
+  or pin. (#59)
+- Stop `Session.Run` from handling tmux 3.2's dead-pane notice. Output that
+  resembles it is kept. (#59)
+- Add `FormatValues.ImageSupport` for tmux's `image_support` variable. (#59)
+- Omit `DisplayPopup`'s `NoKeys` on tmux 3.9 and later, where a popup is a
+  floating pane and the flag no longer exists. (#59)
+
+### workspace
+
+- Report a tmux below 3.3a as `tmux_unsupported`, with the fix in the message,
+  from `load`, `load --append` and `freeze`. `shell` and a Python bridge load
+  refuse it before starting Python. (#59)
+- Report a `load` whose tmux refusal or version check failure sent nothing
+  with status `error` and no retained effects, and print a refusal once in
+  text output. (#59)
+
+### mcp
+
+- Answer a refused tmux from any tool, and at startup, with the fix: restart
+  the tmux server from a newer tmux, or set `LIBTMUX_TMUX_BIN` and restart the
+  server. (#59)
+- Add `minimumVersion` to `get_server_info` and to `-doctor`. (#59)
+- Return `versionRefusal` from `get_server_info` on a refused tmux, with the
+  installed version and `alive` true while the daemon answers on its socket,
+  instead of failing. (#59)
+
 ## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
 
 ### Development

@@ -65,7 +65,7 @@ type ShowMessagesRequest struct {
 }
 
 // BindKey binds Key to Command in a tmux key table. An empty Command creates
-// a no-op binding on tmux 3.3 or newer; tmux 3.2a reports its upstream error.
+// a no-op binding.
 // It mutates the table; cancellation does not prove that tmux did not bind Key.
 func (s Server) BindKey(ctx context.Context, request BindKeyRequest) error {
 	keyTable, hasKeyTable := serverKeyOptionalString(request.KeyTable)

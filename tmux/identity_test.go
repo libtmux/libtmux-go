@@ -300,7 +300,7 @@ func (r *daemonReplacementRunner) Run(
 ) (tmuxcmd.Result, error) {
 	r.requests = append(r.requests, request)
 	if index := slices.Index(request.Arguments, "if-shell"); index >= 0 {
-		failure := request.Arguments[len(request.Arguments)-1]
+		failure := request.Arguments[index+4]
 		return tmuxcmd.Result{
 			ExitCode: 1,
 			Stderr:   []string{"unknown command: " + failure},
@@ -374,11 +374,10 @@ func TestStreamingDaemonGuardClassifiesAReplacement(t *testing.T) {
 	runner := &versionQueueRunner{responses: []versionResponse{
 		{result: tmuxcmd.Result{ExitCode: 1}},
 		{result: tmuxcmd.Result{
-			RawStdout: framedSnapshotRecord(
+			ExitCode: 1, Stderr: identityProbeStderr(
 				snapshotIdentityFields(),
 				snapshotRowValues(version, map[string]string{"pid": "999"}),
 			),
-			ExitCode: 0,
 		}},
 	}}
 	server := serverWithRunner(runner)
@@ -402,5 +401,37 @@ func TestStreamingDaemonGuardClassifiesAReplacement(t *testing.T) {
 	requests := runner.recordedRequests()
 	if len(requests) != 2 || requests[0].Stdio == nil || requests[1].Stdio != nil {
 		t.Fatalf("runner requests = %#v, want streamed command then captured identity probe", requests)
+	}
+}
+
+func TestIdentityProbeFramesOneWordWithTheSocketPathLastAndQuoted(t *testing.T) {
+	t.Parallel()
+
+	fields := coreVersionIdentityFields()
+	arguments := identityProbeArguments("libtmux-version-ab-", fields)
+	want := []string{
+		"run-shell", "-C",
+		`libtmux-version-ab-#{q:pid}|#{q:start_time}|#{q:version}|'#{s/'/'\\''/:socket_path}'=`,
+	}
+	if !slices.Equal(arguments, want) {
+		t.Fatalf("identityProbeArguments() = %#v, want %#v", arguments, want)
+	}
+	path := `/tmp/a b'c"d;e{f}|g=h\i`
+	values, ok := identityProbeReport("libtmux-version-ab-", fields, 1, []string{
+		"unknown command: libtmux-version-ab-12|34|3.3a|" + path + "=",
+	})
+	if !ok || !slices.Equal(values, []string{"12", "34", path, "3.3a"}) {
+		t.Fatalf("identityProbeReport() = (%#v, %t)", values, ok)
+	}
+	for _, stderr := range [][]string{
+		nil,
+		{"unknown command: libtmux-version-ab-12|34|3.3a|/p="[:20]},
+		{"unknown command: libtmux-version-ab-12|34|3.3a|/p=", "extra"},
+		{"unknown command: other-12|34|3.3a|/p="},
+		{"unknown command: libtmux-version-ab-12|34|3.3a|/p"},
+	} {
+		if values, ok := identityProbeReport("libtmux-version-ab-", fields, 1, stderr); ok {
+			t.Errorf("identityProbeReport(%q) = %#v, want refusal", stderr, values)
+		}
 	}
 }

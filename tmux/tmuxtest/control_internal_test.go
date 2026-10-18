@@ -78,6 +78,15 @@ func TestControlCommandPrefixPinsTheEffectiveSocketPath(t *testing.T) {
 	record := filepath.Join(root, "arguments")
 	proxy := filepath.Join(t.TempDir(), "tmux")
 	writeExecutableProxy(t, proxy, []byte(`#!/bin/sh
+case "$*" in
+    *'#{q:version}'*)
+        for argument in "$@"; do
+            case $argument in libtmux-version-*) marker=${argument%%'#{'*};; esac
+        done
+        printf 'unknown command: %s123|456|3.7d|/fixture/control.sock=\n' "$marker" >&2
+        exit 1
+        ;;
+esac
 printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
 `))
 	server := mustNewTmuxServer(t, tmux.ServerOptions{
@@ -103,6 +112,7 @@ printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
 		t.Fatalf("read proxy arguments: %v", err)
 	}
 	wantArguments := []string{
+		"-N",
 		"-u",
 		"-2",
 		"-frelative.conf",
@@ -112,6 +122,11 @@ printf '%s\n' "$@" > "$LIBTMUX_CONTROL_PREFIX_ARGUMENTS"
 		"#{pid}",
 	}
 	arguments := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if len(arguments) != 14 || arguments[5] != "if-shell" ||
+		!strings.HasPrefix(arguments[9], "__libtmux_daemon_replaced_") {
+		t.Fatalf("tmux proxy omitted the checked daemon guard: %#v", arguments)
+	}
+	arguments = append(slices.Clone(arguments[:5]), arguments[11:]...)
 	if !slices.Equal(arguments, wantArguments) {
 		t.Fatalf("tmux proxy arguments = %#v, want %#v", arguments, wantArguments)
 	}

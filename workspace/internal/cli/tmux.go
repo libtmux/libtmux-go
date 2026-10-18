@@ -40,6 +40,24 @@ func serverFor(o *options) (tmux.Server, error) {
 	return server, nil
 }
 
+// requireSupportedTmux refuses a tmux below the library's floor before a child
+// process can start one: the Python bridge and shell run their own tmux
+// through the same executable and socket.
+func requireSupportedTmux(ctx context.Context, server tmux.Server) error {
+	minimum, err := tmux.ParseVersion(tmux.MinimumSupportedVersion)
+	if err != nil {
+		return err
+	}
+	if err := server.RequireVersion(ctx, minimum); err != nil {
+		var refused *tmux.VersionTooLowError
+		if errors.As(err, &refused) {
+			return &failure{"tmux_unsupported", err.Error(), 1}
+		}
+		return err
+	}
+	return nil
+}
+
 func query(ctx context.Context, server tmux.Server, args ...string) (string, error) {
 	for _, arg := range args {
 		if arg == ";" || strings.ContainsRune(arg, 0) {
@@ -59,6 +77,9 @@ func query(ctx context.Context, server tmux.Server, args ...string) (string, err
 func findSession(ctx context.Context, server tmux.Server, target string) (tmux.Session, error) {
 	snapshot, err := server.Snapshot(ctx)
 	if err != nil {
+		if unsupportedTmux(err) {
+			return tmux.Session{}, &failure{"tmux_unsupported", err.Error(), 1}
+		}
 		// A server with zero sessions fails the underlying query outright
 		// ("no current target") instead of reporting emptiness, and a socket
 		// with no server behind it holds no session either; there is nothing
@@ -183,7 +204,7 @@ func (r *invocation) loadValidation(cmd *cobra.Command, o *options) error {
 		return usage("-2 and -8 are mutually exclusive")
 	}
 	if o.colors88 {
-		return usage("tmux 3.2a+ rejects the legacy 88-color flag (-8); remove it or use -2 for 256 colors")
+		return usage("tmux 3.3a+ rejects the legacy 88-color flag (-8); remove it or use -2 for 256 colors")
 	}
 	if r.machine() && !o.detached && !o.append {
 		return usage("machine load requires -d or explicit --append")
@@ -381,6 +402,9 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 	}
 	if needsPython {
+		if err := requireSupportedTmux(r.ctx, server); err != nil {
+			return err
+		}
 		if err := r.checkPython(true); err != nil {
 			return err
 		}
@@ -460,6 +484,15 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 				session, built, buildErr = r.build(server, session, input.plan, index)
 			}
 		}
+		if buildErr != nil && len(built) == 0 &&
+			(unsupportedTmux(buildErr) || errors.Is(buildErr, tmux.ErrVersionCheckFailed)) {
+			// A refused tmux, or a version check that could not finish, received
+			// no command, so nothing was created.
+			var noEffectErr *noEffectError
+			if !errors.As(buildErr, &noEffectErr) {
+				buildErr = &noEffectError{buildErr}
+			}
+		}
 		entry := map[string]any{"input_index": index, "input": privatePath(input.path), "session_name": input.plan.Name, "session_id": session.ID().String(), "reused": reused, "created_windows": built}
 		if buildErr != nil {
 			entry["stage"] = "failed"
@@ -467,6 +500,9 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 			// error that is not already classified (script_failed) is a
 			// tmux command failure.
 			code := "tmux_failed"
+			if unsupportedTmux(buildErr) {
+				code = "tmux_unsupported"
+			}
 			var specific *failure
 			if errors.As(buildErr, &specific) {
 				code = specific.Code
@@ -500,8 +536,14 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		r.loadResult = summary
 		if buildErr != nil {
-			if err := r.event("warning", failures[len(failures)-1]); err != nil {
-				return err
+			// A lone input that changed nothing ends on the same sentence as
+			// its error line, so text mode says it once.
+			var noEffectErr *noEffectError
+			repeated := len(inputs) == 1 && !r.machine() && errors.As(buildErr, &noEffectErr)
+			if !repeated {
+				if err := r.event("warning", failures[len(failures)-1]); err != nil {
+					return err
+				}
 			}
 		} else {
 			if err := r.event("workspace-completed", entry); err != nil {

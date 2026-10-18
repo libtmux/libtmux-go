@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -119,11 +120,13 @@ func sameMaterializedDaemon(left, right Server) bool {
 
 func (s Server) withDaemon(identity snapshotServerIdentity) Server {
 	s.daemon = &identity
+	s.startupVersion = nil
 	return s
 }
 
 func (s Server) withoutDaemon() Server {
 	s.daemon = nil
+	s.startupVersion = nil
 	return s
 }
 
@@ -131,25 +134,32 @@ func (s Server) guardCommand(
 	arguments []string,
 	commandList bool,
 ) ([]string, *daemonCommandGuard, error) {
-	if s.daemon == nil || s.boundToInstance() {
+	if (s.daemon == nil && s.startupVersion == nil) || s.boundToInstance() {
 		return arguments, nil, nil
 	}
-	thenCommand, err := encodeControlCommand(arguments, commandList)
-	if err != nil {
-		return nil, nil, err
+	if !commandList {
+		arguments = escapeCommandListSeparators(arguments)
 	}
 	guard := &daemonCommandGuard{
 		failure: "__libtmux_daemon_replaced_" + rand.Text() + "__",
 	}
-	condition := fmt.Sprintf(
-		"#{&&:#{==:#{pid},%s},#{==:#{start_time},%s},#{==:#{socket_path},%s}}",
-		s.daemon.pid,
-		s.daemon.startTime,
-		escapeFormatLiteral(s.daemon.socketPath),
-	)
-	return []string{
-		"if-shell", "-F", condition, thenCommand, guard.failure,
-	}, guard, nil
+	var condition string
+	if s.daemon == nil {
+		// A daemon can appear after the absent-socket probe. Its version must
+		// still match the executable checked to create it.
+		condition = "#{==:#{version}," + escapeFormatLiteral(s.startupVersion.String()) + "}"
+	} else {
+		// pid and start_time identify the daemon generation. The socket path
+		// is not compared: no format escaping makes tmux match every byte of
+		// it (braces never match), and a handle addresses its socket with -S.
+		condition = fmt.Sprintf(
+			"#{&&:#{==:#{pid},%s},#{==:#{start_time},%s}}",
+			s.daemon.pid,
+			s.daemon.startTime,
+		)
+	}
+	guarded := []string{"if-shell", "-F", condition, "", guard.failure, ";"}
+	return append(guarded, arguments...), guard, nil
 }
 
 func escapeFormatLiteral(value string) string {
@@ -203,26 +213,39 @@ func (s Server) probeClosingIdentity(
 }
 
 func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdentity, error) {
+	return s.probeServerIdentity(ctx, snapshotIdentityFields())
+}
+
+func (s Server) probeServerIdentity(ctx context.Context, fields []formatField) (snapshotServerIdentity, error) {
 	if s.daemon != nil {
 		return *s.daemon, nil
 	}
-	fields := snapshotIdentityFields()
-	result, rawOutput, err := s.literalCmdWithRaw(
-		ctx,
-		"display-message",
-		"-p",
-		formatTemplate(fields),
-	)
+	marker := newIdentityProbeMarker()
+	probe := s
+	probe.probesIdentity = true
+	result, err := probe.runCheckedCommand(ctx, commandServer,
+		identityProbeArguments(marker, fields), nil, false)
+	commandResult := cloneCommandResult(CommandResult{
+		Command: result.Command, Stdout: result.Stdout, RawStdout: result.RawStdout,
+		Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	if err != nil {
+		return snapshotServerIdentity{}, commandTransportFailure(err)
+	}
+	values, ok := identityProbeReport(marker, fields, result.ExitCode, result.Stderr)
+	if !ok {
+		if predatesIdentityProbe(result.ExitCode, result.Stderr) {
+			return snapshotServerIdentity{}, &VersionTooLowError{
+				Current: s.predatedVersion(ctx, result.Stderr), Minimum: minimumSupportedVersion,
+			}
+		}
+		return snapshotServerIdentity{}, newCommandError("run-shell", commandResult)
+	}
+	row, err := newFormatValues(Version{}, fields, values)
 	if err != nil {
 		return snapshotServerIdentity{}, err
 	}
-	if result.ExitCode != 0 {
-		return snapshotServerIdentity{}, newCommandError("display-message", result)
-	}
-	rows, err := decodeFormatRecords(rawOutput, Version{}, fields)
-	if err != nil {
-		return snapshotServerIdentity{}, err
-	}
+	rows := []formatValues{row}
 	if len(rows) != 1 {
 		return snapshotServerIdentity{}, newSnapshotDecodeError(
 			"server",
@@ -237,6 +260,136 @@ func (s Server) probeSnapshotIdentity(ctx context.Context) (snapshotServerIdenti
 		return snapshotServerIdentity{}, err
 	}
 	return s.normalizeSnapshotIdentityVersion(ctx, identity)
+}
+
+// predatesProbeVersion stands for any tmux before 3.2, which has no
+// run-shell -C and so cannot report its version without a hook.
+var predatesProbeVersion = Version{raw: "older than 3.2", major: 3, minor: 1}
+
+// predatedVersion names the tmux that failed the probe. A client that rejects
+// -N is the executable itself, whose own -V gives the release; a daemon that
+// cannot answer never reports one.
+func (s Server) predatedVersion(ctx context.Context, stderr []string) Version {
+	if len(stderr) < 2 || !strings.HasSuffix(stderr[0], "unknown option -- N") {
+		return predatesProbeVersion
+	}
+	version, err := s.withoutDaemon().Version(ctx)
+	if err != nil {
+		return predatesProbeVersion
+	}
+	if _, recognized := versionKey(version.raw); !recognized || version.meetsMinimum(minimumSupportedVersion) {
+		return predatesProbeVersion
+	}
+	return version
+}
+
+// predatesIdentityProbe reports the ways a tmux older than 3.2 answers
+// the probe: a client that does not know -N, a 3.1 daemon whose run-shell has
+// no -C, and a 3.0 daemon the newer client cannot talk to at all.
+func predatesIdentityProbe(exitCode int, stderr []string) bool {
+	if exitCode != 1 || len(stderr) == 0 {
+		return false
+	}
+	if len(stderr) == 1 {
+		return stderr[0] == "server version is too old for client" ||
+			strings.HasPrefix(stderr[0], "usage: run-shell ")
+	}
+	// A client without -N prints its refusal, then its own usage.
+	return strings.HasSuffix(stderr[0], "unknown option -- N") &&
+		strings.HasPrefix(stderr[1], "usage: tmux ")
+}
+
+// identityProbeMarkerPrefix opens the private word the identity probe asks
+// tmux to run. No command carries that name, so tmux refuses it and reports
+// the word, with every format already expanded, on stderr.
+const identityProbeMarkerPrefix = "libtmux-version-"
+
+// newIdentityProbeMarker is replaced only by this package's tests, which pin
+// the marker so scripted executors can answer the probe.
+var newIdentityProbeMarker = randomIdentityProbeMarker
+
+func randomIdentityProbeMarker() string {
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		panic("tmux: read random bytes: " + err.Error())
+	}
+	return identityProbeMarkerPrefix + hex.EncodeToString(random) + "-"
+}
+
+// identityProbeArguments builds the hook-free identity probe. Unlike
+// display-message, run-shell has no after-hook, and with -C the expanded
+// string fails in the parser before any command-error hook can fire.
+//
+// tmux reports only the first unparseable word, so every field expands into
+// one. The parser removes backslash quoting before it prints that word, so the
+// socket path, the only field with arbitrary bytes, is single-quoted with its
+// own quotes re-opened and goes last; the others are quoted by #{q:}.
+func identityProbeArguments(marker string, fields []formatField) []string {
+	var template strings.Builder
+	template.WriteString(marker)
+	for _, field := range identityProbeOrder(fields) {
+		if field.name == "socket_path" {
+			template.WriteString(`'#{s/'/'\\''/:socket_path}'`)
+		} else {
+			template.WriteString("#{q:" + field.name + "}")
+			template.WriteByte(formatFieldSeparator)
+		}
+	}
+	template.WriteByte(formatRecordTerminator)
+	return []string{"run-shell", "-C", template.String()}
+}
+
+// identityProbeOrder keeps the socket path, whose bytes are unconstrained,
+// last so it can be recovered without escaping rules.
+func identityProbeOrder(fields []formatField) []formatField {
+	ordered := make([]formatField, 0, len(fields))
+	for _, field := range fields {
+		if field.name != "socket_path" {
+			ordered = append(ordered, field)
+		}
+	}
+	for _, field := range fields {
+		if field.name == "socket_path" {
+			ordered = append(ordered, field)
+		}
+	}
+	return ordered
+}
+
+// identityProbeReport extracts the field values, in the order of fields, from
+// the refusal tmux prints for the probe's marker word. Anything other than one
+// matching line is not an identity report; a path with a newline is refused.
+func identityProbeReport(
+	marker string,
+	fields []formatField,
+	exitCode int,
+	stderr []string,
+) ([]string, bool) {
+	if exitCode != 1 || len(stderr) != 1 {
+		return nil, false
+	}
+	record, ok := strings.CutPrefix(stderr[0], "unknown command: "+marker)
+	if !ok {
+		return nil, false
+	}
+	record, ok = strings.CutSuffix(record, string(formatRecordTerminator))
+	if !ok {
+		return nil, false
+	}
+	ordered := identityProbeOrder(fields)
+	parts := strings.SplitN(record, string(formatFieldSeparator), len(ordered))
+	if len(parts) != len(ordered) {
+		return nil, false
+	}
+	byName := make(map[string]string, len(ordered))
+	for index, field := range ordered {
+		byName[field.name] = parts[index]
+	}
+	values := make([]string, len(fields))
+	for index, field := range fields {
+		values[index] = byName[field.name]
+	}
+	return values, true
 }
 
 func (s Server) normalizeSnapshotIdentityVersion(

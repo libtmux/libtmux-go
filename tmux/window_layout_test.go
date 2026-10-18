@@ -267,7 +267,7 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{{
-			result: tmuxcmd.Result{Stdout: []string{"tmux 3.7c"}},
+			result: layoutVersionReply("3.7c"),
 		}}}
 		err := (Window{
 			server:    serverWithRunner(runner),
@@ -279,8 +279,8 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 		if !errors.As(err, &tooLow) {
 			t.Fatalf("SelectLayout() error = %v, want *VersionTooLowError", err)
 		}
-		if tooLow.Minimum.String() != "3.8" {
-			t.Errorf("Minimum = %s, want 3.8", tooLow.Minimum)
+		if tooLow.Minimum.String() != "3.8-rc2" {
+			t.Errorf("Minimum = %s, want 3.8-rc2", tooLow.Minimum)
 		}
 		if calls := runner.callCount(); calls != 1 {
 			t.Fatalf("runner calls = %d, want 1 (version probe only, no select-layout sent)", calls)
@@ -291,7 +291,7 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.8"}}},
+			{result: layoutVersionReply("3.8")},
 			{result: tmuxcmd.Result{Stderr: []string{"stop after argv capture"}, ExitCode: 7}},
 		}}
 		err := (Window{
@@ -469,7 +469,7 @@ func TestLayoutPreflightPrefixesAndDaemonVersion(t *testing.T) {
 		}
 	}
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}}},
+		{result: layoutVersionReply("3.2a")},
 		{result: tmuxcmd.Result{}},
 	}}
 	err := (Window{server: serverWithRunner(runner), sessionID: "$7", windowID: "@8"}).SelectLayout(
@@ -477,7 +477,7 @@ func TestLayoutPreflightPrefixesAndDaemonVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelectLayout(main-h) on old daemon: %v", err)
 	}
-	assertRequestArguments(t, runner.recordedRequests()[0], []string{"display-message", "-p", "tmux #{version}"})
+	assertRequestArguments(t, runner.recordedRequests()[0], []string{"run-shell", "-C", testIdentityProbeMarker + "#{q:version}"})
 }
 
 func TestLayoutPreflightPlanRefusesEveryLayoutBeforeDispatch(t *testing.T) {
@@ -491,5 +491,24 @@ func TestLayoutPreflightPlanRefusesEveryLayoutBeforeDispatch(t *testing.T) {
 	}
 	if runner.callCount() != 0 || result.Ops[0].Status != OpSkipped {
 		t.Fatalf("unsafe plan reached tmux: calls=%d result=%+v", runner.callCount(), result)
+	}
+}
+
+// Every build that reports the JSON layout takes the JSON gate, from 3.8-rc2,
+// the earliest measured, on; 3.7c, which reports the classic grammar, refuses
+// it. A candidate ranks below its release, so the gate names the candidate.
+func TestJSONLayoutGateOpensAtTheEarliestMeasuredCandidate(t *testing.T) {
+	const jsonLayout = `{"V":2,"cells":[]}`
+	for raw, wantAccepted := range map[string]bool{
+		"3.7c": false, "3.8-rc": false, "3.8-rc2": true, "3.8-rc3": true,
+		"3.8": true, "next-3.9": true,
+	} {
+		_, err := validateLayout(jsonLayout, mustParseVersion(t, raw))
+		if accepted := err == nil; accepted != wantAccepted {
+			t.Errorf("JSON layout on %s accepted = %t (%v), want %t", raw, accepted, err, wantAccepted)
+		}
+		if got := mustParseVersion(t, raw).AtLeast(layoutJSONVersion); got != wantAccepted {
+			t.Errorf("%s reaches the JSON layout gate = %t, want %t", raw, got, wantAccepted)
+		}
 	}
 }

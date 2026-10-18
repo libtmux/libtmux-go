@@ -187,22 +187,6 @@ func TestDisplayMenuBuildsTypedItemArguments(t *testing.T) {
 func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 	t.Parallel()
 
-	t.Run("confirm-before hard floor", func(t *testing.T) {
-		t.Parallel()
-		runner := &versionQueueRunner{responses: []versionResponse{{
-			result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}},
-		}}}
-		err := degradingServerWithRunner(runner).ConfirmBefore(
-			context.Background(), ConfirmBeforeRequest{Command: "display-message no"},
-		)
-		var tooLow *VersionTooLowError
-		if !errors.As(err, &tooLow) || tooLow.Current.String() != "3.2a" ||
-			tooLow.Minimum.String() != "3.3" {
-			t.Fatalf("ConfirmBefore() error = %#v, want tmux 3.3 floor", err)
-		}
-		assertInteractiveRequests(t, runner, [][]string{{"-V"}})
-	})
-
 	t.Run("confirm-before 3.4 flags", func(t *testing.T) {
 		t.Parallel()
 		key := "a"

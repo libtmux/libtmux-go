@@ -10,10 +10,14 @@ import (
 const (
 	fixtureVersion31   = "version-3.1"
 	fixtureVersion32a  = "version-3.2a"
+	fixtureVersion33a  = "version-3.3a"
 	fixtureVersion36   = "version-3.6"
 	fixtureUnavailable = "unavailable"
 	fixtureNoServer    = "no-server"
 	fixtureHang        = "hang"
+
+	fixtureOldDaemonAppears = "old-daemon-appears"
+	flipFileEnvironment     = "LIBTMUX_MCP_TEST_FLIP_FILE"
 )
 
 func executableFixtureOptions(

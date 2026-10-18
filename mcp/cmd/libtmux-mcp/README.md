@@ -18,8 +18,12 @@ stdout.
 
 Which tmux server it serves is chosen by flags at startup and cannot be changed
 by a client, so a client reaches only the socket the operator selected.
-It requires tmux 3.2a or newer and refuses an older binary before the MCP
-transport starts.
+It requires tmux 3.3a or newer and refuses an older binary before the MCP
+transport starts. A tool that meets an older daemon later answers with an error
+result naming the floor and the fix: restart the tmux server on that socket from
+a newer tmux, or point `LIBTMUX_TMUX_BIN` at one and restart the server.
+`get_server_info` reports `minimumVersion` beside `version`, and `-doctor`
+prints both.
 
 Without a selector, it uses the dedicated socket `libtmux-mcp` and the shipped
 minimal configuration. A random launch marker proves which process created the

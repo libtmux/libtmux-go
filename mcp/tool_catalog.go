@@ -40,7 +40,7 @@ func AdvertisedToolsFor(
 ) ([]*sdk.Tool, error) {
 	alive, err := target.IsAlive(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("inspect selected tmux socket: %w", err)
+		return nil, fmt.Errorf("inspect selected tmux socket: %w", explainVersionRefusal(err))
 	}
 	var profile socketProfile
 	if defaultMinimal {

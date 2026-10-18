@@ -30,8 +30,7 @@ stopped: killed
 <!-- docs:end -->
 
 `test -t 1` held, so the command had a terminal, which one run through a pipe
-does not. tmux before 3.3 does not say which signal ended a pane, so the last
-line reads `stopped` there. The window the command ran in is removed once the
+does not. The window the command ran in is removed once the
 result is read, and the session is killed on the way out.
 
 ## What to look at
@@ -98,12 +97,7 @@ if err != nil {
 if err := <-stopped; err != nil {
 	return fmt.Errorf("stop command: %w", err)
 }
-if streamed.Signal == nil {
-	// tmux before 3.3 does not say which signal ended a pane.
-	fmt.Println("stopped")
-} else {
-	fmt.Println("stopped:", streamed.Signal)
-}
+fmt.Println("stopped:", streamed.Signal)
 ```
 
 <!-- docs:end -->

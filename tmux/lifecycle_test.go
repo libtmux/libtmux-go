@@ -341,7 +341,7 @@ func TestNewSessionBuildsEssentialArgumentsAndReturnsLiveModel(t *testing.T) {
 	name, _ := session.Name()
 	producing := session.Server()
 	if session.sessionID != "$7" || name != "alpha" ||
-		producing.connectionState().executor != runner {
+		producing.connectionState().executor != server.connectionState().executor {
 		t.Fatalf("NewSession() = %#v with name %q, want live $7 alpha model", session, name)
 	}
 
@@ -901,7 +901,7 @@ func TestCreationReturnsIdentityHandleWhenLiveLookupFails(t *testing.T) {
 					test.wantSameServer,
 				)
 			}
-			if producingServer.connectionState().executor != runner {
+			if producingServer.connectionState().executor != server.connectionState().executor {
 				t.Fatal("partial-success Server() lost the creating command executor")
 			}
 		})
@@ -965,7 +965,7 @@ func TestCreationTransportErrorPreservesPrintedIdentity(t *testing.T) {
 			if identity != test.identity {
 				t.Fatalf("transport-error identity = %q, want %q", identity, test.identity)
 			}
-			if producingServer.connectionState().executor != runner {
+			if producingServer.connectionState().executor != server.connectionState().executor {
 				t.Fatal("transport-error handle lost the creating command executor")
 			}
 			if calls := runner.callCount(); calls != 1 {
@@ -1060,7 +1060,12 @@ func TestLifecycleCreationFailuresRedactPayloads(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := test.create(serverWithRunner(&versionQueueRunner{responses: test.responses}))
+			runner := &versionQueueRunner{responses: test.responses}
+			server := serverWithRunner(runner)
+			if test.name == "floating pane" {
+				server = versionedServerWithRunner(runner)
+			}
+			err := test.create(server)
 			var commandError *CommandError
 			if !errors.As(err, &commandError) {
 				t.Fatalf("creation error = %#v, want *CommandError", err)
@@ -1579,6 +1584,12 @@ var defaultGlobalArguments = []string{"-u"}
 func withoutGlobalFlags(requests []tmuxcmd.Request) []tmuxcmd.Request {
 	stripped := slices.Clone(requests)
 	for index, request := range stripped {
+		// The identity probe never starts a daemon, so it carries -N first.
+		if len(request.Arguments) > 1 && request.Arguments[0] == "-N" &&
+			request.Arguments[1] == defaultGlobalArguments[0] {
+			request.Arguments = slices.Clone(request.Arguments[1:])
+			stripped[index] = request
+		}
 		if len(request.Arguments) == 0 ||
 			request.Arguments[0] != defaultGlobalArguments[0] {
 			continue

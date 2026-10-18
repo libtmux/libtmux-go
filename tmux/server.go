@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -161,9 +162,13 @@ import (
 // which runs raw tmux arguments and returns a [CommandResult];
 // a completed nonzero exit is a result, not an error.
 type Server struct {
-	state      *serverState
-	connection *Connection
-	daemon     *snapshotServerIdentity
+	state          *serverState
+	connection     *Connection
+	daemon         *snapshotServerIdentity
+	startupVersion *Version
+	// probesIdentity marks the private identity bootstrap, which must never
+	// start a daemon.
+	probesIdentity bool
 	// requiresProcess marks exact-output and interactive operations that cannot
 	// cross a persistent control connection.
 	requiresProcess bool
@@ -183,6 +188,25 @@ type serverState struct {
 // same daemon with different process environments.
 type serverShared struct {
 	version versionCache
+
+	checkedMu sync.Mutex
+	checked   *snapshotServerIdentity
+}
+
+// checkedDaemon returns the identity last checked at this endpoint.
+func (s *serverShared) checkedDaemon() *snapshotServerIdentity {
+	s.checkedMu.Lock()
+	defer s.checkedMu.Unlock()
+	return s.checked
+}
+
+// rememberChecked records a version-checked identity, or forgets it when nil. The
+// if-shell fence on every dispatch is what proves the record still describes
+// the live daemon.
+func (s *serverShared) rememberChecked(identity *snapshotServerIdentity) {
+	s.checkedMu.Lock()
+	defer s.checkedMu.Unlock()
+	s.checked = identity
 }
 
 // coordination returns the daemon-scoped shared state.
@@ -241,6 +265,9 @@ func (s Server) Executable() string {
 // which command produced which line submits them separately. A list means the
 // same thing through either execution binding.
 //
+// Standalone -V and -h diagnose the configured executable without daemon version
+// checks. They do not qualify a later daemon operation.
+//
 // Only a standalone ";" separates commands. Other semicolons follow the selected
 // binding's parsing; typed operations keep values literal across bindings.
 //
@@ -250,6 +277,13 @@ func (s Server) Executable() string {
 // finishes even after ctx ends. [Server.WaitFor], [Server.RunShell], and
 // [Server.IfShell] take a client of their own instead.
 func (s Server) Cmd(ctx context.Context, args ...string) (CommandResult, error) {
+	if len(args) == 1 && (args[0] == "-V" || args[0] == "-h") {
+		result, err := s.runExactArgv(ctx, args)
+		return cloneCommandResult(CommandResult{
+			Command: result.Command, Stdout: result.Stdout, RawStdout: result.RawStdout,
+			Stderr: result.Stderr, ExitCode: result.ExitCode,
+		}), err
+	}
 	result, _, err := s.dispatch(ctx, true, args...)
 	return result, err
 }

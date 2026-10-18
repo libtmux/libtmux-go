@@ -1287,10 +1287,9 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 		{Index: 0, Value: ""},
 	}}
 	tests := []struct {
-		name         string
-		versionProbe bool
-		want         [][]string
-		run          func(Server, Session, Window, Pane) (SetArrayResult, error)
+		name string
+		want [][]string
+		run  func(Server, Session, Window, Pane) (SetArrayResult, error)
 	}{
 		{
 			name: "server",
@@ -1326,10 +1325,8 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 			},
 		},
 		{
-			name:         "global window",
-			versionProbe: true,
+			name: "global window",
 			want: [][]string{
-				{"-V"},
 				{"set-option", "-g", "-w", "--", "pane-colours", ""},
 				{"set-option", "-g", "-w", "--", "pane-colours[0]", ""},
 				{"set-option", "-g", "-w", "--", "pane-colours[4]", `trailing\;`},
@@ -1339,10 +1336,8 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 			},
 		},
 		{
-			name:         "window",
-			versionProbe: true,
+			name: "window",
 			want: [][]string{
-				{"-V"},
 				{"set-option", "-t", "@8", "-w", "--", "pane-colours", ""},
 				{"set-option", "-t", "@8", "-w", "--", "pane-colours[0]", ""},
 				{"set-option", "-t", "@8", "-w", "--", "pane-colours[4]", `trailing\;`},
@@ -1352,10 +1347,8 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 			},
 		},
 		{
-			name:         "pane",
-			versionProbe: true,
+			name: "pane",
 			want: [][]string{
-				{"-V"},
 				{"set-option", "-t", "$7:.%9", "-p", "--", "pane-colours", ""},
 				{"set-option", "-t", "$7:.%9", "-p", "--", "pane-colours[0]", ""},
 				{"set-option", "-t", "$7:.%9", "-p", "--", "pane-colours[4]", `trailing\;`},
@@ -1369,11 +1362,7 @@ func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			responses := make([]versionResponse, len(test.want))
-			if test.versionProbe {
-				responses[0].result.Stdout = []string{"tmux 3.7b"}
-			}
-			runner := &versionQueueRunner{responses: responses}
+			runner := &versionQueueRunner{responses: make([]versionResponse, len(test.want))}
 			server, session, window, pane := optionTestObjects(runner)
 			result, err := test.run(server, session, window, pane)
 			if err != nil {

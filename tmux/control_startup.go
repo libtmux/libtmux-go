@@ -83,6 +83,11 @@ func (s Server) openControlWithBacklog(
 	if s.connection != nil {
 		return nil, s.connection.routeError(ctx, commandProcess)
 	}
+	checked, err := s.checkCore(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	s = checked
 	version, err := s.Version(ctx)
 	if err != nil {
 		return nil, err
@@ -144,6 +149,9 @@ func (s Server) startControlWithBacklog(
 		notifications = newControlNotificationQueue(backlog)
 	}
 	arguments := s.commandArguments(startup)
+	if s.daemon != nil {
+		arguments = append([]string{"-N"}, arguments...)
+	}
 	command := exec.Command(state.config.executable, arguments...)
 	command.Env = slices.Clone(state.config.processEnvironment)
 	command.Dir = state.config.directory

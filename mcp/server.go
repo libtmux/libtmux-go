@@ -42,7 +42,7 @@ func (i *Instance) requireTmuxVersion(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return i.runtime.base.RequireVersion(ctx, minimum)
+	return explainVersionRefusal(i.runtime.base.RequireVersion(ctx, minimum))
 }
 
 func buildVersion() string {
@@ -270,7 +270,7 @@ func Run(ctx context.Context, target tmux.Server) error {
 	}
 	alive, err := target.IsAlive(ctx)
 	if err != nil {
-		return fmt.Errorf("inspect selected tmux socket: %w", err)
+		return fmt.Errorf("inspect selected tmux socket: %w", explainVersionRefusal(err))
 	}
 	state := "absent"
 	if alive {
@@ -692,4 +692,38 @@ func toolFailure(err error) *mcp.CallToolResult {
 		IsError: true,
 		Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
 	}
+}
+
+// versionRefusalError is a tmux refusal an agent can act on: it names the
+// floor and how to meet it, and keeps the library error for errors.As.
+type versionRefusalError struct {
+	err error
+}
+
+// Error replaces the library's own remedy, which addresses a Go caller, with
+// the one that applies to this server. The library's reason already names the
+// floor.
+func (e *versionRefusalError) Error() string {
+	refused, ok := errors.AsType[*tmux.VersionTooLowError](e.err)
+	if !ok {
+		return e.err.Error()
+	}
+	remedy := refused.Reason() + "; restart the tmux server on this socket from a newer tmux, " +
+		"or set " + BinaryEnvironmentVariable + " to one and restart this server"
+	return strings.Replace(e.err.Error(), refused.Error(), remedy, 1)
+}
+
+func (e *versionRefusalError) Unwrap() error { return e.err }
+
+// explainVersionRefusal adds the remedy to a core version refusal and leaves
+// every other error, including an optional-feature refusal, alone.
+func explainVersionRefusal(err error) error {
+	if _, explained := errors.AsType[*versionRefusalError](err); explained {
+		return err
+	}
+	refused, ok := errors.AsType[*tmux.VersionTooLowError](err)
+	if !ok || refused.Feature != "" || refused.Minimum.String() != tmux.MinimumSupportedVersion {
+		return err
+	}
+	return &versionRefusalError{err: err}
 }

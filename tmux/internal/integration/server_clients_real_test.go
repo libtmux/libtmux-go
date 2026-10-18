@@ -85,7 +85,7 @@ func TestServerAccessListAgainstRealTmux(t *testing.T) {
 		t.Fatalf("ServerAccess(list after allow) error = %v", err)
 	}
 	wantAccess := other.Username + " (R)"
-	currentMinimum, parseErr := tmux.ParseVersion("3.8")
+	currentMinimum, parseErr := tmux.ParseVersion("3.8-rc2")
 	if parseErr != nil {
 		t.Fatal(parseErr)
 	}

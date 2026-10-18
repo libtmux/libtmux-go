@@ -14,7 +14,7 @@ import (
 // the last preset layout. Layout, Spread, Next, and Previous are mutually
 // exclusive and are validated before execution; an empty Layout is omitted
 // rather than passed explicitly. The request contains no retained
-// caller-owned storage and is supported on tmux 3.2a or later.
+// caller-owned storage and is supported on tmux 3.3a or later.
 type SelectLayoutRequest struct {
 	// Layout names a preset or supplies a tmux layout string - either the
 	// classic checksum-prefixed grammar every supported version accepts, or
@@ -157,12 +157,12 @@ func layoutNeedsVersion(value string) bool {
 
 var layoutMirroredVersion = Version{raw: "3.5", major: 3, minor: 5}
 
-// layoutJSONVersion is the tmux feature level at which #{window_layout}
-// switched to a JSON subset for non-control clients and select-layout learned
-// to accept that shape back, alongside the classic grammar it still accepts.
+// layoutJSONVersion is the earliest build measured to report #{window_layout}
+// as a JSON subset for non-control clients and to accept that shape back in
+// select-layout, alongside the classic grammar it still accepts: 3.8-rc2.
 // tmux CHANGES, 3.7c to 3.8: "Layout strings now use a JSON subset format
 // which includes floating panes. The old format is still accepted."
-var layoutJSONVersion = Version{raw: "3.8", major: 3, minor: 8}
+var layoutJSONVersion = Version{raw: "3.8-rc2", major: 3, minor: 8, candidate: 3}
 
 func isClassicLayout(value string) bool {
 	_, valid := layout.Cells(value)

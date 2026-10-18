@@ -281,3 +281,27 @@ func call(ctx context.Context, t *testing.T, session *sdk.ClientSession, name st
 		t.Fatalf("%s: %v (%s)", name, err, surfaceResultText(result))
 	}
 }
+
+// get_server_info is where an agent learns what the server asks of tmux, so it
+// states the floor beside the version it found.
+//
+//libtmux:real-tmux
+func TestServerInfoReportsTheTmuxFloor(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	target := tmuxtest.NewServer(ctx, t)
+	session, closeSession, err := connectExampleClient(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeSession)
+	var info struct {
+		Version        string `json:"version"`
+		MinimumVersion string `json:"minimumVersion"`
+	}
+	call(ctx, t, session, "get_server_info", nil, &info)
+	if info.MinimumVersion != tmux.MinimumSupportedVersion || info.Version == "" {
+		t.Fatalf("get_server_info = %+v, want minimumVersion %s beside a version",
+			info, tmux.MinimumSupportedVersion)
+	}
+}

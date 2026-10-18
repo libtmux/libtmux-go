@@ -25,12 +25,8 @@ func (s Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	minimum, err := ParseVersion(MinimumSupportedVersion)
-	if err != nil {
+	if err := requireSupportedVersion(identity.version); err != nil {
 		return Snapshot{}, err
-	}
-	if !identity.version.AtLeast(minimum) {
-		return Snapshot{}, &VersionTooLowError{Current: identity.version, Minimum: minimum}
 	}
 
 	type listing struct {

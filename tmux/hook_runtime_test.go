@@ -575,7 +575,6 @@ func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}, ExitCode: 0}},
 			{result: tmuxcmd.Result{ExitCode: 0}},
 			{result: tmuxcmd.Result{ExitCode: 0}},
 		}}
@@ -588,7 +587,6 @@ func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 		}
 		requests := runner.recordedRequests()
 		want := [][]string{
-			{"-V"},
 			{"set-hook", "-g", "--", "window-linked", "display-message set"},
 			{"set-hook", "-g", "-a", "--", "window-linked", "display-message append"},
 		}
@@ -605,18 +603,12 @@ func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		version string
+		probes  bool
 		run     func(Server, Session, Window) error
 	}{
 		{
-			name:    "session scope before switch",
-			version: "3.2a",
-			run: func(server Server, _ Session, _ Window) error {
-				return server.GlobalSessionScope().UnsetHook(context.Background(), "window-linked")
-			},
-		},
-		{
-			name:    "window scope after switch",
-			version: "3.3",
+			name:    "window scope of a session hook",
+			version: "3.3a",
 			run: func(_ Server, _ Session, window Window) error {
 				return window.RunHook(context.Background(), "window-linked")
 			},
@@ -624,6 +616,7 @@ func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 		{
 			name:    "hook before introduction",
 			version: "3.5",
+			probes:  true,
 			run: func(_ Server, session Session, _ Window) error {
 				return session.SetHook(context.Background(), "client-dark-theme", "display-message value")
 			},
@@ -641,6 +634,12 @@ func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 				t.Fatalf("versioned hook mutation error = %v, want ErrInvalidOption", err)
 			}
 			requests := runner.recordedRequests()
+			if !test.probes {
+				if len(requests) != 0 {
+					t.Fatalf("hook with no version dependence sent %#v, want nothing", requests)
+				}
+				return
+			}
 			if len(requests) != 1 || !slices.Equal(requests[0].Arguments, []string{"-V"}) {
 				t.Fatalf("unsupported versioned hook requests = %#v, want version probe only", requests)
 			}
@@ -848,34 +847,8 @@ func TestRawHookPreservesPassThroughAndTerminalLineFeedSemantics(t *testing.T) {
 	}
 }
 
-func TestRawIndexedHookVersionGateDisambiguatesLineFeedOnlyOutput(t *testing.T) {
+func TestRawIndexedHookDisambiguatesLineFeedOnlyOutput(t *testing.T) {
 	t.Parallel()
-
-	t.Run("3.2a treats LF-only as absent", func(t *testing.T) {
-		t.Parallel()
-
-		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{RawStdout: []byte("\n"), ExitCode: 0}},
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}, ExitCode: 0}},
-		}}
-		got, ok, err := serverWithRunner(runner).GlobalSessionScope().RawHook(context.Background(), "session-renamed[3]")
-		if err != nil || got != "" || ok {
-			t.Fatalf("RawHook(3.2a index) = (%q, %t, %v), want absent", got, ok, err)
-		}
-		requests := runner.recordedRequests()
-		want := [][]string{
-			{"show-options", "-g", "-H", "-q", "-v", "--", "session-renamed[3]"},
-			{"-V"},
-		}
-		if len(requests) != len(want) {
-			t.Fatalf("RawHook(3.2a) requests = %#v, want %#v", requests, want)
-		}
-		for index := range want {
-			if !slices.Equal(requests[index].Arguments, want[index]) {
-				t.Fatalf("RawHook(3.2a) request %d = %#v, want %#v", index, requests[index].Arguments, want[index])
-			}
-		}
-	})
 
 	for _, test := range []struct {
 		name    string
@@ -885,30 +858,28 @@ func TestRawIndexedHookVersionGateDisambiguatesLineFeedOnlyOutput(t *testing.T) 
 		{name: "present empty", listing: "session-renamed[3] \n", wantOK: true},
 		{name: "missing hole", listing: "session-renamed[7] display-message value\n"},
 	} {
-		t.Run("3.3 "+test.name, func(t *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			runner := &versionQueueRunner{responses: []versionResponse{
 				{result: tmuxcmd.Result{RawStdout: []byte("\n"), ExitCode: 0}},
-				{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}, ExitCode: 0}},
 				{result: tmuxcmd.Result{RawStdout: []byte(test.listing), ExitCode: 0}},
 			}}
 			got, ok, err := serverWithRunner(runner).GlobalSessionScope().RawHook(context.Background(), "session-renamed[3]")
 			if err != nil || got != "" || ok != test.wantOK {
-				t.Fatalf("RawHook(3.3 index) = (%q, %t, %v), want (empty, %t, nil)", got, ok, err, test.wantOK)
+				t.Fatalf("RawHook(index) = (%q, %t, %v), want (empty, %t, nil)", got, ok, err, test.wantOK)
 			}
 			requests := runner.recordedRequests()
 			want := [][]string{
 				{"show-options", "-g", "-H", "-q", "-v", "--", "session-renamed[3]"},
-				{"-V"},
 				{"show-options", "-g", "-H", "-q", "--", "session-renamed"},
 			}
 			if len(requests) != len(want) {
-				t.Fatalf("RawHook(3.3) requests = %#v, want %#v", requests, want)
+				t.Fatalf("RawHook() requests = %#v, want %#v", requests, want)
 			}
 			for index := range want {
 				if !slices.Equal(requests[index].Arguments, want[index]) {
-					t.Fatalf("RawHook(3.3) request %d = %#v, want %#v", index, requests[index].Arguments, want[index])
+					t.Fatalf("RawHook() request %d = %#v, want %#v", index, requests[index].Arguments, want[index])
 				}
 			}
 		})
@@ -1122,16 +1093,16 @@ func TestSetHooksVersionPreflightCompletesBeforeSideEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("unsupported scope version", func(t *testing.T) {
+	t.Run("hook newer than the daemon", func(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{{
-			result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}, ExitCode: 0},
+			result: tmuxcmd.Result{Stdout: []string{"tmux 3.4"}, ExitCode: 0},
 		}}}
 		server := serverWithRunner(runner)
 		result, err := server.GlobalSessionScope().SetHooks(
 			context.Background(),
-			"window-linked",
+			"command-error",
 			values,
 			SetHooksOptions{ClearExisting: true},
 		)
@@ -1145,18 +1116,18 @@ func TestSetHooksVersionPreflightCompletesBeforeSideEffects(t *testing.T) {
 		}
 	})
 
-	t.Run("supported scope version", func(t *testing.T) {
+	t.Run("hook the daemon has", func(t *testing.T) {
 		t.Parallel()
 
 		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}, ExitCode: 0}},
+			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.5"}, ExitCode: 0}},
 			{result: tmuxcmd.Result{ExitCode: 0}},
 			{result: tmuxcmd.Result{ExitCode: 0}},
 		}}
 		server := serverWithRunner(runner)
 		result, err := server.GlobalSessionScope().SetHooks(
 			context.Background(),
-			"window-linked",
+			"command-error",
 			values,
 			SetHooksOptions{ClearExisting: true},
 		)
@@ -1169,8 +1140,8 @@ func TestSetHooksVersionPreflightCompletesBeforeSideEffects(t *testing.T) {
 		requests := runner.recordedRequests()
 		want := [][]string{
 			{"-V"},
-			{"set-hook", "-g", "-u", "--", "window-linked"},
-			{"set-hook", "-g", "--", "window-linked[2]", "display-message value"},
+			{"set-hook", "-g", "-u", "--", "command-error"},
+			{"set-hook", "-g", "--", "command-error[2]", "display-message value"},
 		}
 		if len(requests) != len(want) {
 			t.Fatalf("SetHooks() requests = %#v, want %#v", requests, want)
@@ -1390,68 +1361,27 @@ func TestGlobalScopeHookOperationsBuildExactArguments(t *testing.T) {
 	}
 }
 
-func TestGlobalWindowHookVersionPreflightUsesHistoricalScope(t *testing.T) {
+// window-linked is a session hook on every supported tmux, so the window
+// scope refuses it from the table alone, without asking the daemon.
+func TestGlobalWindowScopeRefusesASessionHookWithoutAProbe(t *testing.T) {
 	t.Parallel()
 
-	t.Run("window scope on 3.2a", func(t *testing.T) {
-		t.Parallel()
-
-		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.2a"}, ExitCode: 0}},
-			{result: tmuxcmd.Result{ExitCode: 0}},
-		}}
-		err := serverWithRunner(runner).GlobalWindowScope().SetHook(
-			context.Background(), "window-linked", "display-message value",
-		)
-		if err != nil {
-			t.Fatalf("GlobalWindowScope.SetHook(3.2a) error = %v", err)
-		}
-		requests := runner.recordedRequests()
-		want := [][]string{
-			{"-V"},
-			{"set-hook", "-g", "-w", "--", "window-linked", "display-message value"},
-		}
-		if len(requests) != len(want) {
-			t.Fatalf("requests = %#v, want %#v", requests, want)
-		}
-		for index := range want {
-			if !slices.Equal(requests[index].Arguments, want[index]) {
-				t.Fatalf("request %d = %#v, want %#v", index, requests[index].Arguments, want[index])
-			}
-		}
-	})
-
-	t.Run("session scope from 3.3 shares the version cache", func(t *testing.T) {
-		t.Parallel()
-
-		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3"}, ExitCode: 0}},
-			{result: tmuxcmd.Result{ExitCode: 0}},
-		}}
-		server := serverWithRunner(runner)
-		if err := server.GlobalSessionScope().SetHook(
-			context.Background(), "window-linked", "display-message session",
-		); err != nil {
-			t.Fatalf("GlobalSessionScope.SetHook(3.3) error = %v", err)
-		}
-		err := server.GlobalWindowScope().SetHook(
-			context.Background(), "window-linked", "display-message value",
-		)
-		if !errors.Is(err, ErrInvalidOption) {
-			t.Fatalf("GlobalWindowScope.SetHook(3.3) error = %v, want ErrInvalidOption", err)
-		}
-		requests := runner.recordedRequests()
-		want := [][]string{
-			{"-V"},
-			{"set-hook", "-g", "--", "window-linked", "display-message session"},
-		}
-		if len(requests) != len(want) {
-			t.Fatalf("requests = %#v, want %#v", requests, want)
-		}
-		for index := range want {
-			if !slices.Equal(requests[index].Arguments, want[index]) {
-				t.Fatalf("request %d = %#v, want %#v", index, requests[index].Arguments, want[index])
-			}
-		}
-	})
+	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{ExitCode: 0}}}}
+	server := serverWithRunner(runner)
+	if err := server.GlobalSessionScope().SetHook(
+		context.Background(), "window-linked", "display-message session",
+	); err != nil {
+		t.Fatalf("GlobalSessionScope.SetHook() error = %v", err)
+	}
+	err := server.GlobalWindowScope().SetHook(
+		context.Background(), "window-linked", "display-message value",
+	)
+	if !errors.Is(err, ErrInvalidOption) {
+		t.Fatalf("GlobalWindowScope.SetHook() error = %v, want ErrInvalidOption", err)
+	}
+	requests := runner.recordedRequests()
+	want := [][]string{{"set-hook", "-g", "--", "window-linked", "display-message session"}}
+	if len(requests) != len(want) || !slices.Equal(requests[0].Arguments, want[0]) {
+		t.Fatalf("requests = %#v, want %#v", requests, want)
+	}
 }

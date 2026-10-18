@@ -82,12 +82,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err := <-stopped; err != nil {
 		return fmt.Errorf("stop command: %w", err)
 	}
-	if streamed.Signal == nil {
-		// tmux before 3.3 does not say which signal ended a pane.
-		fmt.Println("stopped")
-	} else {
-		fmt.Println("stopped:", streamed.Signal)
-	}
+	fmt.Println("stopped:", streamed.Signal)
 	// docs:end
 	return nil
 }

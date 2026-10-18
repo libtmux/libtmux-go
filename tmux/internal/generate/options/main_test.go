@@ -29,6 +29,7 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generateOptions() error = %v", err)
 	}
+	spec = foldToFloor(spec)
 	file, err := parser.ParseFile(token.NewFileSet(), "option_generated.go", generated, parser.ParseComments)
 	if err != nil {
 		t.Fatalf("parse generated options: %v", err)
@@ -157,9 +158,11 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 			wants := []string{
 				strconv.Quote(entry.Name),
 				entry.GoType,
-				"tmux " + variantsForScope(entry, scope)[0].Since,
 				"[" + valuesType + "." + entry.GoName + "]",
 				valuesSource,
+			}
+			if since := variantsForScope(entry, scope)[0].Since; since != "" {
+				wants = append(wants, "tmux "+since)
 			}
 			if entry.Array {
 				wants = append(wants, "replaces", "not atomic", "Serialize", "UnsetOption")
@@ -180,14 +183,14 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 		wants  []string
 	}{
 		{method: "PaneOptionValues.PaneActiveBorderStyle", wants: []string{"tmux 3.7", "style option"}},
-		{method: "PaneOptionValues.PaneBorderFormat", wants: []string{"tmux 3.3"}},
+		{method: "PaneOptionValues.PaneBorderFormat", wants: []string{"STRING"}},
 		{method: "PaneOptionValues.PaneBorderStyle", wants: []string{"tmux 3.7", "style option"}},
-		{method: "WindowOptionValues.PaneActiveBorderStyle", wants: []string{"tmux 3.2a"}},
-		{method: "WindowOptionValues.PaneBorderFormat", wants: []string{"tmux 3.2a"}},
-		{method: "WindowOptionValues.PaneBorderStyle", wants: []string{"tmux 3.2a"}},
-		{method: "WindowOptionValues.AllowPassthrough", wants: []string{"FLAG", "CHOICE", "off", "on", "all", "tmux 3.3", "tmux 3.4"}},
-		{method: "SessionHookValues.WindowLinked", wants: []string{"tmux 3.3", "including gaps"}},
-		{method: "ServerHookValues.WindowLinked", wants: []string{"tmux 3.3", "including gaps"}},
+		{method: "WindowOptionValues.PaneActiveBorderStyle", wants: []string{"STRING"}},
+		{method: "WindowOptionValues.PaneBorderFormat", wants: []string{"STRING"}},
+		{method: "WindowOptionValues.PaneBorderStyle", wants: []string{"STRING"}},
+		{method: "WindowOptionValues.AllowPassthrough", wants: []string{"FLAG", "CHOICE", "off", "on", "all", "tmux 3.4"}},
+		{method: "SessionHookValues.WindowLinked", wants: []string{"including gaps"}},
+		{method: "ServerHookValues.WindowLinked", wants: []string{"including gaps"}},
 	} {
 		doc := docs.methods[test.method]
 		for _, want := range test.wants {
@@ -221,7 +224,7 @@ func TestGeneratedOptionDocumentationIsCallerComplete(t *testing.T) {
 		if !strings.HasPrefix(doc, constant) {
 			t.Errorf("%s documentation must begin with its identifier: %s", constant, doc)
 		}
-		for _, want := range []string{"ControlNotification" + entry.GoName, entry.WireName, "tmux " + entry.Since, "ParseControlNotification"} {
+		for _, want := range []string{"ControlNotification" + entry.GoName, entry.WireName, "ParseControlNotification"} {
 			if !strings.Contains(doc, want) {
 				t.Errorf("ControlNotification%s documentation is missing %q: %s", entry.GoName, want, doc)
 			}
@@ -395,7 +398,7 @@ func mapsValues(values map[string]string) []string {
 // tmux 3.2a, 3.3a, 3.4, 3.5, 3.6, and 3.7b. It covers each option's unit,
 // which that table carries and which decides whether this package renders the
 // option as a duration.
-const pinnedSourceContractDigest = "f51ec724adbdab9fda2575398596d346c3b02b41c2165141586cb946ddfaaf71"
+const pinnedSourceContractDigest = "d64302892207f4bc3ab73b432388d9d46a4e7defd76ea2c70a96a51a76c2fe9a"
 
 var controlOnlyNotifications = []string{
 	"client-detached-control", "client-session-changed-control", "config-error",
@@ -1173,4 +1176,46 @@ func unionInventory(entries []entrySpec) (result struct {
 		}
 	}
 	return result
+}
+
+// A variant or notification first offered at or below the floor carries no
+// minimum, of the variants at or below it only the newest survives, and none
+// of them is documented as arriving in a release every supported tmux has.
+func TestFoldToFloorLeavesNoMinimumAtOrBelowTheFloor(t *testing.T) {
+	t.Parallel()
+
+	spec := validSpec()
+	spec.FeatureFloor = "3.3a"
+	spec.Options = []entrySpec{{
+		Name: "buffer-limit", GoName: "BufferLimit", GoType: "int64",
+		Variants: []variantSpec{
+			{Since: "3.2a", TmuxKind: "NUMBER", Scopes: []string{"server"}, Choices: []string{}},
+			{Since: "3.3", TmuxKind: "NUMBER", Scopes: []string{"server", "session"}, Choices: []string{}},
+			{Since: "3.4", TmuxKind: "NUMBER", Scopes: []string{"server", "session", "window"}, Choices: []string{}},
+		},
+	}}
+	spec.Aliases = nil
+	spec.Notifications[0].Since = "3.3"
+	generated, err := generateOptions(spec)
+	if err != nil {
+		t.Fatalf("generateOptions() error = %v", err)
+	}
+	text := string(generated)
+	for _, banned := range []string{`"3.2a"`, `"3.3"`, "since tmux 3.2a", "since tmux 3.3 ", "available since tmux 3.3"} {
+		if strings.Contains(text, banned) {
+			t.Errorf("generated options mention %s, a release at or below the floor", banned)
+		}
+	}
+	for _, want := range []string{
+		`{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer | generatedOptionScopeSession,`,
+		`{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer | generatedOptionScopeSession | generatedOptionScopeWindow,`,
+		`minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated options lack %q", want)
+		}
+	}
+	if got := strings.Count(text, "{minimum: Version"); got != 3 {
+		t.Errorf("generated %d variants, want two for the option (the one in force at the floor and the one after it) and one for the hook", got)
+	}
 }

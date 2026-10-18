@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -77,7 +78,8 @@ func TestInstanceConnectChecksTheMCPVersionBeforeTransport(t *testing.T) {
 		wantError error
 	}{
 		{version: "3.1", fixture: fixtureVersion31, wantError: tmux.ErrVersionTooLow},
-		{version: "3.2a", fixture: fixtureVersion32a, wantCalls: 1, wantError: errVersionGateTransportReached},
+		{version: "3.2a", fixture: fixtureVersion32a, wantError: tmux.ErrVersionTooLow},
+		{version: "3.3a", fixture: fixtureVersion33a, wantCalls: 1, wantError: errVersionGateTransportReached},
 	} {
 		t.Run(test.version, func(t *testing.T) {
 			target := mustInternalTmuxServer(t, executableFixtureOptions(t, test.fixture, tmux.ServerOptions{
@@ -94,12 +96,16 @@ func TestInstanceConnectChecksTheMCPVersionBeforeTransport(t *testing.T) {
 			if calls := transport.calls.Load(); calls != test.wantCalls {
 				t.Fatalf("transport Connect calls = %d, want %d", calls, test.wantCalls)
 			}
-			if test.version == "3.1" {
+			if errors.Is(test.wantError, tmux.ErrVersionTooLow) {
 				var tooLow *tmux.VersionTooLowError
-				if !errors.As(err, &tooLow) || tooLow.Current.String() != "3.1" ||
+				if !errors.As(err, &tooLow) || tooLow.Current.String() != test.version ||
 					tooLow.Minimum.String() != minimumTmuxVersion {
-					t.Fatalf("Connect() error = %#v, want current 3.1 and minimum %s",
-						err, minimumTmuxVersion)
+					t.Fatalf("Connect() error = %#v, want current %s and minimum %s",
+						err, test.version, minimumTmuxVersion)
+				}
+				if !strings.Contains(err.Error(), "restart the tmux server") ||
+					!strings.Contains(err.Error(), BinaryEnvironmentVariable) {
+					t.Fatalf("Connect() error = %q, want the startup remedy", err)
 				}
 			}
 		})

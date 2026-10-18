@@ -1,7 +1,7 @@
 # tmux-workspace
 
 `tmux-workspace` manages tmuxp YAML and JSON workspaces through native Go
-services. It requires Go 1.26 to build and tmux 3.2a or later to load or capture
+services. It requires Go 1.26 to build and tmux 3.3a or later to load or capture
 sessions. Discovery, conversion, import, help and documentation generation do
 not require tmux.
 
@@ -322,6 +322,7 @@ the shared ones dishonestly:
 | `child_failed` | The `shell` command's Python child (tmuxp) exited unsuccessfully. A `before_script` or plugin bridge failing during `load` is `script_failed`, not this. |
 | `editor_failed` | The editor launched for an interactive edit exited unsuccessfully. |
 | `compatibility_runtime` | The Python compatibility runtime `shell` and plugin loads depend on is missing or does not meet the version requirement. |
+| `tmux_unsupported` | The tmux in use is older than 3.3a, or reports a version that names no release. `shell` and loads that run Python refuse it before starting Python; upgrade tmux and restart its server, or pin the previous release. |
 | `client_changed` | The terminal client identified for handoff changed identity between selection and `switch-client`. |
 | `unsupported_log_file` | `--log-file` on a platform without file-logging support. |
 | `unsupported_terminal` | Terminal state restoration on a platform this binary does not support. |

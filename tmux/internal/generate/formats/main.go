@@ -21,11 +21,16 @@ import (
 
 var (
 	fieldNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	versionPattern   = regexp.MustCompile(`^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?[a-z0-9.-]*$`)
+	versionPattern   = regexp.MustCompile(`^(next-)?([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?([a-z0-9.-]*)$`)
+	candidatePattern = regexp.MustCompile(`(?:^|-)rc([0-9]*)$`)
 )
 
 type formatSpec struct {
-	Schema int         `json:"schema"`
+	Schema int `json:"schema"`
+	// Floor is the oldest tmux the package supports. A field first offered at
+	// or before it is available on every supported tmux, so it carries no
+	// minimum and its documentation names no release.
+	Floor  string      `json:"floor,omitempty"`
 	Fields []fieldSpec `json:"fields"`
 }
 
@@ -166,6 +171,11 @@ func validateFormatSpec(spec formatSpec) error {
 		"universal": true,
 		"window":    true,
 	}
+	if spec.Floor != "" {
+		if _, _, _, _, _, err := parseVersion(spec.Floor); err != nil {
+			return fmt.Errorf("format spec floor: %w", err)
+		}
+	}
 	seenNames := make(map[string]struct{}, len(spec.Fields))
 	seenAccessors := make(map[string]string, len(spec.Fields)*len(accessorReceivers))
 	for _, field := range spec.Fields {
@@ -193,7 +203,7 @@ func validateFormatSpec(spec formatSpec) error {
 				)
 			}
 		}
-		if _, _, _, err := parseVersion(field.Since); err != nil {
+		if _, _, _, _, _, err := parseVersion(field.Since); err != nil {
 			return fmt.Errorf("format field %q: %w", field.Name, err)
 		}
 		if generateFormatValuesAccessor(field) {
@@ -235,6 +245,44 @@ func validateFormatSpec(spec formatSpec) error {
 	return nil
 }
 
+// atFloor reports whether the field is offered by every supported tmux.
+func (spec formatSpec) atFloor(field fieldSpec) bool {
+	if spec.Floor == "" {
+		return false
+	}
+	fieldMajor, fieldMinor, fieldPatch, fieldDevelopment, fieldCandidate, err := parseVersion(field.Since)
+	if err != nil {
+		return false
+	}
+	floorMajor, floorMinor, floorPatch, floorDevelopment, floorCandidate, err := parseVersion(spec.Floor)
+	if err != nil {
+		return false
+	}
+	return slices.Compare(
+		versionRank(fieldMajor, fieldMinor, fieldPatch, fieldDevelopment, fieldCandidate),
+		versionRank(floorMajor, floorMinor, floorPatch, floorDevelopment, floorCandidate),
+	) <= 0
+}
+
+// versionRank mirrors the order of Version.Compare: a release outranks its
+// candidates.
+func versionRank(major, minor, patch, development, candidate int) []int {
+	final := 0
+	if candidate == 0 {
+		final = 1
+	}
+	return []int{major, minor, patch, development, final, candidate}
+}
+
+// sinceClause is the documentation tail naming the release a field first
+// appeared in, empty for one every supported tmux has.
+func (spec formatSpec) sinceClause(field fieldSpec) string {
+	if spec.atFloor(field) {
+		return ""
+	}
+	return " (tmux " + field.Since + " or later)"
+}
+
 func generateFormats(spec formatSpec) ([]byte, error) {
 	if err := validateFormatSpec(spec); err != nil {
 		return nil, err
@@ -255,17 +303,31 @@ func generateFormats(spec formatSpec) ([]byte, error) {
 	}
 	output.WriteString("var generatedFormatFields = [...]formatField{\n")
 	for _, field := range fields {
-		major, minor, patch, _ := parseVersion(field.Since)
+		minimum := "Version{}"
+		if !spec.atFloor(field) {
+			major, minor, patch, development, candidate, _ := parseVersion(field.Since)
+			// A next-X.Y build ranks below X.Y-rc and a candidate below its
+			// release, so a field first seen on either must carry that rank
+			// to be offered on it.
+			rank := ""
+			if development != 0 {
+				rank += fmt.Sprintf(", development: %d", development)
+			}
+			if candidate != 0 {
+				rank += fmt.Sprintf(", candidate: %d", candidate)
+			}
+			minimum = fmt.Sprintf(
+				"Version{raw: %s, major: %d, minor: %d, patch: %d%s}",
+				strconv.Quote(field.Since), major, minor, patch, rank,
+			)
+		}
 		fmt.Fprintf(
 			&output,
-			"{name: %s, scope: formatScope%s, kind: formatKind%s, minimum: Version{raw: %s, major: %d, minor: %d, patch: %d}},\n",
+			"{name: %s, scope: formatScope%s, kind: formatKind%s, minimum: %s},\n",
 			strconv.Quote(field.Name),
 			accessorName(field.Scope),
 			formatKindName(field.Kind),
-			strconv.Quote(field.Since),
-			major,
-			minor,
-			patch,
+			minimum,
 		)
 	}
 	output.WriteString("}\n\n")
@@ -278,12 +340,12 @@ func generateFormats(spec formatSpec) ([]byte, error) {
 		kind := accessorKinds[field.Kind]
 		fmt.Fprintf(
 			&output,
-			"// %s returns tmux #{%s} as %s from materialized %s-scoped fields (tmux %s or later).\n",
+			"// %s returns tmux #{%s} as %s from materialized %s-scoped fields%s.\n",
 			accessor,
 			field.Name,
 			kind.returnType,
 			field.Scope,
-			field.Since,
+			spec.sinceClause(field),
 		)
 		fmt.Fprintf(
 			&output,
@@ -304,13 +366,13 @@ func generateFormats(spec formatSpec) ([]byte, error) {
 			kind := accessorKinds[field.Kind]
 			fmt.Fprintf(
 				&output,
-				"// %s returns tmux #{%s} as %s from this %s's materialized %s-scoped fields (tmux %s or later).\n",
+				"// %s returns tmux #{%s} as %s from this %s's materialized %s-scoped fields%s.\n",
 				accessor,
 				field.Name,
 				kind.returnType,
 				receiver.typeName,
 				field.Scope,
-				field.Since,
+				spec.sinceClause(field),
 			)
 			fmt.Fprintf(
 				&output,
@@ -393,23 +455,36 @@ func accessorNameForReceiver(receiver string, field fieldSpec) string {
 	return accessorName(strings.TrimPrefix(field.Name, prefix))
 }
 
-func parseVersion(raw string) (int, int, int, error) {
+func parseVersion(raw string) (major, minor, patch, development, candidate int, err error) {
 	matches := versionPattern.FindStringSubmatch(raw)
 	if matches == nil {
-		return 0, 0, 0, fmt.Errorf("invalid minimum version %q", raw)
+		return 0, 0, 0, 0, 0, fmt.Errorf("invalid minimum version %q", raw)
 	}
 	parts := [3]int{}
-	for index, value := range matches[1:4] {
+	for index, value := range matches[2:5] {
 		if value == "" {
 			continue
 		}
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
-			return 0, 0, 0, fmt.Errorf("invalid minimum version %q", raw)
+			return 0, 0, 0, 0, 0, fmt.Errorf("invalid minimum version %q", raw)
 		}
 		parts[index] = parsed
 	}
-	return parts[0], parts[1], parts[2], nil
+	if matches[1] != "" {
+		development = -1
+	}
+	if rc := candidatePattern.FindStringSubmatch(matches[5]); rc != nil {
+		candidate = 1
+		if rc[1] != "" {
+			number, err := strconv.Atoi(rc[1])
+			if err != nil {
+				return 0, 0, 0, 0, 0, fmt.Errorf("invalid minimum version %q", raw)
+			}
+			candidate = number + 1
+		}
+	}
+	return parts[0], parts[1], parts[2], development, candidate, nil
 }
 
 // accessorName converts a tmux format token to its generated Go accessor name

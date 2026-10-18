@@ -1,4 +1,5 @@
 {
+  "floor": "3.3a",
   "fields": [
     {
       "name": "active_window_index",
@@ -318,7 +319,7 @@
     {
       "name": "history_added",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
@@ -336,13 +337,13 @@
     {
       "name": "history_collected",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
       "name": "history_generation",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
@@ -368,6 +369,12 @@
       "scope": "universal",
       "since": "3.2a",
       "kind": "string"
+    },
+    {
+      "name": "image_support",
+      "scope": "universal",
+      "since": "next-3.9",
+      "kind": "bool"
     },
     {
       "name": "insert_flag",
@@ -498,7 +505,7 @@
     {
       "name": "pane_command_running",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "bool"
     },
     {
@@ -624,7 +631,7 @@
     {
       "name": "pane_modal_flag",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "bool"
     },
     {
@@ -636,7 +643,7 @@
     {
       "name": "pane_output_generation",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
@@ -680,7 +687,7 @@
     {
       "name": "pane_private_modes",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "string"
     },
     {
@@ -704,7 +711,7 @@
     {
       "name": "pane_start_command_list",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "string"
     },
     {
@@ -752,13 +759,13 @@
     {
       "name": "pane_unzoomed_height",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
       "name": "pane_unzoomed_width",
       "scope": "pane",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
@@ -1192,13 +1199,13 @@
     {
       "name": "window_manual_height",
       "scope": "window",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {
       "name": "window_manual_width",
       "scope": "window",
-      "since": "3.8",
+      "since": "3.8-rc2",
       "kind": "int"
     },
     {

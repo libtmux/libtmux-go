@@ -5,8 +5,8 @@ import (
 	"strconv"
 )
 
-// LinkWindowRequest configures linking a window into another session on tmux
-// 3.2a or later. Its zero value is invalid because TargetSession is required.
+// LinkWindowRequest configures linking a window into another session on every
+// supported tmux. Its zero value is invalid because TargetSession is required.
 // Nil TargetIndex asks tmux for a destination index; a nonnil value is
 // explicit and must be nonnegative. After and Before are mutually exclusive
 // and are rejected before execution. TargetIndex is read during the call and
@@ -27,7 +27,7 @@ type LinkWindowRequest struct {
 	Detach bool
 }
 
-// UnlinkWindowRequest configures unlinking one exact winlink on tmux 3.2a or
+// UnlinkWindowRequest configures unlinking one exact winlink on tmux 3.3a or
 // later. Its zero value removes the link only when the stable window has
 // another link. The request contains no retained caller-owned storage and has
 // no invalid field combinations.
@@ -37,7 +37,7 @@ type UnlinkWindowRequest struct {
 	KillIfLast bool
 }
 
-// MoveWindowRequest configures moving one exact winlink on tmux 3.2a or later.
+// MoveWindowRequest configures moving one exact winlink on tmux 3.3a or later.
 // Its zero value moves the receiver within its current session to a tmux-chosen
 // index and lets the moved winlink become current. Nil TargetIndex asks tmux
 // for that index; a nonnil value is explicit and must be nonnegative. After

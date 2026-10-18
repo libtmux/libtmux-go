@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -176,6 +177,9 @@ func (r *invocation) commandFailure(err error) *failure {
 	}
 	if err == nil {
 		return nil
+	}
+	if unsupportedTmux(err) {
+		code = "tmux_unsupported"
 	}
 	f := &failure{code, err.Error(), 1}
 	var specific *failure
@@ -391,7 +395,7 @@ func (r *invocation) tree() *cobra.Command {
 	f.BoolVarP(&l.detached, "detached", "d", false, "load without attaching")
 	f.BoolVarP(&l.append, "append", "a", false, "append windows to the current session")
 	f.BoolVarP(&l.colors256, "256-colors", "2", false, "request 256 terminal colors")
-	f.BoolVarP(&l.colors88, "88-colors", "8", false, "legacy 88-color request; unsupported by tmux 3.2a+ (default false)")
+	f.BoolVarP(&l.colors88, "88-colors", "8", false, "legacy 88-color request; unsupported by tmux 3.3a+ (default false)")
 	f.StringVar(&l.logFile, "log-file", "", "append JSON diagnostics: info lifecycle, debug script output (default empty: disabled)")
 	f.StringVar(&l.progressFormat, "progress-format", "", "progress preset or token format; TMUXP_PROGRESS_FORMAT (default default)")
 	f.IntVar(&l.progressLines, "progress-lines", 3, "script panel lines; 0 direct output, -1 terminal height; TMUXP_PROGRESS_LINES (default 3)")
@@ -604,4 +608,12 @@ func commandMetadata(cmd *cobra.Command) map[string]any {
 		children = append(children, commandMetadata(child))
 	}
 	return map[string]any{"name": cmd.Name(), "path": cmd.CommandPath(), "usage": cmd.Use, "description": cmd.Short, "aliases": cmd.Aliases, "positionals": cmd.Annotations, "flags": flags, "inherited_flags": inherited, "children": children}
+}
+
+// unsupportedTmux reports a refusal of the tmux in use: older than the floor,
+// or a version that names no release. Its message carries the remedy, so the
+// caller keeps the message and only the code names the cause.
+func unsupportedTmux(err error) bool {
+	var refused *tmux.VersionTooLowError
+	return errors.As(err, &refused) && refused.Feature == ""
 }

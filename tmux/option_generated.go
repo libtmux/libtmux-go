@@ -984,7 +984,7 @@ const (
 	generatedOptionSourceTag  = "3.7b"
 )
 
-var generatedOptionFeatureFloor = Version{raw: "3.2a", major: 3, minor: 2, patch: 0}
+var generatedOptionFeatureFloor = Version{raw: "3.3a", major: 3, minor: 3, patch: 0}
 
 var generatedOptionFeatureCeiling = Version{raw: "3.7", major: 3, minor: 7, patch: 0}
 
@@ -999,66 +999,66 @@ var generatedOptionAliases = [...]generatedOptionAlias{
 
 var generatedOptionDefinitions = [...]generatedOptionDefinition{
 	{name: "activity-action", goName: "ActivityAction", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"none", "any", "current", "other"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"none", "any", "current", "other"}},
 	}},
 	{name: "aggressive-resize", goName: "AggressiveResize", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "allow-passthrough", goName: "AllowPassthrough", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 		{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{"off", "on", "all"}},
 	}},
 	{name: "allow-rename", goName: "AllowRename", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "allow-set-title", goName: "AllowSetTitle", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.5", major: 3, minor: 5, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "alternate-screen", goName: "AlternateScreen", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "assume-paste-time", goName: "AssumePasteTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "automatic-rename", goName: "AutomaticRename", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "automatic-rename-format", goName: "AutomaticRenameFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "backspace", goName: "Backspace", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindKey, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindKey, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "base-index", goName: "BaseIndex", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "bell-action", goName: "BellAction", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"none", "any", "current", "other"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"none", "any", "current", "other"}},
 	}},
 	{name: "buffer-limit", goName: "BufferLimit", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "clock-mode-colour", goName: "ClockModeColour", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "clock-mode-style", goName: "ClockModeStyle", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"12", "24"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"12", "24"}},
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"12", "24", "12-with-seconds", "24-with-seconds"}},
 	}},
 	{name: "codepoint-widths", goName: "CodepointWidths", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "command-alias", goName: "CommandAlias", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "copy-command", goName: "CopyCommand", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "copy-mode-current-line-number-style", goName: "CopyModeCurrentLineNumberStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "copy-mode-current-match-style", goName: "CopyModeCurrentMatchStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "copy-mode-line-number-style", goName: "CopyModeLineNumberStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
@@ -1067,10 +1067,10 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"off", "default", "absolute", "relative", "hybrid"}},
 	}},
 	{name: "copy-mode-mark-style", goName: "CopyModeMarkStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "copy-mode-match-style", goName: "CopyModeMatchStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "copy-mode-position-format", goName: "CopyModePositionFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
@@ -1082,69 +1082,69 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "cursor-colour", goName: "CursorColour", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "cursor-style", goName: "CursorStyle", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{"default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{"default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"}},
 	}},
 	{name: "default-client-command", goName: "DefaultClientCommand", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "default-command", goName: "DefaultCommand", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "default-shell", goName: "DefaultShell", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "default-size", goName: "DefaultSize", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "default-terminal", goName: "DefaultTerminal", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "destroy-unattached", goName: "DestroyUnattached", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
 		{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "keep-last", "keep-group"}},
 	}},
 	{name: "detach-on-destroy", goName: "DetachOnDestroy", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "no-detached"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "no-detached"}},
 		{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "no-detached", "previous", "next"}},
 	}},
 	{name: "display-panes-active-colour", goName: "DisplayPanesActiveColour", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "display-panes-colour", goName: "DisplayPanesColour", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "display-panes-time", goName: "DisplayPanesTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "display-time", goName: "DisplayTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "editor", goName: "Editor", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "escape-time", goName: "EscapeTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "exit-empty", goName: "ExitEmpty", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "exit-unattached", goName: "ExitUnattached", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "extended-keys", goName: "ExtendedKeys", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeServer, choices: []string{"off", "on", "always"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeServer, choices: []string{"off", "on", "always"}},
 	}},
 	{name: "extended-keys-format", goName: "ExtendedKeysFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.5", major: 3, minor: 5, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeServer, choices: []string{"csi-u", "xterm"}},
 	}},
 	{name: "fill-character", goName: "FillCharacter", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "focus-events", goName: "FocusEvents", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "focus-follows-mouse", goName: "FocusFollowsMouse", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
@@ -1153,10 +1153,10 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeServer, choices: []string{"off", "buffer", "request", "both"}},
 	}},
 	{name: "history-file", goName: "HistoryFile", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "history-limit", goName: "HistoryLimit", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "initial-repeat-time", goName: "InitialRepeatTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
@@ -1165,19 +1165,19 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "key-table", goName: "KeyTable", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "lock-after-time", goName: "LockAfterTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "lock-command", goName: "LockCommand", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "main-pane-height", goName: "MainPaneHeight", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "main-pane-width", goName: "MainPaneWidth", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "menu-border-lines", goName: "MenuBorderLines", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"single", "double", "heavy", "simple", "rounded", "padded", "none"}},
@@ -1192,71 +1192,70 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "message-command-style", goName: "MessageCommandStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "message-format", goName: "MessageFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "message-limit", goName: "MessageLimit", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "message-line", goName: "MessageLine", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"0", "1", "2", "3", "4"}},
 	}},
 	{name: "message-style", goName: "MessageStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "mode-keys", goName: "ModeKeys", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"emacs", "vi"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"emacs", "vi"}},
 	}},
 	{name: "mode-style", goName: "ModeStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "monitor-activity", goName: "MonitorActivity", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "monitor-bell", goName: "MonitorBell", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "monitor-silence", goName: "MonitorSilence", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "mouse", goName: "Mouse", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "other-pane-height", goName: "OtherPaneHeight", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "other-pane-width", goName: "OtherPaneWidth", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "pane-active-border-style", goName: "PaneActiveBorderStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-base-index", goName: "PaneBaseIndex", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "pane-border-format", goName: "PaneBorderFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-border-indicators", goName: "PaneBorderIndicators", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"off", "colour", "arrows", "both"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"off", "colour", "arrows", "both"}},
 	}},
 	{name: "pane-border-lines", goName: "PaneBorderLines", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"single", "double", "heavy", "simple", "number"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"single", "double", "heavy", "simple", "number"}},
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"single", "double", "heavy", "simple", "number", "spaces"}},
 	}},
 	{name: "pane-border-status", goName: "PaneBorderStatus", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"off", "top", "bottom"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"off", "top", "bottom"}},
 	}},
 	{name: "pane-border-style", goName: "PaneBorderStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-colours", goName: "PaneColours", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-scrollbars", goName: "PaneScrollbars", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"off", "modal", "on"}},
@@ -1274,22 +1273,22 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "popup-border-lines", goName: "PopupBorderLines", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"single", "double", "heavy", "simple", "rounded", "padded", "none"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"single", "double", "heavy", "simple", "rounded", "padded", "none"}},
 	}},
 	{name: "popup-border-style", goName: "PopupBorderStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "popup-style", goName: "PopupStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "prefix", goName: "Prefix", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindKey, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindKey, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "prefix-timeout", goName: "PrefixTimeout", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.5", major: 3, minor: 5, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "prefix2", goName: "Prefix2", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindKey, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindKey, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "prompt-command-cursor-style", goName: "PromptCommandCursorStyle", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"}},
@@ -1301,23 +1300,23 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"}},
 	}},
 	{name: "prompt-history-limit", goName: "PromptHistoryLimit", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "remain-on-exit", goName: "RemainOnExit", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{"off", "on", "failed"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{"off", "on", "failed"}},
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{"off", "on", "failed", "key"}},
 	}},
 	{name: "remain-on-exit-format", goName: "RemainOnExitFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "renumber-windows", goName: "RenumberWindows", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "repeat-time", goName: "RepeatTime", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "scroll-on-clear", goName: "ScrollOnClear", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "session-status-current-style", goName: "SessionStatusCurrentStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
@@ -1326,70 +1325,70 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "set-clipboard", goName: "SetClipboard", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeServer, choices: []string{"off", "external", "on"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeServer, choices: []string{"off", "external", "on"}},
 	}},
 	{name: "set-titles", goName: "SetTitles", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "set-titles-string", goName: "SetTitlesString", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "silence-action", goName: "SilenceAction", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"none", "any", "current", "other"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"none", "any", "current", "other"}},
 	}},
 	{name: "status", goName: "Status", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "2", "3", "4", "5"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "2", "3", "4", "5"}},
 	}},
 	{name: "status-bg", goName: "StatusBG", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-fg", goName: "StatusFG", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindColour, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-format", goName: "StatusFormat", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-interval", goName: "StatusInterval", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-justify", goName: "StatusJustify", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"left", "centre", "right", "absolute-centre"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"left", "centre", "right", "absolute-centre"}},
 	}},
 	{name: "status-keys", goName: "StatusKeys", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"emacs", "vi"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"emacs", "vi"}},
 	}},
 	{name: "status-left", goName: "StatusLeft", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-left-length", goName: "StatusLeftLength", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-left-style", goName: "StatusLeftStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-position", goName: "StatusPosition", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"top", "bottom"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"top", "bottom"}},
 	}},
 	{name: "status-right", goName: "StatusRight", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-right-length", goName: "StatusRightLength", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-right-style", goName: "StatusRightStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "status-style", goName: "StatusStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "synchronize-panes", goName: "SynchronizePanes", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "terminal-features", goName: "TerminalFeatures", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "terminal-overrides", goName: "TerminalOverrides", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "tiled-layout-max-columns", goName: "TiledLayoutMaxColumns", valueKind: generatedOptionValueKindInt64, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindNumber, scopes: generatedOptionScopeWindow, choices: []string{}},
@@ -1401,25 +1400,25 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "update-environment", goName: "UpdateEnvironment", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "user-keys", goName: "UserKeys", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "variation-selector-always-wide", goName: "VariationSelectorAlwaysWide", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeServer, choices: []string{}},
 	}},
 	{name: "visual-activity", goName: "VisualActivity", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "both"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "both"}},
 	}},
 	{name: "visual-bell", goName: "VisualBell", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "both"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "both"}},
 	}},
 	{name: "visual-silence", goName: "VisualSilence", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "both"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeSession, choices: []string{"off", "on", "both"}},
 	}},
 	{name: "window-active-style", goName: "WindowActiveStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "window-pane-current-status-format", goName: "WindowPaneCurrentStatusFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
@@ -1428,276 +1427,274 @@ var generatedOptionDefinitions = [...]generatedOptionDefinition{
 		{minimum: Version{raw: "3.7", major: 3, minor: 7, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-size", goName: "WindowSize", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"largest", "smallest", "manual", "latest"}},
+		{minimum: Version{}, kind: generatedOptionKindChoice, scopes: generatedOptionScopeWindow, choices: []string{"largest", "smallest", "manual", "latest"}},
 	}},
 	{name: "window-status-activity-style", goName: "WindowStatusActivityStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-bell-style", goName: "WindowStatusBellStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-current-format", goName: "WindowStatusCurrentFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-current-style", goName: "WindowStatusCurrentStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-format", goName: "WindowStatusFormat", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-last-style", goName: "WindowStatusLastStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-separator", goName: "WindowStatusSeparator", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-status-style", goName: "WindowStatusStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-style", goName: "WindowStyle", valueKind: generatedOptionValueKindString, array: false, style: true, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "word-separators", goName: "WordSeparators", valueKind: generatedOptionValueKindString, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindString, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "wrap-search", goName: "WrapSearch", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "xterm-keys", goName: "XTermKeys", valueKind: generatedOptionValueKindBool, array: false, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindFlag, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 }
 
 var generatedHookDefinitions = [...]generatedOptionDefinition{
 	{name: "after-bind-key", goName: "AfterBindKey", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-capture-pane", goName: "AfterCapturePane", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-copy-mode", goName: "AfterCopyMode", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-display-message", goName: "AfterDisplayMessage", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-display-panes", goName: "AfterDisplayPanes", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-kill-pane", goName: "AfterKillPane", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-list-buffers", goName: "AfterListBuffers", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-list-clients", goName: "AfterListClients", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-list-keys", goName: "AfterListKeys", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-list-panes", goName: "AfterListPanes", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-list-sessions", goName: "AfterListSessions", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-list-windows", goName: "AfterListWindows", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-load-buffer", goName: "AfterLoadBuffer", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-lock-server", goName: "AfterLockServer", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-new-session", goName: "AfterNewSession", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-new-window", goName: "AfterNewWindow", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-paste-buffer", goName: "AfterPasteBuffer", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-pipe-pane", goName: "AfterPipePane", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-queue", goName: "AfterQueue", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-refresh-client", goName: "AfterRefreshClient", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-rename-session", goName: "AfterRenameSession", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-rename-window", goName: "AfterRenameWindow", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-resize-pane", goName: "AfterResizePane", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-resize-window", goName: "AfterResizeWindow", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-save-buffer", goName: "AfterSaveBuffer", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-select-layout", goName: "AfterSelectLayout", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-select-pane", goName: "AfterSelectPane", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-select-window", goName: "AfterSelectWindow", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-send-keys", goName: "AfterSendKeys", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-set-buffer", goName: "AfterSetBuffer", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-set-environment", goName: "AfterSetEnvironment", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-set-hook", goName: "AfterSetHook", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-set-option", goName: "AfterSetOption", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-show-environment", goName: "AfterShowEnvironment", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-show-messages", goName: "AfterShowMessages", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-show-options", goName: "AfterShowOptions", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-split-window", goName: "AfterSplitWindow", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "after-unbind-key", goName: "AfterUnbindKey", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "alert-activity", goName: "AlertActivity", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "alert-bell", goName: "AlertBell", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "alert-silence", goName: "AlertSilence", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-active", goName: "ClientActive", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-attached", goName: "ClientAttached", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-dark-theme", goName: "ClientDarkTheme", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-detached", goName: "ClientDetached", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-focus-in", goName: "ClientFocusIn", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-focus-out", goName: "ClientFocusOut", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-light-theme", goName: "ClientLightTheme", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.6", major: 3, minor: 6, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-resized", goName: "ClientResized", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "client-session-changed", goName: "ClientSessionChanged", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "command-error", goName: "CommandError", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
 		{minimum: Version{raw: "3.5", major: 3, minor: 5, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "pane-died", goName: "PaneDied", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-exited", goName: "PaneExited", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-focus-in", goName: "PaneFocusIn", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-focus-out", goName: "PaneFocusOut", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-mode-changed", goName: "PaneModeChanged", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-set-clipboard", goName: "PaneSetClipboard", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "pane-title-changed", goName: "PaneTitleChanged", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow | generatedOptionScopePane, choices: []string{}},
 	}},
 	{name: "session-closed", goName: "SessionClosed", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "session-created", goName: "SessionCreated", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "session-renamed", goName: "SessionRenamed", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "session-window-changed", goName: "SessionWindowChanged", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "window-layout-changed", goName: "WindowLayoutChanged", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-linked", goName: "WindowLinked", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 	{name: "window-pane-changed", goName: "WindowPaneChanged", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-renamed", goName: "WindowRenamed", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-resized", goName: "WindowResized", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
 	}},
 	{name: "window-unlinked", goName: "WindowUnlinked", valueKind: generatedOptionValueKindSparseString, array: true, style: false, variants: []generatedOptionVariant{
-		{minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeWindow, choices: []string{}},
-		{minimum: Version{raw: "3.3", major: 3, minor: 3, patch: 0}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
+		{minimum: Version{}, kind: generatedOptionKindCommand, scopes: generatedOptionScopeSession, choices: []string{}},
 	}},
 }
 
 const (
-	// ControlNotificationClientDetached identifies the %client-detached notification, available since tmux 3.2a. Its wire grammar is %client-detached <client>.
+	// ControlNotificationClientDetached identifies the %client-detached notification. Its wire grammar is %client-detached <client>.
 	// ParseControlNotification returns its arguments as client tail.
 	ControlNotificationClientDetached ControlNotificationKind = "%client-detached"
-	// ControlNotificationClientSessionChanged identifies the %client-session-changed notification, available since tmux 3.2a. Its wire grammar is %client-session-changed <client> <session ID> <session name>.
+	// ControlNotificationClientSessionChanged identifies the %client-session-changed notification. Its wire grammar is %client-session-changed <client> <session ID> <session name>.
 	// ParseControlNotification returns its arguments as client, session ID, session name tail.
 	ControlNotificationClientSessionChanged ControlNotificationKind = "%client-session-changed"
 	// ControlNotificationConfigError identifies the %config-error notification, available since tmux 3.4. Its wire grammar is %config-error <text>.
 	// ParseControlNotification returns its arguments as text tail.
 	ControlNotificationConfigError ControlNotificationKind = "%config-error"
-	// ControlNotificationContinue identifies the %continue notification, available since tmux 3.2a. Its wire grammar is %continue <pane ID>.
+	// ControlNotificationContinue identifies the %continue notification. Its wire grammar is %continue <pane ID>.
 	// ParseControlNotification returns its arguments as pane ID.
 	ControlNotificationContinue ControlNotificationKind = "%continue"
-	// ControlNotificationExit identifies the %exit notification, available since tmux 3.2a. Its wire grammar is %exit or %exit <reason>.
+	// ControlNotificationExit identifies the %exit notification. Its wire grammar is %exit or %exit <reason>.
 	// ParseControlNotification returns its arguments as reason tail.
 	ControlNotificationExit ControlNotificationKind = "%exit"
-	// ControlNotificationExtendedOutput identifies the %extended-output notification, available since tmux 3.2a. Its wire grammar is %extended-output <pane ID> <age> { zero or more <reserved argument> } : <data>.
+	// ControlNotificationExtendedOutput identifies the %extended-output notification. Its wire grammar is %extended-output <pane ID> <age> { zero or more <reserved argument> } : <data>.
 	// ParseControlNotification returns its arguments as the prefix arguments, then zero or more reserved arguments, then the data tail; the prefix arguments are pane ID, age.
 	// Its tail may be empty.
 	ControlNotificationExtendedOutput ControlNotificationKind = "%extended-output"
-	// ControlNotificationLayoutChange identifies the %layout-change notification, available since tmux 3.2a. Its wire grammar is %layout-change <window ID> <layout> <visible layout> <flags>.
+	// ControlNotificationLayoutChange identifies the %layout-change notification. Its wire grammar is %layout-change <window ID> <layout> <visible layout> <flags>.
 	// ParseControlNotification returns its arguments as window ID, layout, visible layout, flags tail.
 	// Its tail may be empty.
 	ControlNotificationLayoutChange ControlNotificationKind = "%layout-change"
@@ -1705,11 +1702,11 @@ const (
 	// ParseControlNotification returns its arguments as text tail.
 	// Its tail may be empty.
 	ControlNotificationMessage ControlNotificationKind = "%message"
-	// ControlNotificationOutput identifies the %output notification, available since tmux 3.2a. Its wire grammar is %output <pane ID> <data>.
+	// ControlNotificationOutput identifies the %output notification. Its wire grammar is %output <pane ID> <data>.
 	// ParseControlNotification returns its arguments as pane ID, data tail.
 	// Its tail may be empty.
 	ControlNotificationOutput ControlNotificationKind = "%output"
-	// ControlNotificationPaneModeChanged identifies the %pane-mode-changed notification, available since tmux 3.2a. Its wire grammar is %pane-mode-changed <pane ID>.
+	// ControlNotificationPaneModeChanged identifies the %pane-mode-changed notification. Its wire grammar is %pane-mode-changed <pane ID>.
 	// ParseControlNotification returns its arguments as pane ID.
 	ControlNotificationPaneModeChanged ControlNotificationKind = "%pane-mode-changed"
 	// ControlNotificationPasteBufferChanged identifies the %paste-buffer-changed notification, available since tmux 3.4. Its wire grammar is %paste-buffer-changed <name>.
@@ -1718,78 +1715,79 @@ const (
 	// ControlNotificationPasteBufferDeleted identifies the %paste-buffer-deleted notification, available since tmux 3.4. Its wire grammar is %paste-buffer-deleted <name>.
 	// ParseControlNotification returns its arguments as name tail.
 	ControlNotificationPasteBufferDeleted ControlNotificationKind = "%paste-buffer-deleted"
-	// ControlNotificationPause identifies the %pause notification, available since tmux 3.2a. Its wire grammar is %pause <pane ID>.
+	// ControlNotificationPause identifies the %pause notification. Its wire grammar is %pause <pane ID>.
 	// ParseControlNotification returns its arguments as pane ID.
 	ControlNotificationPause ControlNotificationKind = "%pause"
-	// ControlNotificationSessionChanged identifies the %session-changed notification, available since tmux 3.2a. Its wire grammar is %session-changed <session ID> <session name>.
+	// ControlNotificationSessionChanged identifies the %session-changed notification. Its wire grammar is %session-changed <session ID> <session name>.
 	// ParseControlNotification returns its arguments as session ID, session name tail.
 	ControlNotificationSessionChanged ControlNotificationKind = "%session-changed"
-	// ControlNotificationSessionRenamed identifies the %session-renamed notification, available since tmux 3.2a. Its wire grammar is %session-renamed <session ID> <session name>.
+	// ControlNotificationSessionRenamed identifies the %session-renamed notification. Its wire grammar is %session-renamed <session ID> <session name>.
 	// ParseControlNotification returns its arguments as session ID, session name tail.
 	ControlNotificationSessionRenamed ControlNotificationKind = "%session-renamed"
-	// ControlNotificationSessionWindowChanged identifies the %session-window-changed notification, available since tmux 3.2a. Its wire grammar is %session-window-changed <session ID> <window ID>.
+	// ControlNotificationSessionWindowChanged identifies the %session-window-changed notification. Its wire grammar is %session-window-changed <session ID> <window ID>.
 	// ParseControlNotification returns its arguments as session ID, window ID.
 	ControlNotificationSessionWindowChanged ControlNotificationKind = "%session-window-changed"
-	// ControlNotificationSessionsChanged identifies the %sessions-changed notification, available since tmux 3.2a. Its wire grammar is %sessions-changed.
+	// ControlNotificationSessionsChanged identifies the %sessions-changed notification. Its wire grammar is %sessions-changed.
 	// ParseControlNotification returns its arguments as no arguments.
 	ControlNotificationSessionsChanged ControlNotificationKind = "%sessions-changed"
-	// ControlNotificationSubscriptionChanged identifies the %subscription-changed notification, available since tmux 3.2a. Its wire grammar is %subscription-changed <name> <session ID> <window ID> <window index> <pane ID> { zero or more <reserved argument> } : <value>.
+	// ControlNotificationSubscriptionChanged identifies the %subscription-changed notification. Its wire grammar is %subscription-changed <name> <session ID> <window ID> <window index> <pane ID> { zero or more <reserved argument> } : <value>.
 	// ParseControlNotification returns its arguments as the prefix arguments, then zero or more reserved arguments, then the value tail; the prefix arguments are name, session ID, window ID, window index, pane ID.
 	// Its tail may be empty.
 	ControlNotificationSubscriptionChanged ControlNotificationKind = "%subscription-changed"
-	// ControlNotificationUnlinkedWindowAdd identifies the %unlinked-window-add notification, available since tmux 3.2a. Its wire grammar is %unlinked-window-add <window ID>.
+	// ControlNotificationUnlinkedWindowAdd identifies the %unlinked-window-add notification. Its wire grammar is %unlinked-window-add <window ID>.
 	// ParseControlNotification returns its arguments as window ID.
 	ControlNotificationUnlinkedWindowAdd ControlNotificationKind = "%unlinked-window-add"
-	// ControlNotificationUnlinkedWindowClose identifies the %unlinked-window-close notification, available since tmux 3.2a. Its wire grammar is %unlinked-window-close <window ID>.
+	// ControlNotificationUnlinkedWindowClose identifies the %unlinked-window-close notification. Its wire grammar is %unlinked-window-close <window ID>.
 	// ParseControlNotification returns its arguments as window ID.
 	ControlNotificationUnlinkedWindowClose ControlNotificationKind = "%unlinked-window-close"
-	// ControlNotificationUnlinkedWindowRenamed identifies the %unlinked-window-renamed notification, available since tmux 3.2a. Its wire grammar is %unlinked-window-renamed <window ID> <name>.
+	// ControlNotificationUnlinkedWindowRenamed identifies the %unlinked-window-renamed notification. Its wire grammar is %unlinked-window-renamed <window ID> <name>.
 	// ParseControlNotification returns its arguments as window ID, name tail.
 	ControlNotificationUnlinkedWindowRenamed ControlNotificationKind = "%unlinked-window-renamed"
-	// ControlNotificationWindowAdd identifies the %window-add notification, available since tmux 3.2a. Its wire grammar is %window-add <window ID>.
+	// ControlNotificationWindowAdd identifies the %window-add notification. Its wire grammar is %window-add <window ID>.
 	// ParseControlNotification returns its arguments as window ID.
 	ControlNotificationWindowAdd ControlNotificationKind = "%window-add"
-	// ControlNotificationWindowClose identifies the %window-close notification, available since tmux 3.2a. Its wire grammar is %window-close <window ID>.
+	// ControlNotificationWindowClose identifies the %window-close notification. Its wire grammar is %window-close <window ID>.
 	// ParseControlNotification returns its arguments as window ID.
 	ControlNotificationWindowClose ControlNotificationKind = "%window-close"
-	// ControlNotificationWindowPaneChanged identifies the %window-pane-changed notification, available since tmux 3.2a. Its wire grammar is %window-pane-changed <window ID> <pane ID>.
+	// ControlNotificationWindowPaneChanged identifies the %window-pane-changed notification. Its wire grammar is %window-pane-changed <window ID> <pane ID>.
 	// ParseControlNotification returns its arguments as window ID, pane ID.
 	ControlNotificationWindowPaneChanged ControlNotificationKind = "%window-pane-changed"
-	// ControlNotificationWindowRenamed identifies the %window-renamed notification, available since tmux 3.2a. Its wire grammar is %window-renamed <window ID> <name>.
+	// ControlNotificationWindowRenamed identifies the %window-renamed notification. Its wire grammar is %window-renamed <window ID> <name>.
 	// ParseControlNotification returns its arguments as window ID, name tail.
 	ControlNotificationWindowRenamed ControlNotificationKind = "%window-renamed"
 )
 
 var generatedControlNotificationDefinitions = [...]generatedControlNotificationDefinition{
-	{kind: ControlNotificationClientDetached, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
-	{kind: ControlNotificationClientSessionChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
+	{kind: ControlNotificationClientDetached, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
+	{kind: ControlNotificationClientSessionChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
 	{kind: ControlNotificationConfigError, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
-	{kind: ControlNotificationContinue, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationExit, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailOptional, allowEmptyTail: false},
-	{kind: ControlNotificationExtendedOutput, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailColon, allowEmptyTail: true},
-	{kind: ControlNotificationLayoutChange, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 3, tail: generatedControlNotificationTailRequired, allowEmptyTail: true},
+	{kind: ControlNotificationContinue, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationExit, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailOptional, allowEmptyTail: false},
+	{kind: ControlNotificationExtendedOutput, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailColon, allowEmptyTail: true},
+	{kind: ControlNotificationLayoutChange, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 3, tail: generatedControlNotificationTailRequired, allowEmptyTail: true},
 	{kind: ControlNotificationMessage, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailRequired, allowEmptyTail: true},
-	{kind: ControlNotificationOutput, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: true},
-	{kind: ControlNotificationPaneModeChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationOutput, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: true},
+	{kind: ControlNotificationPaneModeChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
 	{kind: ControlNotificationPasteBufferChanged, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
 	{kind: ControlNotificationPasteBufferDeleted, minimum: Version{raw: "3.4", major: 3, minor: 4, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
-	{kind: ControlNotificationPause, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationSessionChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
-	{kind: ControlNotificationSessionRenamed, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
-	{kind: ControlNotificationSessionWindowChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationSessionsChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationSubscriptionChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 5, tail: generatedControlNotificationTailColon, allowEmptyTail: true},
-	{kind: ControlNotificationUnlinkedWindowAdd, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationUnlinkedWindowClose, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationUnlinkedWindowRenamed, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
-	{kind: ControlNotificationWindowAdd, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationWindowClose, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationWindowPaneChanged, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
-	{kind: ControlNotificationWindowRenamed, minimum: Version{raw: "3.2a", major: 3, minor: 2, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
+	{kind: ControlNotificationPause, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationSessionChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
+	{kind: ControlNotificationSessionRenamed, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
+	{kind: ControlNotificationSessionWindowChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationSessionsChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 0, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationSubscriptionChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 5, tail: generatedControlNotificationTailColon, allowEmptyTail: true},
+	{kind: ControlNotificationUnlinkedWindowAdd, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationUnlinkedWindowClose, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationUnlinkedWindowRenamed, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
+	{kind: ControlNotificationWindowAdd, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationWindowClose, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationWindowPaneChanged, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 2, tail: generatedControlNotificationTailNone, allowEmptyTail: false},
+	{kind: ControlNotificationWindowRenamed, minimum: Version{raw: "3.3a", major: 3, minor: 3, patch: 0}, prefixArguments: 1, tail: generatedControlNotificationTailRequired, allowEmptyTail: false},
 }
 
-// MinimumVersion returns the oldest [Version] that emits k. It returns ok == false
-// for the zero value and unknown kinds.
+// MinimumVersion returns the oldest supported [Version] that emits k, which is
+// [MinimumSupportedVersion] for a notification every supported tmux emits. It
+// returns ok == false for the zero value and unknown kinds.
 func (k ControlNotificationKind) MinimumVersion() (Version, bool) {
 	for _, definition := range generatedControlNotificationDefinitions {
 		if definition.kind == k {
@@ -1806,7 +1804,7 @@ const (
 	generatedPaneOptionCount    = 19
 	generatedServerHookCount    = 57
 	generatedSessionHookCount   = 57
-	generatedWindowHookCount    = 13
+	generatedWindowHookCount    = 11
 	generatedPaneHookCount      = 7
 )
 
@@ -1842,11 +1840,11 @@ type ServerOptionValues struct {
 }
 
 // Backspace returns materialized "backspace" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
-// Available as KEY since tmux 3.2a; set it with [Server.SetBackspace].
+// Available as KEY; set it with [Server.SetBackspace].
 func (v ServerOptionValues) Backspace() OptionValue[string] { return v.backspace }
 
 // BufferLimit returns materialized "buffer-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Server.SetBufferLimit].
+// Available as NUMBER; set it with [Server.SetBufferLimit].
 func (v ServerOptionValues) BufferLimit() OptionValue[int64] { return v.bufferLimit }
 
 // CodepointWidths returns materialized "codepoint-widths" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
@@ -1857,12 +1855,12 @@ func (v ServerOptionValues) CodepointWidths() OptionValue[SparseArray[string]] {
 }
 
 // CommandAlias returns materialized "command-alias" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetCommandAlias].
+// Available as STRING; set it with [Server.SetCommandAlias].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) CommandAlias() OptionValue[SparseArray[string]] { return v.commandAlias }
 
 // CopyCommand returns materialized "copy-command" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetCopyCommand].
+// Available as STRING; set it with [Server.SetCopyCommand].
 func (v ServerOptionValues) CopyCommand() OptionValue[string] { return v.copyCommand }
 
 // DefaultClientCommand returns materialized "default-client-command" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
@@ -1870,27 +1868,27 @@ func (v ServerOptionValues) CopyCommand() OptionValue[string] { return v.copyCom
 func (v ServerOptionValues) DefaultClientCommand() OptionValue[string] { return v.defaultClientCommand }
 
 // DefaultTerminal returns materialized "default-terminal" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetDefaultTerminal].
+// Available as STRING; set it with [Server.SetDefaultTerminal].
 func (v ServerOptionValues) DefaultTerminal() OptionValue[string] { return v.defaultTerminal }
 
 // Editor returns materialized "editor" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetEditor].
+// Available as STRING; set it with [Server.SetEditor].
 func (v ServerOptionValues) Editor() OptionValue[string] { return v.editor }
 
 // EscapeTime returns materialized "escape-time" as [OptionValue] with value type OptionValue[time.Duration] from server option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Server.SetEscapeTime].
+// Available as NUMBER; set it with [Server.SetEscapeTime].
 func (v ServerOptionValues) EscapeTime() OptionValue[time.Duration] { return v.escapeTime }
 
 // ExitEmpty returns materialized "exit-empty" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Server.SetExitEmpty].
+// Available as FLAG; set it with [Server.SetExitEmpty].
 func (v ServerOptionValues) ExitEmpty() OptionValue[bool] { return v.exitEmpty }
 
 // ExitUnattached returns materialized "exit-unattached" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Server.SetExitUnattached].
+// Available as FLAG; set it with [Server.SetExitUnattached].
 func (v ServerOptionValues) ExitUnattached() OptionValue[bool] { return v.exitUnattached }
 
 // ExtendedKeys returns materialized "extended-keys" as [OptionValue] with value type OptionValue[ExtendedKeys] from server option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "always"); set it with [Server.SetExtendedKeys].
+// Available as CHOICE (choices: "off", "on", "always"); set it with [Server.SetExtendedKeys].
 func (v ServerOptionValues) ExtendedKeys() OptionValue[ExtendedKeys] { return v.extendedKeys }
 
 // ExtendedKeysFormat returns materialized "extended-keys-format" as [OptionValue] with value type OptionValue[ExtendedKeysFormat] from server option values; it does not query tmux.
@@ -1900,7 +1898,7 @@ func (v ServerOptionValues) ExtendedKeysFormat() OptionValue[ExtendedKeysFormat]
 }
 
 // FocusEvents returns materialized "focus-events" as [OptionValue] with value type OptionValue[bool] from server option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Server.SetFocusEvents].
+// Available as FLAG; set it with [Server.SetFocusEvents].
 func (v ServerOptionValues) FocusEvents() OptionValue[bool] { return v.focusEvents }
 
 // GetClipboard returns materialized "get-clipboard" as [OptionValue] with value type OptionValue[GetClipboard] from server option values; it does not query tmux.
@@ -1908,7 +1906,7 @@ func (v ServerOptionValues) FocusEvents() OptionValue[bool] { return v.focusEven
 func (v ServerOptionValues) GetClipboard() OptionValue[GetClipboard] { return v.getClipboard }
 
 // HistoryFile returns materialized "history-file" as [OptionValue] with value type OptionValue[string] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetHistoryFile].
+// Available as STRING; set it with [Server.SetHistoryFile].
 func (v ServerOptionValues) HistoryFile() OptionValue[string] { return v.historyFile }
 
 // InputBufferSize returns materialized "input-buffer-size" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
@@ -1916,7 +1914,7 @@ func (v ServerOptionValues) HistoryFile() OptionValue[string] { return v.history
 func (v ServerOptionValues) InputBufferSize() OptionValue[int64] { return v.inputBufferSize }
 
 // MessageLimit returns materialized "message-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Server.SetMessageLimit].
+// Available as NUMBER; set it with [Server.SetMessageLimit].
 func (v ServerOptionValues) MessageLimit() OptionValue[int64] { return v.messageLimit }
 
 // PrefixTimeout returns materialized "prefix-timeout" as [OptionValue] with value type OptionValue[time.Duration] from server option values; it does not query tmux.
@@ -1924,29 +1922,29 @@ func (v ServerOptionValues) MessageLimit() OptionValue[int64] { return v.message
 func (v ServerOptionValues) PrefixTimeout() OptionValue[time.Duration] { return v.prefixTimeout }
 
 // PromptHistoryLimit returns materialized "prompt-history-limit" as [OptionValue] with value type OptionValue[int64] from server option values; it does not query tmux.
-// Available as NUMBER since tmux 3.3; set it with [Server.SetPromptHistoryLimit].
+// Available as NUMBER; set it with [Server.SetPromptHistoryLimit].
 func (v ServerOptionValues) PromptHistoryLimit() OptionValue[int64] { return v.promptHistoryLimit }
 
 // SetClipboard returns materialized "set-clipboard" as [OptionValue] with value type OptionValue[SetClipboard] from server option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "external", "on"); set it with [Server.SetClipboard].
+// Available as CHOICE (choices: "off", "external", "on"); set it with [Server.SetClipboard].
 func (v ServerOptionValues) SetClipboard() OptionValue[SetClipboard] { return v.setClipboard }
 
 // TerminalFeatures returns materialized "terminal-features" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetTerminalFeatures].
+// Available as STRING; set it with [Server.SetTerminalFeatures].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) TerminalFeatures() OptionValue[SparseArray[string]] {
 	return v.terminalFeatures
 }
 
 // TerminalOverrides returns materialized "terminal-overrides" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetTerminalOverrides].
+// Available as STRING; set it with [Server.SetTerminalOverrides].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) TerminalOverrides() OptionValue[SparseArray[string]] {
 	return v.terminalOverrides
 }
 
 // UserKeys returns materialized "user-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from server option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Server.SetUserKeys].
+// Available as STRING; set it with [Server.SetUserKeys].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerOptionValues) UserKeys() OptionValue[SparseArray[string]] { return v.userKeys }
 
@@ -2076,59 +2074,59 @@ type SessionOptionValues struct {
 }
 
 // ActivityAction returns materialized "activity-action" as [OptionValue] with value type OptionValue[ActivityAction] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetActivityAction] or [GlobalSessionScope.SetActivityAction].
+// Available as CHOICE (choices: "none", "any", "current", "other"); set it with [Session.SetActivityAction] or [GlobalSessionScope.SetActivityAction].
 func (v SessionOptionValues) ActivityAction() OptionValue[ActivityAction] { return v.activityAction }
 
 // AssumePasteTime returns materialized "assume-paste-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetAssumePasteTime] or [GlobalSessionScope.SetAssumePasteTime].
+// Available as NUMBER; set it with [Session.SetAssumePasteTime] or [GlobalSessionScope.SetAssumePasteTime].
 func (v SessionOptionValues) AssumePasteTime() OptionValue[time.Duration] { return v.assumePasteTime }
 
 // BaseIndex returns materialized "base-index" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetBaseIndex] or [GlobalSessionScope.SetBaseIndex].
+// Available as NUMBER; set it with [Session.SetBaseIndex] or [GlobalSessionScope.SetBaseIndex].
 func (v SessionOptionValues) BaseIndex() OptionValue[int64] { return v.baseIndex }
 
 // BellAction returns materialized "bell-action" as [OptionValue] with value type OptionValue[BellAction] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetBellAction] or [GlobalSessionScope.SetBellAction].
+// Available as CHOICE (choices: "none", "any", "current", "other"); set it with [Session.SetBellAction] or [GlobalSessionScope.SetBellAction].
 func (v SessionOptionValues) BellAction() OptionValue[BellAction] { return v.bellAction }
 
 // DefaultCommand returns materialized "default-command" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetDefaultCommand] or [GlobalSessionScope.SetDefaultCommand].
+// Available as STRING; set it with [Session.SetDefaultCommand] or [GlobalSessionScope.SetDefaultCommand].
 func (v SessionOptionValues) DefaultCommand() OptionValue[string] { return v.defaultCommand }
 
 // DefaultShell returns materialized "default-shell" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetDefaultShell] or [GlobalSessionScope.SetDefaultShell].
+// Available as STRING; set it with [Session.SetDefaultShell] or [GlobalSessionScope.SetDefaultShell].
 func (v SessionOptionValues) DefaultShell() OptionValue[string] { return v.defaultShell }
 
 // DefaultSize returns materialized "default-size" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetDefaultSize] or [GlobalSessionScope.SetDefaultSize].
+// Available as STRING; set it with [Session.SetDefaultSize] or [GlobalSessionScope.SetDefaultSize].
 func (v SessionOptionValues) DefaultSize() OptionValue[string] { return v.defaultSize }
 
 // DestroyUnattached returns materialized "destroy-unattached" as [OptionValue] with value type OptionValue[DestroyUnattached] from session option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; CHOICE since tmux 3.4 (choices: "off", "on", "keep-last", "keep-group"); set it with [Session.SetDestroyUnattached] or [GlobalSessionScope.SetDestroyUnattached].
+// Available as FLAG; CHOICE since tmux 3.4 (choices: "off", "on", "keep-last", "keep-group"); set it with [Session.SetDestroyUnattached] or [GlobalSessionScope.SetDestroyUnattached].
 func (v SessionOptionValues) DestroyUnattached() OptionValue[DestroyUnattached] {
 	return v.destroyUnattached
 }
 
 // DetachOnDestroy returns materialized "detach-on-destroy" as [OptionValue] with value type OptionValue[DetachOnDestroy] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "no-detached"); CHOICE since tmux 3.4 (choices: "off", "on", "no-detached", "previous", "next"); set it with [Session.SetDetachOnDestroy] or [GlobalSessionScope.SetDetachOnDestroy].
+// Available as CHOICE (choices: "off", "on", "no-detached"); CHOICE since tmux 3.4 (choices: "off", "on", "no-detached", "previous", "next"); set it with [Session.SetDetachOnDestroy] or [GlobalSessionScope.SetDetachOnDestroy].
 func (v SessionOptionValues) DetachOnDestroy() OptionValue[DetachOnDestroy] { return v.detachOnDestroy }
 
 // DisplayPanesActiveColour returns materialized "display-panes-active-colour" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as COLOUR since tmux 3.2a; set it with [Session.SetDisplayPanesActiveColour] or [GlobalSessionScope.SetDisplayPanesActiveColour].
+// Available as COLOUR; set it with [Session.SetDisplayPanesActiveColour] or [GlobalSessionScope.SetDisplayPanesActiveColour].
 func (v SessionOptionValues) DisplayPanesActiveColour() OptionValue[string] {
 	return v.displayPanesActiveColour
 }
 
 // DisplayPanesColour returns materialized "display-panes-colour" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as COLOUR since tmux 3.2a; set it with [Session.SetDisplayPanesColour] or [GlobalSessionScope.SetDisplayPanesColour].
+// Available as COLOUR; set it with [Session.SetDisplayPanesColour] or [GlobalSessionScope.SetDisplayPanesColour].
 func (v SessionOptionValues) DisplayPanesColour() OptionValue[string] { return v.displayPanesColour }
 
 // DisplayPanesTime returns materialized "display-panes-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetDisplayPanesTime] or [GlobalSessionScope.SetDisplayPanesTime].
+// Available as NUMBER; set it with [Session.SetDisplayPanesTime] or [GlobalSessionScope.SetDisplayPanesTime].
 func (v SessionOptionValues) DisplayPanesTime() OptionValue[time.Duration] { return v.displayPanesTime }
 
 // DisplayTime returns materialized "display-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetDisplayTime] or [GlobalSessionScope.SetDisplayTime].
+// Available as NUMBER; set it with [Session.SetDisplayTime] or [GlobalSessionScope.SetDisplayTime].
 func (v SessionOptionValues) DisplayTime() OptionValue[time.Duration] { return v.displayTime }
 
 // FocusFollowsMouse returns materialized "focus-follows-mouse" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
@@ -2136,7 +2134,7 @@ func (v SessionOptionValues) DisplayTime() OptionValue[time.Duration] { return v
 func (v SessionOptionValues) FocusFollowsMouse() OptionValue[bool] { return v.focusFollowsMouse }
 
 // HistoryLimit returns materialized "history-limit" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetHistoryLimit] or [GlobalSessionScope.SetHistoryLimit].
+// Available as NUMBER; set it with [Session.SetHistoryLimit] or [GlobalSessionScope.SetHistoryLimit].
 func (v SessionOptionValues) HistoryLimit() OptionValue[int64] { return v.historyLimit }
 
 // InitialRepeatTime returns materialized "initial-repeat-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
@@ -2146,19 +2144,19 @@ func (v SessionOptionValues) InitialRepeatTime() OptionValue[time.Duration] {
 }
 
 // KeyTable returns materialized "key-table" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetKeyTable] or [GlobalSessionScope.SetKeyTable].
+// Available as STRING; set it with [Session.SetKeyTable] or [GlobalSessionScope.SetKeyTable].
 func (v SessionOptionValues) KeyTable() OptionValue[string] { return v.keyTable }
 
 // LockAfterTime returns materialized "lock-after-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetLockAfterTime] or [GlobalSessionScope.SetLockAfterTime].
+// Available as NUMBER; set it with [Session.SetLockAfterTime] or [GlobalSessionScope.SetLockAfterTime].
 func (v SessionOptionValues) LockAfterTime() OptionValue[time.Duration] { return v.lockAfterTime }
 
 // LockCommand returns materialized "lock-command" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetLockCommand] or [GlobalSessionScope.SetLockCommand].
+// Available as STRING; set it with [Session.SetLockCommand] or [GlobalSessionScope.SetLockCommand].
 func (v SessionOptionValues) LockCommand() OptionValue[string] { return v.lockCommand }
 
 // MessageCommandStyle returns materialized "message-command-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetMessageCommandStyle] or [GlobalSessionScope.SetMessageCommandStyle].
+// Available as STRING; set it with [Session.SetMessageCommandStyle] or [GlobalSessionScope.SetMessageCommandStyle].
 // It is a style option.
 func (v SessionOptionValues) MessageCommandStyle() OptionValue[string] { return v.messageCommandStyle }
 
@@ -2171,20 +2169,20 @@ func (v SessionOptionValues) MessageFormat() OptionValue[string] { return v.mess
 func (v SessionOptionValues) MessageLine() OptionValue[MessageLine] { return v.messageLine }
 
 // MessageStyle returns materialized "message-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetMessageStyle] or [GlobalSessionScope.SetMessageStyle].
+// Available as STRING; set it with [Session.SetMessageStyle] or [GlobalSessionScope.SetMessageStyle].
 // It is a style option.
 func (v SessionOptionValues) MessageStyle() OptionValue[string] { return v.messageStyle }
 
 // Mouse returns materialized "mouse" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Session.SetMouse] or [GlobalSessionScope.SetMouse].
+// Available as FLAG; set it with [Session.SetMouse] or [GlobalSessionScope.SetMouse].
 func (v SessionOptionValues) Mouse() OptionValue[bool] { return v.mouse }
 
 // Prefix returns materialized "prefix" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as KEY since tmux 3.2a; set it with [Session.SetPrefix] or [GlobalSessionScope.SetPrefix].
+// Available as KEY; set it with [Session.SetPrefix] or [GlobalSessionScope.SetPrefix].
 func (v SessionOptionValues) Prefix() OptionValue[string] { return v.prefix }
 
 // Prefix2 returns materialized "prefix2" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as KEY since tmux 3.2a; set it with [Session.SetPrefix2] or [GlobalSessionScope.SetPrefix2].
+// Available as KEY; set it with [Session.SetPrefix2] or [GlobalSessionScope.SetPrefix2].
 func (v SessionOptionValues) Prefix2() OptionValue[string] { return v.prefix2 }
 
 // PromptCommandCursorStyle returns materialized "prompt-command-cursor-style" as [OptionValue] with value type OptionValue[PromptCommandCursorStyle] from session option values; it does not query tmux.
@@ -2204,110 +2202,110 @@ func (v SessionOptionValues) PromptCursorStyle() OptionValue[PromptCursorStyle] 
 }
 
 // RenumberWindows returns materialized "renumber-windows" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Session.SetRenumberWindows] or [GlobalSessionScope.SetRenumberWindows].
+// Available as FLAG; set it with [Session.SetRenumberWindows] or [GlobalSessionScope.SetRenumberWindows].
 func (v SessionOptionValues) RenumberWindows() OptionValue[bool] { return v.renumberWindows }
 
 // RepeatTime returns materialized "repeat-time" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetRepeatTime] or [GlobalSessionScope.SetRepeatTime].
+// Available as NUMBER; set it with [Session.SetRepeatTime] or [GlobalSessionScope.SetRepeatTime].
 func (v SessionOptionValues) RepeatTime() OptionValue[time.Duration] { return v.repeatTime }
 
 // SetTitles returns materialized "set-titles" as [OptionValue] with value type OptionValue[bool] from session option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Session.SetTitles] or [GlobalSessionScope.SetTitles].
+// Available as FLAG; set it with [Session.SetTitles] or [GlobalSessionScope.SetTitles].
 func (v SessionOptionValues) SetTitles() OptionValue[bool] { return v.setTitles }
 
 // SetTitlesString returns materialized "set-titles-string" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetTitlesString] or [GlobalSessionScope.SetTitlesString].
+// Available as STRING; set it with [Session.SetTitlesString] or [GlobalSessionScope.SetTitlesString].
 func (v SessionOptionValues) SetTitlesString() OptionValue[string] { return v.setTitlesString }
 
 // SilenceAction returns materialized "silence-action" as [OptionValue] with value type OptionValue[SilenceAction] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "none", "any", "current", "other"); set it with [Session.SetSilenceAction] or [GlobalSessionScope.SetSilenceAction].
+// Available as CHOICE (choices: "none", "any", "current", "other"); set it with [Session.SetSilenceAction] or [GlobalSessionScope.SetSilenceAction].
 func (v SessionOptionValues) SilenceAction() OptionValue[SilenceAction] { return v.silenceAction }
 
 // Status returns materialized "status" as [OptionValue] with value type OptionValue[Status] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "2", "3", "4", "5"); set it with [Session.SetStatus] or [GlobalSessionScope.SetStatus].
+// Available as CHOICE (choices: "off", "on", "2", "3", "4", "5"); set it with [Session.SetStatus] or [GlobalSessionScope.SetStatus].
 func (v SessionOptionValues) Status() OptionValue[Status] { return v.status }
 
 // StatusBG returns materialized "status-bg" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as COLOUR since tmux 3.2a; set it with [Session.SetStatusBG] or [GlobalSessionScope.SetStatusBG].
+// Available as COLOUR; set it with [Session.SetStatusBG] or [GlobalSessionScope.SetStatusBG].
 func (v SessionOptionValues) StatusBG() OptionValue[string] { return v.statusBG }
 
 // StatusFG returns materialized "status-fg" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as COLOUR since tmux 3.2a; set it with [Session.SetStatusFG] or [GlobalSessionScope.SetStatusFG].
+// Available as COLOUR; set it with [Session.SetStatusFG] or [GlobalSessionScope.SetStatusFG].
 func (v SessionOptionValues) StatusFG() OptionValue[string] { return v.statusFG }
 
 // StatusFormat returns materialized "status-format" as [OptionValue] with value type OptionValue[SparseArray[string]] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetStatusFormat] or [GlobalSessionScope.SetStatusFormat].
+// Available as STRING; set it with [Session.SetStatusFormat] or [GlobalSessionScope.SetStatusFormat].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionOptionValues) StatusFormat() OptionValue[SparseArray[string]] { return v.statusFormat }
 
 // StatusInterval returns materialized "status-interval" as [OptionValue] with value type OptionValue[time.Duration] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusInterval] or [GlobalSessionScope.SetStatusInterval].
+// Available as NUMBER; set it with [Session.SetStatusInterval] or [GlobalSessionScope.SetStatusInterval].
 func (v SessionOptionValues) StatusInterval() OptionValue[time.Duration] { return v.statusInterval }
 
 // StatusJustify returns materialized "status-justify" as [OptionValue] with value type OptionValue[StatusJustify] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "left", "centre", "right", "absolute-centre"); set it with [Session.SetStatusJustify] or [GlobalSessionScope.SetStatusJustify].
+// Available as CHOICE (choices: "left", "centre", "right", "absolute-centre"); set it with [Session.SetStatusJustify] or [GlobalSessionScope.SetStatusJustify].
 func (v SessionOptionValues) StatusJustify() OptionValue[StatusJustify] { return v.statusJustify }
 
 // StatusKeys returns materialized "status-keys" as [OptionValue] with value type OptionValue[StatusKeys] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "emacs", "vi"); set it with [Session.SetStatusKeys] or [GlobalSessionScope.SetStatusKeys].
+// Available as CHOICE (choices: "emacs", "vi"); set it with [Session.SetStatusKeys] or [GlobalSessionScope.SetStatusKeys].
 func (v SessionOptionValues) StatusKeys() OptionValue[StatusKeys] { return v.statusKeys }
 
 // StatusLeft returns materialized "status-left" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetStatusLeft] or [GlobalSessionScope.SetStatusLeft].
+// Available as STRING; set it with [Session.SetStatusLeft] or [GlobalSessionScope.SetStatusLeft].
 func (v SessionOptionValues) StatusLeft() OptionValue[string] { return v.statusLeft }
 
 // StatusLeftLength returns materialized "status-left-length" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusLeftLength] or [GlobalSessionScope.SetStatusLeftLength].
+// Available as NUMBER; set it with [Session.SetStatusLeftLength] or [GlobalSessionScope.SetStatusLeftLength].
 func (v SessionOptionValues) StatusLeftLength() OptionValue[int64] { return v.statusLeftLength }
 
 // StatusLeftStyle returns materialized "status-left-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetStatusLeftStyle] or [GlobalSessionScope.SetStatusLeftStyle].
+// Available as STRING; set it with [Session.SetStatusLeftStyle] or [GlobalSessionScope.SetStatusLeftStyle].
 // It is a style option.
 func (v SessionOptionValues) StatusLeftStyle() OptionValue[string] { return v.statusLeftStyle }
 
 // StatusPosition returns materialized "status-position" as [OptionValue] with value type OptionValue[StatusPosition] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "top", "bottom"); set it with [Session.SetStatusPosition] or [GlobalSessionScope.SetStatusPosition].
+// Available as CHOICE (choices: "top", "bottom"); set it with [Session.SetStatusPosition] or [GlobalSessionScope.SetStatusPosition].
 func (v SessionOptionValues) StatusPosition() OptionValue[StatusPosition] { return v.statusPosition }
 
 // StatusRight returns materialized "status-right" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetStatusRight] or [GlobalSessionScope.SetStatusRight].
+// Available as STRING; set it with [Session.SetStatusRight] or [GlobalSessionScope.SetStatusRight].
 func (v SessionOptionValues) StatusRight() OptionValue[string] { return v.statusRight }
 
 // StatusRightLength returns materialized "status-right-length" as [OptionValue] with value type OptionValue[int64] from session option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Session.SetStatusRightLength] or [GlobalSessionScope.SetStatusRightLength].
+// Available as NUMBER; set it with [Session.SetStatusRightLength] or [GlobalSessionScope.SetStatusRightLength].
 func (v SessionOptionValues) StatusRightLength() OptionValue[int64] { return v.statusRightLength }
 
 // StatusRightStyle returns materialized "status-right-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetStatusRightStyle] or [GlobalSessionScope.SetStatusRightStyle].
+// Available as STRING; set it with [Session.SetStatusRightStyle] or [GlobalSessionScope.SetStatusRightStyle].
 // It is a style option.
 func (v SessionOptionValues) StatusRightStyle() OptionValue[string] { return v.statusRightStyle }
 
 // StatusStyle returns materialized "status-style" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetStatusStyle] or [GlobalSessionScope.SetStatusStyle].
+// Available as STRING; set it with [Session.SetStatusStyle] or [GlobalSessionScope.SetStatusStyle].
 // It is a style option.
 func (v SessionOptionValues) StatusStyle() OptionValue[string] { return v.statusStyle }
 
 // UpdateEnvironment returns materialized "update-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetUpdateEnvironment] or [GlobalSessionScope.SetUpdateEnvironment].
+// Available as STRING; set it with [Session.SetUpdateEnvironment] or [GlobalSessionScope.SetUpdateEnvironment].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionOptionValues) UpdateEnvironment() OptionValue[SparseArray[string]] {
 	return v.updateEnvironment
 }
 
 // VisualActivity returns materialized "visual-activity" as [OptionValue] with value type OptionValue[VisualActivity] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "both"); set it with [Session.SetVisualActivity] or [GlobalSessionScope.SetVisualActivity].
+// Available as CHOICE (choices: "off", "on", "both"); set it with [Session.SetVisualActivity] or [GlobalSessionScope.SetVisualActivity].
 func (v SessionOptionValues) VisualActivity() OptionValue[VisualActivity] { return v.visualActivity }
 
 // VisualBell returns materialized "visual-bell" as [OptionValue] with value type OptionValue[VisualBell] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "both"); set it with [Session.SetVisualBell] or [GlobalSessionScope.SetVisualBell].
+// Available as CHOICE (choices: "off", "on", "both"); set it with [Session.SetVisualBell] or [GlobalSessionScope.SetVisualBell].
 func (v SessionOptionValues) VisualBell() OptionValue[VisualBell] { return v.visualBell }
 
 // VisualSilence returns materialized "visual-silence" as [OptionValue] with value type OptionValue[VisualSilence] from session option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "both"); set it with [Session.SetVisualSilence] or [GlobalSessionScope.SetVisualSilence].
+// Available as CHOICE (choices: "off", "on", "both"); set it with [Session.SetVisualSilence] or [GlobalSessionScope.SetVisualSilence].
 func (v SessionOptionValues) VisualSilence() OptionValue[VisualSilence] { return v.visualSilence }
 
 // WordSeparators returns materialized "word-separators" as [OptionValue] with value type OptionValue[string] from session option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Session.SetWordSeparators] or [GlobalSessionScope.SetWordSeparators].
+// Available as STRING; set it with [Session.SetWordSeparators] or [GlobalSessionScope.SetWordSeparators].
 func (v SessionOptionValues) WordSeparators() OptionValue[string] { return v.wordSeparators }
 
 func newSessionOptionValues(values []decodedOptionValue) SessionOptionValues {
@@ -2508,17 +2506,17 @@ type WindowOptionValues struct {
 }
 
 // AggressiveResize returns materialized "aggressive-resize" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetAggressiveResize] or [GlobalWindowScope.SetAggressiveResize].
+// Available as FLAG; set it with [Window.SetAggressiveResize] or [GlobalWindowScope.SetAggressiveResize].
 func (v WindowOptionValues) AggressiveResize() OptionValue[bool] { return v.aggressiveResize }
 
 // AllowPassthrough returns materialized "allow-passthrough" as [OptionValue] with value type OptionValue[AllowPassthrough] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.3; CHOICE since tmux 3.4 (choices: "off", "on", "all"); set it with [Window.SetAllowPassthrough] or [GlobalWindowScope.SetAllowPassthrough].
+// Available as FLAG; CHOICE since tmux 3.4 (choices: "off", "on", "all"); set it with [Window.SetAllowPassthrough] or [GlobalWindowScope.SetAllowPassthrough].
 func (v WindowOptionValues) AllowPassthrough() OptionValue[AllowPassthrough] {
 	return v.allowPassthrough
 }
 
 // AllowRename returns materialized "allow-rename" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetAllowRename] or [GlobalWindowScope.SetAllowRename].
+// Available as FLAG; set it with [Window.SetAllowRename] or [GlobalWindowScope.SetAllowRename].
 func (v WindowOptionValues) AllowRename() OptionValue[bool] { return v.allowRename }
 
 // AllowSetTitle returns materialized "allow-set-title" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
@@ -2526,25 +2524,25 @@ func (v WindowOptionValues) AllowRename() OptionValue[bool] { return v.allowRena
 func (v WindowOptionValues) AllowSetTitle() OptionValue[bool] { return v.allowSetTitle }
 
 // AlternateScreen returns materialized "alternate-screen" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetAlternateScreen] or [GlobalWindowScope.SetAlternateScreen].
+// Available as FLAG; set it with [Window.SetAlternateScreen] or [GlobalWindowScope.SetAlternateScreen].
 func (v WindowOptionValues) AlternateScreen() OptionValue[bool] { return v.alternateScreen }
 
 // AutomaticRename returns materialized "automatic-rename" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetAutomaticRename] or [GlobalWindowScope.SetAutomaticRename].
+// Available as FLAG; set it with [Window.SetAutomaticRename] or [GlobalWindowScope.SetAutomaticRename].
 func (v WindowOptionValues) AutomaticRename() OptionValue[bool] { return v.automaticRename }
 
 // AutomaticRenameFormat returns materialized "automatic-rename-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetAutomaticRenameFormat] or [GlobalWindowScope.SetAutomaticRenameFormat].
+// Available as STRING; set it with [Window.SetAutomaticRenameFormat] or [GlobalWindowScope.SetAutomaticRenameFormat].
 func (v WindowOptionValues) AutomaticRenameFormat() OptionValue[string] {
 	return v.automaticRenameFormat
 }
 
 // ClockModeColour returns materialized "clock-mode-colour" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as COLOUR since tmux 3.2a; set it with [Window.SetClockModeColour] or [GlobalWindowScope.SetClockModeColour].
+// Available as COLOUR; set it with [Window.SetClockModeColour] or [GlobalWindowScope.SetClockModeColour].
 func (v WindowOptionValues) ClockModeColour() OptionValue[string] { return v.clockModeColour }
 
 // ClockModeStyle returns materialized "clock-mode-style" as [OptionValue] with value type OptionValue[ClockModeStyle] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "12", "24"); CHOICE since tmux 3.6 (choices: "12", "24", "12-with-seconds", "24-with-seconds"); set it with [Window.SetClockModeStyle] or [GlobalWindowScope.SetClockModeStyle].
+// Available as CHOICE (choices: "12", "24"); CHOICE since tmux 3.6 (choices: "12", "24", "12-with-seconds", "24-with-seconds"); set it with [Window.SetClockModeStyle] or [GlobalWindowScope.SetClockModeStyle].
 func (v WindowOptionValues) ClockModeStyle() OptionValue[ClockModeStyle] { return v.clockModeStyle }
 
 // CopyModeCurrentLineNumberStyle returns materialized "copy-mode-current-line-number-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
@@ -2555,7 +2553,7 @@ func (v WindowOptionValues) CopyModeCurrentLineNumberStyle() OptionValue[string]
 }
 
 // CopyModeCurrentMatchStyle returns materialized "copy-mode-current-match-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetCopyModeCurrentMatchStyle] or [GlobalWindowScope.SetCopyModeCurrentMatchStyle].
+// Available as STRING; set it with [Window.SetCopyModeCurrentMatchStyle] or [GlobalWindowScope.SetCopyModeCurrentMatchStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeCurrentMatchStyle() OptionValue[string] {
 	return v.copyModeCurrentMatchStyle
@@ -2575,12 +2573,12 @@ func (v WindowOptionValues) CopyModeLineNumbers() OptionValue[CopyModeLineNumber
 }
 
 // CopyModeMarkStyle returns materialized "copy-mode-mark-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetCopyModeMarkStyle] or [GlobalWindowScope.SetCopyModeMarkStyle].
+// Available as STRING; set it with [Window.SetCopyModeMarkStyle] or [GlobalWindowScope.SetCopyModeMarkStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeMarkStyle() OptionValue[string] { return v.copyModeMarkStyle }
 
 // CopyModeMatchStyle returns materialized "copy-mode-match-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetCopyModeMatchStyle] or [GlobalWindowScope.SetCopyModeMatchStyle].
+// Available as STRING; set it with [Window.SetCopyModeMatchStyle] or [GlobalWindowScope.SetCopyModeMatchStyle].
 // It is a style option.
 func (v WindowOptionValues) CopyModeMatchStyle() OptionValue[string] { return v.copyModeMatchStyle }
 
@@ -2605,23 +2603,23 @@ func (v WindowOptionValues) CopyModeSelectionStyle() OptionValue[string] {
 }
 
 // CursorColour returns materialized "cursor-colour" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as COLOUR since tmux 3.3; set it with [Window.SetCursorColour] or [GlobalWindowScope.SetCursorColour].
+// Available as COLOUR; set it with [Window.SetCursorColour] or [GlobalWindowScope.SetCursorColour].
 func (v WindowOptionValues) CursorColour() OptionValue[string] { return v.cursorColour }
 
 // CursorStyle returns materialized "cursor-style" as [OptionValue] with value type OptionValue[CursorStyle] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.3 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Window.SetCursorStyle] or [GlobalWindowScope.SetCursorStyle].
+// Available as CHOICE (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Window.SetCursorStyle] or [GlobalWindowScope.SetCursorStyle].
 func (v WindowOptionValues) CursorStyle() OptionValue[CursorStyle] { return v.cursorStyle }
 
 // FillCharacter returns materialized "fill-character" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.3; set it with [Window.SetFillCharacter] or [GlobalWindowScope.SetFillCharacter].
+// Available as STRING; set it with [Window.SetFillCharacter] or [GlobalWindowScope.SetFillCharacter].
 func (v WindowOptionValues) FillCharacter() OptionValue[string] { return v.fillCharacter }
 
 // MainPaneHeight returns materialized "main-pane-height" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetMainPaneHeight] or [GlobalWindowScope.SetMainPaneHeight].
+// Available as STRING; set it with [Window.SetMainPaneHeight] or [GlobalWindowScope.SetMainPaneHeight].
 func (v WindowOptionValues) MainPaneHeight() OptionValue[string] { return v.mainPaneHeight }
 
 // MainPaneWidth returns materialized "main-pane-width" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetMainPaneWidth] or [GlobalWindowScope.SetMainPaneWidth].
+// Available as STRING; set it with [Window.SetMainPaneWidth] or [GlobalWindowScope.SetMainPaneWidth].
 func (v WindowOptionValues) MainPaneWidth() OptionValue[string] { return v.mainPaneWidth }
 
 // MenuBorderLines returns materialized "menu-border-lines" as [OptionValue] with value type OptionValue[MenuBorderLines] from window option values; it does not query tmux.
@@ -2644,72 +2642,72 @@ func (v WindowOptionValues) MenuSelectedStyle() OptionValue[string] { return v.m
 func (v WindowOptionValues) MenuStyle() OptionValue[string] { return v.menuStyle }
 
 // ModeKeys returns materialized "mode-keys" as [OptionValue] with value type OptionValue[ModeKeys] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "emacs", "vi"); set it with [Window.SetModeKeys] or [GlobalWindowScope.SetModeKeys].
+// Available as CHOICE (choices: "emacs", "vi"); set it with [Window.SetModeKeys] or [GlobalWindowScope.SetModeKeys].
 func (v WindowOptionValues) ModeKeys() OptionValue[ModeKeys] { return v.modeKeys }
 
 // ModeStyle returns materialized "mode-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetModeStyle] or [GlobalWindowScope.SetModeStyle].
+// Available as STRING; set it with [Window.SetModeStyle] or [GlobalWindowScope.SetModeStyle].
 // It is a style option.
 func (v WindowOptionValues) ModeStyle() OptionValue[string] { return v.modeStyle }
 
 // MonitorActivity returns materialized "monitor-activity" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetMonitorActivity] or [GlobalWindowScope.SetMonitorActivity].
+// Available as FLAG; set it with [Window.SetMonitorActivity] or [GlobalWindowScope.SetMonitorActivity].
 func (v WindowOptionValues) MonitorActivity() OptionValue[bool] { return v.monitorActivity }
 
 // MonitorBell returns materialized "monitor-bell" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetMonitorBell] or [GlobalWindowScope.SetMonitorBell].
+// Available as FLAG; set it with [Window.SetMonitorBell] or [GlobalWindowScope.SetMonitorBell].
 func (v WindowOptionValues) MonitorBell() OptionValue[bool] { return v.monitorBell }
 
 // MonitorSilence returns materialized "monitor-silence" as [OptionValue] with value type OptionValue[int64] from window option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Window.SetMonitorSilence] or [GlobalWindowScope.SetMonitorSilence].
+// Available as NUMBER; set it with [Window.SetMonitorSilence] or [GlobalWindowScope.SetMonitorSilence].
 func (v WindowOptionValues) MonitorSilence() OptionValue[int64] { return v.monitorSilence }
 
 // OtherPaneHeight returns materialized "other-pane-height" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetOtherPaneHeight] or [GlobalWindowScope.SetOtherPaneHeight].
+// Available as STRING; set it with [Window.SetOtherPaneHeight] or [GlobalWindowScope.SetOtherPaneHeight].
 func (v WindowOptionValues) OtherPaneHeight() OptionValue[string] { return v.otherPaneHeight }
 
 // OtherPaneWidth returns materialized "other-pane-width" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetOtherPaneWidth] or [GlobalWindowScope.SetOtherPaneWidth].
+// Available as STRING; set it with [Window.SetOtherPaneWidth] or [GlobalWindowScope.SetOtherPaneWidth].
 func (v WindowOptionValues) OtherPaneWidth() OptionValue[string] { return v.otherPaneWidth }
 
 // PaneActiveBorderStyle returns materialized "pane-active-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; STRING since tmux 3.7; set it with [Window.SetPaneActiveBorderStyle] or [GlobalWindowScope.SetPaneActiveBorderStyle].
+// Available as STRING; STRING since tmux 3.7; set it with [Window.SetPaneActiveBorderStyle] or [GlobalWindowScope.SetPaneActiveBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneActiveBorderStyle() OptionValue[string] {
 	return v.paneActiveBorderStyle
 }
 
 // PaneBaseIndex returns materialized "pane-base-index" as [OptionValue] with value type OptionValue[int64] from window option values; it does not query tmux.
-// Available as NUMBER since tmux 3.2a; set it with [Window.SetPaneBaseIndex] or [GlobalWindowScope.SetPaneBaseIndex].
+// Available as NUMBER; set it with [Window.SetPaneBaseIndex] or [GlobalWindowScope.SetPaneBaseIndex].
 func (v WindowOptionValues) PaneBaseIndex() OptionValue[int64] { return v.paneBaseIndex }
 
 // PaneBorderFormat returns materialized "pane-border-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; STRING since tmux 3.3; set it with [Window.SetPaneBorderFormat] or [GlobalWindowScope.SetPaneBorderFormat].
+// Available as STRING; set it with [Window.SetPaneBorderFormat] or [GlobalWindowScope.SetPaneBorderFormat].
 func (v WindowOptionValues) PaneBorderFormat() OptionValue[string] { return v.paneBorderFormat }
 
 // PaneBorderIndicators returns materialized "pane-border-indicators" as [OptionValue] with value type OptionValue[PaneBorderIndicators] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.3 (choices: "off", "colour", "arrows", "both"); set it with [Window.SetPaneBorderIndicators] or [GlobalWindowScope.SetPaneBorderIndicators].
+// Available as CHOICE (choices: "off", "colour", "arrows", "both"); set it with [Window.SetPaneBorderIndicators] or [GlobalWindowScope.SetPaneBorderIndicators].
 func (v WindowOptionValues) PaneBorderIndicators() OptionValue[PaneBorderIndicators] {
 	return v.paneBorderIndicators
 }
 
 // PaneBorderLines returns materialized "pane-border-lines" as [OptionValue] with value type OptionValue[PaneBorderLines] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "single", "double", "heavy", "simple", "number"); CHOICE since tmux 3.6 (choices: "single", "double", "heavy", "simple", "number", "spaces"); set it with [Window.SetPaneBorderLines] or [GlobalWindowScope.SetPaneBorderLines].
+// Available as CHOICE (choices: "single", "double", "heavy", "simple", "number"); CHOICE since tmux 3.6 (choices: "single", "double", "heavy", "simple", "number", "spaces"); set it with [Window.SetPaneBorderLines] or [GlobalWindowScope.SetPaneBorderLines].
 func (v WindowOptionValues) PaneBorderLines() OptionValue[PaneBorderLines] { return v.paneBorderLines }
 
 // PaneBorderStatus returns materialized "pane-border-status" as [OptionValue] with value type OptionValue[PaneBorderStatus] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "top", "bottom"); set it with [Window.SetPaneBorderStatus] or [GlobalWindowScope.SetPaneBorderStatus].
+// Available as CHOICE (choices: "off", "top", "bottom"); set it with [Window.SetPaneBorderStatus] or [GlobalWindowScope.SetPaneBorderStatus].
 func (v WindowOptionValues) PaneBorderStatus() OptionValue[PaneBorderStatus] {
 	return v.paneBorderStatus
 }
 
 // PaneBorderStyle returns materialized "pane-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; STRING since tmux 3.7; set it with [Window.SetPaneBorderStyle] or [GlobalWindowScope.SetPaneBorderStyle].
+// Available as STRING; STRING since tmux 3.7; set it with [Window.SetPaneBorderStyle] or [GlobalWindowScope.SetPaneBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) PaneBorderStyle() OptionValue[string] { return v.paneBorderStyle }
 
 // PaneColours returns materialized "pane-colours" as [OptionValue] with value type OptionValue[SparseArray[string]] from window option values; it does not query tmux.
-// Available as COLOUR since tmux 3.3; set it with [Window.SetPaneColours] or [GlobalWindowScope.SetPaneColours].
+// Available as COLOUR; set it with [Window.SetPaneColours] or [GlobalWindowScope.SetPaneColours].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowOptionValues) PaneColours() OptionValue[SparseArray[string]] { return v.paneColours }
 
@@ -2741,31 +2739,31 @@ func (v WindowOptionValues) PaneStatusCurrentStyle() OptionValue[string] {
 func (v WindowOptionValues) PaneStatusStyle() OptionValue[string] { return v.paneStatusStyle }
 
 // PopupBorderLines returns materialized "popup-border-lines" as [OptionValue] with value type OptionValue[PopupBorderLines] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.3 (choices: "single", "double", "heavy", "simple", "rounded", "padded", "none"); set it with [Window.SetPopupBorderLines] or [GlobalWindowScope.SetPopupBorderLines].
+// Available as CHOICE (choices: "single", "double", "heavy", "simple", "rounded", "padded", "none"); set it with [Window.SetPopupBorderLines] or [GlobalWindowScope.SetPopupBorderLines].
 func (v WindowOptionValues) PopupBorderLines() OptionValue[PopupBorderLines] {
 	return v.popupBorderLines
 }
 
 // PopupBorderStyle returns materialized "popup-border-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.3; set it with [Window.SetPopupBorderStyle] or [GlobalWindowScope.SetPopupBorderStyle].
+// Available as STRING; set it with [Window.SetPopupBorderStyle] or [GlobalWindowScope.SetPopupBorderStyle].
 // It is a style option.
 func (v WindowOptionValues) PopupBorderStyle() OptionValue[string] { return v.popupBorderStyle }
 
 // PopupStyle returns materialized "popup-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.3; set it with [Window.SetPopupStyle] or [GlobalWindowScope.SetPopupStyle].
+// Available as STRING; set it with [Window.SetPopupStyle] or [GlobalWindowScope.SetPopupStyle].
 // It is a style option.
 func (v WindowOptionValues) PopupStyle() OptionValue[string] { return v.popupStyle }
 
 // RemainOnExit returns materialized "remain-on-exit" as [OptionValue] with value type OptionValue[RemainOnExit] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key"); set it with [Window.SetRemainOnExit] or [GlobalWindowScope.SetRemainOnExit].
+// Available as CHOICE (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key"); set it with [Window.SetRemainOnExit] or [GlobalWindowScope.SetRemainOnExit].
 func (v WindowOptionValues) RemainOnExit() OptionValue[RemainOnExit] { return v.remainOnExit }
 
 // RemainOnExitFormat returns materialized "remain-on-exit-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.3; set it with [Window.SetRemainOnExitFormat] or [GlobalWindowScope.SetRemainOnExitFormat].
+// Available as STRING; set it with [Window.SetRemainOnExitFormat] or [GlobalWindowScope.SetRemainOnExitFormat].
 func (v WindowOptionValues) RemainOnExitFormat() OptionValue[string] { return v.remainOnExitFormat }
 
 // ScrollOnClear returns materialized "scroll-on-clear" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.3; set it with [Window.SetScrollOnClear] or [GlobalWindowScope.SetScrollOnClear].
+// Available as FLAG; set it with [Window.SetScrollOnClear] or [GlobalWindowScope.SetScrollOnClear].
 func (v WindowOptionValues) ScrollOnClear() OptionValue[bool] { return v.scrollOnClear }
 
 // SessionStatusCurrentStyle returns materialized "session-status-current-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
@@ -2781,7 +2779,7 @@ func (v WindowOptionValues) SessionStatusCurrentStyle() OptionValue[string] {
 func (v WindowOptionValues) SessionStatusStyle() OptionValue[string] { return v.sessionStatusStyle }
 
 // SynchronizePanes returns materialized "synchronize-panes" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetSynchronizePanes] or [GlobalWindowScope.SetSynchronizePanes].
+// Available as FLAG; set it with [Window.SetSynchronizePanes] or [GlobalWindowScope.SetSynchronizePanes].
 func (v WindowOptionValues) SynchronizePanes() OptionValue[bool] { return v.synchronizePanes }
 
 // TiledLayoutMaxColumns returns materialized "tiled-layout-max-columns" as [OptionValue] with value type OptionValue[int64] from window option values; it does not query tmux.
@@ -2802,7 +2800,7 @@ func (v WindowOptionValues) TreeModePreviewFormat() OptionValue[string] {
 func (v WindowOptionValues) TreeModePreviewStyle() OptionValue[string] { return v.treeModePreviewStyle }
 
 // WindowActiveStyle returns materialized "window-active-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowActiveStyle] or [GlobalWindowScope.SetWindowActiveStyle].
+// Available as STRING; set it with [Window.SetWindowActiveStyle] or [GlobalWindowScope.SetWindowActiveStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowActiveStyle() OptionValue[string] { return v.windowActiveStyle }
 
@@ -2819,69 +2817,69 @@ func (v WindowOptionValues) WindowPaneStatusFormat() OptionValue[string] {
 }
 
 // WindowSize returns materialized "window-size" as [OptionValue] with value type OptionValue[WindowSize] from window option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "largest", "smallest", "manual", "latest"); set it with [Window.SetWindowSize] or [GlobalWindowScope.SetWindowSize].
+// Available as CHOICE (choices: "largest", "smallest", "manual", "latest"); set it with [Window.SetWindowSize] or [GlobalWindowScope.SetWindowSize].
 func (v WindowOptionValues) WindowSize() OptionValue[WindowSize] { return v.windowSize }
 
 // WindowStatusActivityStyle returns materialized "window-status-activity-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusActivityStyle] or [GlobalWindowScope.SetWindowStatusActivityStyle].
+// Available as STRING; set it with [Window.SetWindowStatusActivityStyle] or [GlobalWindowScope.SetWindowStatusActivityStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusActivityStyle() OptionValue[string] {
 	return v.windowStatusActivityStyle
 }
 
 // WindowStatusBellStyle returns materialized "window-status-bell-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusBellStyle] or [GlobalWindowScope.SetWindowStatusBellStyle].
+// Available as STRING; set it with [Window.SetWindowStatusBellStyle] or [GlobalWindowScope.SetWindowStatusBellStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusBellStyle() OptionValue[string] {
 	return v.windowStatusBellStyle
 }
 
 // WindowStatusCurrentFormat returns materialized "window-status-current-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusCurrentFormat] or [GlobalWindowScope.SetWindowStatusCurrentFormat].
+// Available as STRING; set it with [Window.SetWindowStatusCurrentFormat] or [GlobalWindowScope.SetWindowStatusCurrentFormat].
 func (v WindowOptionValues) WindowStatusCurrentFormat() OptionValue[string] {
 	return v.windowStatusCurrentFormat
 }
 
 // WindowStatusCurrentStyle returns materialized "window-status-current-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusCurrentStyle] or [GlobalWindowScope.SetWindowStatusCurrentStyle].
+// Available as STRING; set it with [Window.SetWindowStatusCurrentStyle] or [GlobalWindowScope.SetWindowStatusCurrentStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusCurrentStyle() OptionValue[string] {
 	return v.windowStatusCurrentStyle
 }
 
 // WindowStatusFormat returns materialized "window-status-format" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusFormat] or [GlobalWindowScope.SetWindowStatusFormat].
+// Available as STRING; set it with [Window.SetWindowStatusFormat] or [GlobalWindowScope.SetWindowStatusFormat].
 func (v WindowOptionValues) WindowStatusFormat() OptionValue[string] { return v.windowStatusFormat }
 
 // WindowStatusLastStyle returns materialized "window-status-last-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusLastStyle] or [GlobalWindowScope.SetWindowStatusLastStyle].
+// Available as STRING; set it with [Window.SetWindowStatusLastStyle] or [GlobalWindowScope.SetWindowStatusLastStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusLastStyle() OptionValue[string] {
 	return v.windowStatusLastStyle
 }
 
 // WindowStatusSeparator returns materialized "window-status-separator" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusSeparator] or [GlobalWindowScope.SetWindowStatusSeparator].
+// Available as STRING; set it with [Window.SetWindowStatusSeparator] or [GlobalWindowScope.SetWindowStatusSeparator].
 func (v WindowOptionValues) WindowStatusSeparator() OptionValue[string] {
 	return v.windowStatusSeparator
 }
 
 // WindowStatusStyle returns materialized "window-status-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStatusStyle] or [GlobalWindowScope.SetWindowStatusStyle].
+// Available as STRING; set it with [Window.SetWindowStatusStyle] or [GlobalWindowScope.SetWindowStatusStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStatusStyle() OptionValue[string] { return v.windowStatusStyle }
 
 // WindowStyle returns materialized "window-style" as [OptionValue] with value type OptionValue[string] from window option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Window.SetWindowStyle] or [GlobalWindowScope.SetWindowStyle].
+// Available as STRING; set it with [Window.SetWindowStyle] or [GlobalWindowScope.SetWindowStyle].
 // It is a style option.
 func (v WindowOptionValues) WindowStyle() OptionValue[string] { return v.windowStyle }
 
 // WrapSearch returns materialized "wrap-search" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetWrapSearch] or [GlobalWindowScope.SetWrapSearch].
+// Available as FLAG; set it with [Window.SetWrapSearch] or [GlobalWindowScope.SetWrapSearch].
 func (v WindowOptionValues) WrapSearch() OptionValue[bool] { return v.wrapSearch }
 
 // XTermKeys returns materialized "xterm-keys" as [OptionValue] with value type OptionValue[bool] from window option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Window.SetXTermKeys] or [GlobalWindowScope.SetXTermKeys].
+// Available as FLAG; set it with [Window.SetXTermKeys] or [GlobalWindowScope.SetXTermKeys].
 func (v WindowOptionValues) XTermKeys() OptionValue[bool] { return v.xTermKeys }
 
 func newWindowOptionValues(values []decodedOptionValue) WindowOptionValues {
@@ -3067,11 +3065,11 @@ type PaneOptionValues struct {
 }
 
 // AllowPassthrough returns materialized "allow-passthrough" as [OptionValue] with value type OptionValue[AllowPassthrough] from pane option values; it does not query tmux.
-// Available as FLAG since tmux 3.3; CHOICE since tmux 3.4 (choices: "off", "on", "all"); set it with [Pane.SetAllowPassthrough].
+// Available as FLAG; CHOICE since tmux 3.4 (choices: "off", "on", "all"); set it with [Pane.SetAllowPassthrough].
 func (v PaneOptionValues) AllowPassthrough() OptionValue[AllowPassthrough] { return v.allowPassthrough }
 
 // AllowRename returns materialized "allow-rename" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Pane.SetAllowRename].
+// Available as FLAG; set it with [Pane.SetAllowRename].
 func (v PaneOptionValues) AllowRename() OptionValue[bool] { return v.allowRename }
 
 // AllowSetTitle returns materialized "allow-set-title" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
@@ -3079,7 +3077,7 @@ func (v PaneOptionValues) AllowRename() OptionValue[bool] { return v.allowRename
 func (v PaneOptionValues) AllowSetTitle() OptionValue[bool] { return v.allowSetTitle }
 
 // AlternateScreen returns materialized "alternate-screen" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Pane.SetAlternateScreen].
+// Available as FLAG; set it with [Pane.SetAlternateScreen].
 func (v PaneOptionValues) AlternateScreen() OptionValue[bool] { return v.alternateScreen }
 
 // CopyModePositionFormat returns materialized "copy-mode-position-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
@@ -3089,11 +3087,11 @@ func (v PaneOptionValues) CopyModePositionFormat() OptionValue[string] {
 }
 
 // CursorColour returns materialized "cursor-colour" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
-// Available as COLOUR since tmux 3.3; set it with [Pane.SetCursorColour].
+// Available as COLOUR; set it with [Pane.SetCursorColour].
 func (v PaneOptionValues) CursorColour() OptionValue[string] { return v.cursorColour }
 
 // CursorStyle returns materialized "cursor-style" as [OptionValue] with value type OptionValue[CursorStyle] from pane option values; it does not query tmux.
-// Available as CHOICE since tmux 3.3 (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Pane.SetCursorStyle].
+// Available as CHOICE (choices: "default", "blinking-block", "block", "blinking-underline", "underline", "blinking-bar", "bar"); set it with [Pane.SetCursorStyle].
 func (v PaneOptionValues) CursorStyle() OptionValue[CursorStyle] { return v.cursorStyle }
 
 // PaneActiveBorderStyle returns materialized "pane-active-border-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
@@ -3102,7 +3100,7 @@ func (v PaneOptionValues) CursorStyle() OptionValue[CursorStyle] { return v.curs
 func (v PaneOptionValues) PaneActiveBorderStyle() OptionValue[string] { return v.paneActiveBorderStyle }
 
 // PaneBorderFormat returns materialized "pane-border-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
-// Available as STRING since tmux 3.3; set it with [Pane.SetPaneBorderFormat].
+// Available as STRING; set it with [Pane.SetPaneBorderFormat].
 func (v PaneOptionValues) PaneBorderFormat() OptionValue[string] { return v.paneBorderFormat }
 
 // PaneBorderStyle returns materialized "pane-border-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
@@ -3111,7 +3109,7 @@ func (v PaneOptionValues) PaneBorderFormat() OptionValue[string] { return v.pane
 func (v PaneOptionValues) PaneBorderStyle() OptionValue[string] { return v.paneBorderStyle }
 
 // PaneColours returns materialized "pane-colours" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane option values; it does not query tmux.
-// Available as COLOUR since tmux 3.3; set it with [Pane.SetPaneColours].
+// Available as COLOUR; set it with [Pane.SetPaneColours].
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneOptionValues) PaneColours() OptionValue[SparseArray[string]] { return v.paneColours }
 
@@ -3121,19 +3119,19 @@ func (v PaneOptionValues) PaneColours() OptionValue[SparseArray[string]] { retur
 func (v PaneOptionValues) PaneScrollbarsStyle() OptionValue[string] { return v.paneScrollbarsStyle }
 
 // RemainOnExit returns materialized "remain-on-exit" as [OptionValue] with value type OptionValue[RemainOnExit] from pane option values; it does not query tmux.
-// Available as CHOICE since tmux 3.2a (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key"); set it with [Pane.SetRemainOnExit].
+// Available as CHOICE (choices: "off", "on", "failed"); CHOICE since tmux 3.7 (choices: "off", "on", "failed", "key"); set it with [Pane.SetRemainOnExit].
 func (v PaneOptionValues) RemainOnExit() OptionValue[RemainOnExit] { return v.remainOnExit }
 
 // RemainOnExitFormat returns materialized "remain-on-exit-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
-// Available as STRING since tmux 3.3; set it with [Pane.SetRemainOnExitFormat].
+// Available as STRING; set it with [Pane.SetRemainOnExitFormat].
 func (v PaneOptionValues) RemainOnExitFormat() OptionValue[string] { return v.remainOnExitFormat }
 
 // ScrollOnClear returns materialized "scroll-on-clear" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
-// Available as FLAG since tmux 3.3; set it with [Pane.SetScrollOnClear].
+// Available as FLAG; set it with [Pane.SetScrollOnClear].
 func (v PaneOptionValues) ScrollOnClear() OptionValue[bool] { return v.scrollOnClear }
 
 // SynchronizePanes returns materialized "synchronize-panes" as [OptionValue] with value type OptionValue[bool] from pane option values; it does not query tmux.
-// Available as FLAG since tmux 3.2a; set it with [Pane.SetSynchronizePanes].
+// Available as FLAG; set it with [Pane.SetSynchronizePanes].
 func (v PaneOptionValues) SynchronizePanes() OptionValue[bool] { return v.synchronizePanes }
 
 // TreeModePreviewFormat returns materialized "tree-mode-preview-format" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
@@ -3141,12 +3139,12 @@ func (v PaneOptionValues) SynchronizePanes() OptionValue[bool] { return v.synchr
 func (v PaneOptionValues) TreeModePreviewFormat() OptionValue[string] { return v.treeModePreviewFormat }
 
 // WindowActiveStyle returns materialized "window-active-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Pane.SetWindowActiveStyle].
+// Available as STRING; set it with [Pane.SetWindowActiveStyle].
 // It is a style option.
 func (v PaneOptionValues) WindowActiveStyle() OptionValue[string] { return v.windowActiveStyle }
 
 // WindowStyle returns materialized "window-style" as [OptionValue] with value type OptionValue[string] from pane option values; it does not query tmux.
-// Available as STRING since tmux 3.2a; set it with [Pane.SetWindowStyle].
+// Available as STRING; set it with [Pane.SetWindowStyle].
 // It is a style option.
 func (v PaneOptionValues) WindowStyle() OptionValue[string] { return v.windowStyle }
 
@@ -3261,267 +3259,267 @@ type ServerHookValues struct {
 }
 
 // AfterBindKey returns materialized "after-bind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterBindKey() OptionValue[SparseArray[string]] { return v.afterBindKey }
 
 // AfterCapturePane returns materialized "after-capture-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterCapturePane() OptionValue[SparseArray[string]] {
 	return v.afterCapturePane
 }
 
 // AfterCopyMode returns materialized "after-copy-mode" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterCopyMode() OptionValue[SparseArray[string]] { return v.afterCopyMode }
 
 // AfterDisplayMessage returns materialized "after-display-message" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterDisplayMessage() OptionValue[SparseArray[string]] {
 	return v.afterDisplayMessage
 }
 
 // AfterDisplayPanes returns materialized "after-display-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterDisplayPanes() OptionValue[SparseArray[string]] {
 	return v.afterDisplayPanes
 }
 
 // AfterKillPane returns materialized "after-kill-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterKillPane() OptionValue[SparseArray[string]] { return v.afterKillPane }
 
 // AfterListBuffers returns materialized "after-list-buffers" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListBuffers() OptionValue[SparseArray[string]] {
 	return v.afterListBuffers
 }
 
 // AfterListClients returns materialized "after-list-clients" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListClients() OptionValue[SparseArray[string]] {
 	return v.afterListClients
 }
 
 // AfterListKeys returns materialized "after-list-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListKeys() OptionValue[SparseArray[string]] { return v.afterListKeys }
 
 // AfterListPanes returns materialized "after-list-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListPanes() OptionValue[SparseArray[string]] { return v.afterListPanes }
 
 // AfterListSessions returns materialized "after-list-sessions" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListSessions() OptionValue[SparseArray[string]] {
 	return v.afterListSessions
 }
 
 // AfterListWindows returns materialized "after-list-windows" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterListWindows() OptionValue[SparseArray[string]] {
 	return v.afterListWindows
 }
 
 // AfterLoadBuffer returns materialized "after-load-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterLoadBuffer() OptionValue[SparseArray[string]] {
 	return v.afterLoadBuffer
 }
 
 // AfterLockServer returns materialized "after-lock-server" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterLockServer() OptionValue[SparseArray[string]] {
 	return v.afterLockServer
 }
 
 // AfterNewSession returns materialized "after-new-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterNewSession() OptionValue[SparseArray[string]] {
 	return v.afterNewSession
 }
 
 // AfterNewWindow returns materialized "after-new-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterNewWindow() OptionValue[SparseArray[string]] { return v.afterNewWindow }
 
 // AfterPasteBuffer returns materialized "after-paste-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterPasteBuffer() OptionValue[SparseArray[string]] {
 	return v.afterPasteBuffer
 }
 
 // AfterPipePane returns materialized "after-pipe-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterPipePane() OptionValue[SparseArray[string]] { return v.afterPipePane }
 
 // AfterQueue returns materialized "after-queue" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterQueue() OptionValue[SparseArray[string]] { return v.afterQueue }
 
 // AfterRefreshClient returns materialized "after-refresh-client" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterRefreshClient() OptionValue[SparseArray[string]] {
 	return v.afterRefreshClient
 }
 
 // AfterRenameSession returns materialized "after-rename-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterRenameSession() OptionValue[SparseArray[string]] {
 	return v.afterRenameSession
 }
 
 // AfterRenameWindow returns materialized "after-rename-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterRenameWindow() OptionValue[SparseArray[string]] {
 	return v.afterRenameWindow
 }
 
 // AfterResizePane returns materialized "after-resize-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterResizePane() OptionValue[SparseArray[string]] {
 	return v.afterResizePane
 }
 
 // AfterResizeWindow returns materialized "after-resize-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterResizeWindow() OptionValue[SparseArray[string]] {
 	return v.afterResizeWindow
 }
 
 // AfterSaveBuffer returns materialized "after-save-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSaveBuffer() OptionValue[SparseArray[string]] {
 	return v.afterSaveBuffer
 }
 
 // AfterSelectLayout returns materialized "after-select-layout" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSelectLayout() OptionValue[SparseArray[string]] {
 	return v.afterSelectLayout
 }
 
 // AfterSelectPane returns materialized "after-select-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSelectPane() OptionValue[SparseArray[string]] {
 	return v.afterSelectPane
 }
 
 // AfterSelectWindow returns materialized "after-select-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSelectWindow() OptionValue[SparseArray[string]] {
 	return v.afterSelectWindow
 }
 
 // AfterSendKeys returns materialized "after-send-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSendKeys() OptionValue[SparseArray[string]] { return v.afterSendKeys }
 
 // AfterSetBuffer returns materialized "after-set-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetBuffer() OptionValue[SparseArray[string]] { return v.afterSetBuffer }
 
 // AfterSetEnvironment returns materialized "after-set-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterSetEnvironment
 }
 
 // AfterSetHook returns materialized "after-set-hook" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetHook() OptionValue[SparseArray[string]] { return v.afterSetHook }
 
 // AfterSetOption returns materialized "after-set-option" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSetOption() OptionValue[SparseArray[string]] { return v.afterSetOption }
 
 // AfterShowEnvironment returns materialized "after-show-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterShowEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterShowEnvironment
 }
 
 // AfterShowMessages returns materialized "after-show-messages" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterShowMessages() OptionValue[SparseArray[string]] {
 	return v.afterShowMessages
 }
 
 // AfterShowOptions returns materialized "after-show-options" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterShowOptions() OptionValue[SparseArray[string]] {
 	return v.afterShowOptions
 }
 
 // AfterSplitWindow returns materialized "after-split-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterSplitWindow() OptionValue[SparseArray[string]] {
 	return v.afterSplitWindow
 }
 
 // AfterUnbindKey returns materialized "after-unbind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AfterUnbindKey() OptionValue[SparseArray[string]] { return v.afterUnbindKey }
 
 // AlertActivity returns materialized "alert-activity" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AlertActivity() OptionValue[SparseArray[string]] { return v.alertActivity }
 
 // AlertBell returns materialized "alert-bell" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AlertBell() OptionValue[SparseArray[string]] { return v.alertBell }
 
 // AlertSilence returns materialized "alert-silence" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) AlertSilence() OptionValue[SparseArray[string]] { return v.alertSilence }
 
 // ClientActive returns materialized "client-active" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientActive() OptionValue[SparseArray[string]] { return v.clientActive }
 
 // ClientAttached returns materialized "client-attached" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientAttached() OptionValue[SparseArray[string]] { return v.clientAttached }
 
@@ -3533,17 +3531,17 @@ func (v ServerHookValues) ClientDarkTheme() OptionValue[SparseArray[string]] {
 }
 
 // ClientDetached returns materialized "client-detached" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientDetached() OptionValue[SparseArray[string]] { return v.clientDetached }
 
 // ClientFocusIn returns materialized "client-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientFocusIn() OptionValue[SparseArray[string]] { return v.clientFocusIn }
 
 // ClientFocusOut returns materialized "client-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientFocusOut() OptionValue[SparseArray[string]] { return v.clientFocusOut }
 
@@ -3555,12 +3553,12 @@ func (v ServerHookValues) ClientLightTheme() OptionValue[SparseArray[string]] {
 }
 
 // ClientResized returns materialized "client-resized" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientResized() OptionValue[SparseArray[string]] { return v.clientResized }
 
 // ClientSessionChanged returns materialized "client-session-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) ClientSessionChanged() OptionValue[SparseArray[string]] {
 	return v.clientSessionChanged
@@ -3572,34 +3570,34 @@ func (v ServerHookValues) ClientSessionChanged() OptionValue[SparseArray[string]
 func (v ServerHookValues) CommandError() OptionValue[SparseArray[string]] { return v.commandError }
 
 // SessionClosed returns materialized "session-closed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionClosed() OptionValue[SparseArray[string]] { return v.sessionClosed }
 
 // SessionCreated returns materialized "session-created" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionCreated() OptionValue[SparseArray[string]] { return v.sessionCreated }
 
 // SessionRenamed returns materialized "session-renamed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionRenamed() OptionValue[SparseArray[string]] { return v.sessionRenamed }
 
 // SessionWindowChanged returns materialized "session-window-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) SessionWindowChanged() OptionValue[SparseArray[string]] {
 	return v.sessionWindowChanged
 }
 
 // WindowLinked returns materialized "window-linked" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) WindowLinked() OptionValue[SparseArray[string]] { return v.windowLinked }
 
 // WindowUnlinked returns materialized "window-unlinked" as [OptionValue] with value type OptionValue[SparseArray[string]] from global session-scope hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v ServerHookValues) WindowUnlinked() OptionValue[SparseArray[string]] { return v.windowUnlinked }
 
@@ -3790,267 +3788,267 @@ type SessionHookValues struct {
 }
 
 // AfterBindKey returns materialized "after-bind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterBindKey() OptionValue[SparseArray[string]] { return v.afterBindKey }
 
 // AfterCapturePane returns materialized "after-capture-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterCapturePane() OptionValue[SparseArray[string]] {
 	return v.afterCapturePane
 }
 
 // AfterCopyMode returns materialized "after-copy-mode" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterCopyMode() OptionValue[SparseArray[string]] { return v.afterCopyMode }
 
 // AfterDisplayMessage returns materialized "after-display-message" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterDisplayMessage() OptionValue[SparseArray[string]] {
 	return v.afterDisplayMessage
 }
 
 // AfterDisplayPanes returns materialized "after-display-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterDisplayPanes() OptionValue[SparseArray[string]] {
 	return v.afterDisplayPanes
 }
 
 // AfterKillPane returns materialized "after-kill-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterKillPane() OptionValue[SparseArray[string]] { return v.afterKillPane }
 
 // AfterListBuffers returns materialized "after-list-buffers" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListBuffers() OptionValue[SparseArray[string]] {
 	return v.afterListBuffers
 }
 
 // AfterListClients returns materialized "after-list-clients" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListClients() OptionValue[SparseArray[string]] {
 	return v.afterListClients
 }
 
 // AfterListKeys returns materialized "after-list-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListKeys() OptionValue[SparseArray[string]] { return v.afterListKeys }
 
 // AfterListPanes returns materialized "after-list-panes" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListPanes() OptionValue[SparseArray[string]] { return v.afterListPanes }
 
 // AfterListSessions returns materialized "after-list-sessions" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListSessions() OptionValue[SparseArray[string]] {
 	return v.afterListSessions
 }
 
 // AfterListWindows returns materialized "after-list-windows" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterListWindows() OptionValue[SparseArray[string]] {
 	return v.afterListWindows
 }
 
 // AfterLoadBuffer returns materialized "after-load-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterLoadBuffer() OptionValue[SparseArray[string]] {
 	return v.afterLoadBuffer
 }
 
 // AfterLockServer returns materialized "after-lock-server" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterLockServer() OptionValue[SparseArray[string]] {
 	return v.afterLockServer
 }
 
 // AfterNewSession returns materialized "after-new-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterNewSession() OptionValue[SparseArray[string]] {
 	return v.afterNewSession
 }
 
 // AfterNewWindow returns materialized "after-new-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterNewWindow() OptionValue[SparseArray[string]] { return v.afterNewWindow }
 
 // AfterPasteBuffer returns materialized "after-paste-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterPasteBuffer() OptionValue[SparseArray[string]] {
 	return v.afterPasteBuffer
 }
 
 // AfterPipePane returns materialized "after-pipe-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterPipePane() OptionValue[SparseArray[string]] { return v.afterPipePane }
 
 // AfterQueue returns materialized "after-queue" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterQueue() OptionValue[SparseArray[string]] { return v.afterQueue }
 
 // AfterRefreshClient returns materialized "after-refresh-client" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterRefreshClient() OptionValue[SparseArray[string]] {
 	return v.afterRefreshClient
 }
 
 // AfterRenameSession returns materialized "after-rename-session" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterRenameSession() OptionValue[SparseArray[string]] {
 	return v.afterRenameSession
 }
 
 // AfterRenameWindow returns materialized "after-rename-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterRenameWindow() OptionValue[SparseArray[string]] {
 	return v.afterRenameWindow
 }
 
 // AfterResizePane returns materialized "after-resize-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterResizePane() OptionValue[SparseArray[string]] {
 	return v.afterResizePane
 }
 
 // AfterResizeWindow returns materialized "after-resize-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterResizeWindow() OptionValue[SparseArray[string]] {
 	return v.afterResizeWindow
 }
 
 // AfterSaveBuffer returns materialized "after-save-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSaveBuffer() OptionValue[SparseArray[string]] {
 	return v.afterSaveBuffer
 }
 
 // AfterSelectLayout returns materialized "after-select-layout" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSelectLayout() OptionValue[SparseArray[string]] {
 	return v.afterSelectLayout
 }
 
 // AfterSelectPane returns materialized "after-select-pane" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSelectPane() OptionValue[SparseArray[string]] {
 	return v.afterSelectPane
 }
 
 // AfterSelectWindow returns materialized "after-select-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSelectWindow() OptionValue[SparseArray[string]] {
 	return v.afterSelectWindow
 }
 
 // AfterSendKeys returns materialized "after-send-keys" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSendKeys() OptionValue[SparseArray[string]] { return v.afterSendKeys }
 
 // AfterSetBuffer returns materialized "after-set-buffer" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetBuffer() OptionValue[SparseArray[string]] { return v.afterSetBuffer }
 
 // AfterSetEnvironment returns materialized "after-set-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterSetEnvironment
 }
 
 // AfterSetHook returns materialized "after-set-hook" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetHook() OptionValue[SparseArray[string]] { return v.afterSetHook }
 
 // AfterSetOption returns materialized "after-set-option" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSetOption() OptionValue[SparseArray[string]] { return v.afterSetOption }
 
 // AfterShowEnvironment returns materialized "after-show-environment" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterShowEnvironment() OptionValue[SparseArray[string]] {
 	return v.afterShowEnvironment
 }
 
 // AfterShowMessages returns materialized "after-show-messages" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterShowMessages() OptionValue[SparseArray[string]] {
 	return v.afterShowMessages
 }
 
 // AfterShowOptions returns materialized "after-show-options" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterShowOptions() OptionValue[SparseArray[string]] {
 	return v.afterShowOptions
 }
 
 // AfterSplitWindow returns materialized "after-split-window" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterSplitWindow() OptionValue[SparseArray[string]] {
 	return v.afterSplitWindow
 }
 
 // AfterUnbindKey returns materialized "after-unbind-key" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AfterUnbindKey() OptionValue[SparseArray[string]] { return v.afterUnbindKey }
 
 // AlertActivity returns materialized "alert-activity" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AlertActivity() OptionValue[SparseArray[string]] { return v.alertActivity }
 
 // AlertBell returns materialized "alert-bell" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AlertBell() OptionValue[SparseArray[string]] { return v.alertBell }
 
 // AlertSilence returns materialized "alert-silence" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) AlertSilence() OptionValue[SparseArray[string]] { return v.alertSilence }
 
 // ClientActive returns materialized "client-active" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientActive() OptionValue[SparseArray[string]] { return v.clientActive }
 
 // ClientAttached returns materialized "client-attached" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientAttached() OptionValue[SparseArray[string]] { return v.clientAttached }
 
@@ -4062,17 +4060,17 @@ func (v SessionHookValues) ClientDarkTheme() OptionValue[SparseArray[string]] {
 }
 
 // ClientDetached returns materialized "client-detached" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientDetached() OptionValue[SparseArray[string]] { return v.clientDetached }
 
 // ClientFocusIn returns materialized "client-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientFocusIn() OptionValue[SparseArray[string]] { return v.clientFocusIn }
 
 // ClientFocusOut returns materialized "client-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientFocusOut() OptionValue[SparseArray[string]] { return v.clientFocusOut }
 
@@ -4084,12 +4082,12 @@ func (v SessionHookValues) ClientLightTheme() OptionValue[SparseArray[string]] {
 }
 
 // ClientResized returns materialized "client-resized" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientResized() OptionValue[SparseArray[string]] { return v.clientResized }
 
 // ClientSessionChanged returns materialized "client-session-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) ClientSessionChanged() OptionValue[SparseArray[string]] {
 	return v.clientSessionChanged
@@ -4101,34 +4099,34 @@ func (v SessionHookValues) ClientSessionChanged() OptionValue[SparseArray[string
 func (v SessionHookValues) CommandError() OptionValue[SparseArray[string]] { return v.commandError }
 
 // SessionClosed returns materialized "session-closed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionClosed() OptionValue[SparseArray[string]] { return v.sessionClosed }
 
 // SessionCreated returns materialized "session-created" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionCreated() OptionValue[SparseArray[string]] { return v.sessionCreated }
 
 // SessionRenamed returns materialized "session-renamed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionRenamed() OptionValue[SparseArray[string]] { return v.sessionRenamed }
 
 // SessionWindowChanged returns materialized "session-window-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) SessionWindowChanged() OptionValue[SparseArray[string]] {
 	return v.sessionWindowChanged
 }
 
 // WindowLinked returns materialized "window-linked" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) WindowLinked() OptionValue[SparseArray[string]] { return v.windowLinked }
 
 // WindowUnlinked returns materialized "window-unlinked" as [OptionValue] with value type OptionValue[SparseArray[string]] from session hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v SessionHookValues) WindowUnlinked() OptionValue[SparseArray[string]] { return v.windowUnlinked }
 
@@ -4267,87 +4265,75 @@ type WindowHookValues struct {
 	paneSetClipboard    OptionValue[SparseArray[string]]
 	paneTitleChanged    OptionValue[SparseArray[string]]
 	windowLayoutChanged OptionValue[SparseArray[string]]
-	windowLinked        OptionValue[SparseArray[string]]
 	windowPaneChanged   OptionValue[SparseArray[string]]
 	windowRenamed       OptionValue[SparseArray[string]]
 	windowResized       OptionValue[SparseArray[string]]
-	windowUnlinked      OptionValue[SparseArray[string]]
 }
 
 // PaneDied returns materialized "pane-died" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneDied() OptionValue[SparseArray[string]] { return v.paneDied }
 
 // PaneExited returns materialized "pane-exited" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneExited() OptionValue[SparseArray[string]] { return v.paneExited }
 
 // PaneFocusIn returns materialized "pane-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneFocusIn() OptionValue[SparseArray[string]] { return v.paneFocusIn }
 
 // PaneFocusOut returns materialized "pane-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneFocusOut() OptionValue[SparseArray[string]] { return v.paneFocusOut }
 
 // PaneModeChanged returns materialized "pane-mode-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneModeChanged() OptionValue[SparseArray[string]] {
 	return v.paneModeChanged
 }
 
 // PaneSetClipboard returns materialized "pane-set-clipboard" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneSetClipboard() OptionValue[SparseArray[string]] {
 	return v.paneSetClipboard
 }
 
 // PaneTitleChanged returns materialized "pane-title-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) PaneTitleChanged() OptionValue[SparseArray[string]] {
 	return v.paneTitleChanged
 }
 
 // WindowLayoutChanged returns materialized "window-layout-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowLayoutChanged() OptionValue[SparseArray[string]] {
 	return v.windowLayoutChanged
 }
 
-// WindowLinked returns materialized "window-linked" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
-// Its present SparseArray value preserves assigned tmux indexes, including gaps.
-func (v WindowHookValues) WindowLinked() OptionValue[SparseArray[string]] { return v.windowLinked }
-
 // WindowPaneChanged returns materialized "window-pane-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowPaneChanged() OptionValue[SparseArray[string]] {
 	return v.windowPaneChanged
 }
 
 // WindowRenamed returns materialized "window-renamed" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowRenamed() OptionValue[SparseArray[string]] { return v.windowRenamed }
 
 // WindowResized returns materialized "window-resized" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.3.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v WindowHookValues) WindowResized() OptionValue[SparseArray[string]] { return v.windowResized }
-
-// WindowUnlinked returns materialized "window-unlinked" as [OptionValue] with value type OptionValue[SparseArray[string]] from window hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
-// Its present SparseArray value preserves assigned tmux indexes, including gaps.
-func (v WindowHookValues) WindowUnlinked() OptionValue[SparseArray[string]] { return v.windowUnlinked }
 
 func newWindowHookValues(values []decodedOptionValue) WindowHookValues {
 	var result WindowHookValues
@@ -4369,16 +4355,12 @@ func newWindowHookValues(values []decodedOptionValue) WindowHookValues {
 			result.paneTitleChanged = optionValueFromDecoded(value.sparseStringValue, value.origin)
 		case "window-layout-changed":
 			result.windowLayoutChanged = optionValueFromDecoded(value.sparseStringValue, value.origin)
-		case "window-linked":
-			result.windowLinked = optionValueFromDecoded(value.sparseStringValue, value.origin)
 		case "window-pane-changed":
 			result.windowPaneChanged = optionValueFromDecoded(value.sparseStringValue, value.origin)
 		case "window-renamed":
 			result.windowRenamed = optionValueFromDecoded(value.sparseStringValue, value.origin)
 		case "window-resized":
 			result.windowResized = optionValueFromDecoded(value.sparseStringValue, value.origin)
-		case "window-unlinked":
-			result.windowUnlinked = optionValueFromDecoded(value.sparseStringValue, value.origin)
 		}
 	}
 	return result
@@ -4398,39 +4380,39 @@ type PaneHookValues struct {
 }
 
 // PaneDied returns materialized "pane-died" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneDied() OptionValue[SparseArray[string]] { return v.paneDied }
 
 // PaneExited returns materialized "pane-exited" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneExited() OptionValue[SparseArray[string]] { return v.paneExited }
 
 // PaneFocusIn returns materialized "pane-focus-in" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneFocusIn() OptionValue[SparseArray[string]] { return v.paneFocusIn }
 
 // PaneFocusOut returns materialized "pane-focus-out" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneFocusOut() OptionValue[SparseArray[string]] { return v.paneFocusOut }
 
 // PaneModeChanged returns materialized "pane-mode-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneModeChanged() OptionValue[SparseArray[string]] { return v.paneModeChanged }
 
 // PaneSetClipboard returns materialized "pane-set-clipboard" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneSetClipboard() OptionValue[SparseArray[string]] {
 	return v.paneSetClipboard
 }
 
 // PaneTitleChanged returns materialized "pane-title-changed" as [OptionValue] with value type OptionValue[SparseArray[string]] from pane hook values; it does not query tmux.
-// Available as COMMAND since tmux 3.2a.
+// Available as COMMAND.
 // Its present SparseArray value preserves assigned tmux indexes, including gaps.
 func (v PaneHookValues) PaneTitleChanged() OptionValue[SparseArray[string]] {
 	return v.paneTitleChanged
@@ -4459,7 +4441,7 @@ func newPaneHookValues(values []decodedOptionValue) PaneHookValues {
 	return result
 }
 
-// SetActivityAction stores the "activity-action" session option as ActivityAction (tmux 3.2a or later).
+// SetActivityAction stores the "activity-action" session option as ActivityAction.
 // Read it with [SessionOptionValues.ActivityAction] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetActivityAction(ctx context.Context, value ActivityAction) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -4469,7 +4451,7 @@ func (s Session) SetActivityAction(ctx context.Context, value ActivityAction) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "activity-action", value.String(), true)
 }
 
-// SetActivityAction stores the "activity-action" session option as ActivityAction (tmux 3.2a or later).
+// SetActivityAction stores the "activity-action" session option as ActivityAction.
 // Read it with [SessionOptionValues.ActivityAction] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetActivityAction(ctx context.Context, value ActivityAction) error {
 	server := s.server
@@ -4477,7 +4459,7 @@ func (s GlobalSessionScope) SetActivityAction(ctx context.Context, value Activit
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "activity-action", value.String(), true)
 }
 
-// SetAggressiveResize stores the "aggressive-resize" window option as bool (tmux 3.2a or later).
+// SetAggressiveResize stores the "aggressive-resize" window option as bool.
 // Read it with [WindowOptionValues.AggressiveResize] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAggressiveResize(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4487,7 +4469,7 @@ func (w Window) SetAggressiveResize(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "aggressive-resize", encodeTypedOptionBool(value), false)
 }
 
-// SetAggressiveResize stores the "aggressive-resize" window option as bool (tmux 3.2a or later).
+// SetAggressiveResize stores the "aggressive-resize" window option as bool.
 // Read it with [WindowOptionValues.AggressiveResize] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAggressiveResize(ctx context.Context, value bool) error {
 	server := s.server
@@ -4495,7 +4477,7 @@ func (s GlobalWindowScope) SetAggressiveResize(ctx context.Context, value bool) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "aggressive-resize", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowPassthrough stores the "allow-passthrough" window option as AllowPassthrough (tmux 3.3 or later).
+// SetAllowPassthrough stores the "allow-passthrough" window option as AllowPassthrough.
 // Read it with [WindowOptionValues.AllowPassthrough] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4505,7 +4487,7 @@ func (w Window) SetAllowPassthrough(ctx context.Context, value AllowPassthrough)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-passthrough", value.String(), true)
 }
 
-// SetAllowPassthrough stores the "allow-passthrough" window option as AllowPassthrough (tmux 3.3 or later).
+// SetAllowPassthrough stores the "allow-passthrough" window option as AllowPassthrough.
 // Read it with [WindowOptionValues.AllowPassthrough] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	server := s.server
@@ -4513,7 +4495,7 @@ func (s GlobalWindowScope) SetAllowPassthrough(ctx context.Context, value AllowP
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-passthrough", value.String(), true)
 }
 
-// SetAllowPassthrough stores the "allow-passthrough" pane option as AllowPassthrough (tmux 3.3 or later).
+// SetAllowPassthrough stores the "allow-passthrough" pane option as AllowPassthrough.
 // Read it with [PaneOptionValues.AllowPassthrough] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -4523,7 +4505,7 @@ func (p Pane) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "allow-passthrough", value.String(), true)
 }
 
-// SetAllowRename stores the "allow-rename" window option as bool (tmux 3.2a or later).
+// SetAllowRename stores the "allow-rename" window option as bool.
 // Read it with [WindowOptionValues.AllowRename] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAllowRename(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4533,7 +4515,7 @@ func (w Window) SetAllowRename(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowRename stores the "allow-rename" window option as bool (tmux 3.2a or later).
+// SetAllowRename stores the "allow-rename" window option as bool.
 // Read it with [WindowOptionValues.AllowRename] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAllowRename(ctx context.Context, value bool) error {
 	server := s.server
@@ -4541,7 +4523,7 @@ func (s GlobalWindowScope) SetAllowRename(ctx context.Context, value bool) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "allow-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAllowRename stores the "allow-rename" pane option as bool (tmux 3.2a or later).
+// SetAllowRename stores the "allow-rename" pane option as bool.
 // Read it with [PaneOptionValues.AllowRename] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAllowRename(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -4579,7 +4561,7 @@ func (p Pane) SetAllowSetTitle(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "allow-set-title", encodeTypedOptionBool(value), false)
 }
 
-// SetAlternateScreen stores the "alternate-screen" window option as bool (tmux 3.2a or later).
+// SetAlternateScreen stores the "alternate-screen" window option as bool.
 // Read it with [WindowOptionValues.AlternateScreen] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAlternateScreen(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4589,7 +4571,7 @@ func (w Window) SetAlternateScreen(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAlternateScreen stores the "alternate-screen" window option as bool (tmux 3.2a or later).
+// SetAlternateScreen stores the "alternate-screen" window option as bool.
 // Read it with [WindowOptionValues.AlternateScreen] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAlternateScreen(ctx context.Context, value bool) error {
 	server := s.server
@@ -4597,7 +4579,7 @@ func (s GlobalWindowScope) SetAlternateScreen(ctx context.Context, value bool) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAlternateScreen stores the "alternate-screen" pane option as bool (tmux 3.2a or later).
+// SetAlternateScreen stores the "alternate-screen" pane option as bool.
 // Read it with [PaneOptionValues.AlternateScreen] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetAlternateScreen(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -4607,7 +4589,7 @@ func (p Pane) SetAlternateScreen(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "alternate-screen", encodeTypedOptionBool(value), false)
 }
 
-// SetAssumePasteTime stores the "assume-paste-time" session option as time.Duration (tmux 3.2a or later).
+// SetAssumePasteTime stores the "assume-paste-time" session option as time.Duration.
 // Read it with [SessionOptionValues.AssumePasteTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetAssumePasteTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -4621,7 +4603,7 @@ func (s Session) SetAssumePasteTime(ctx context.Context, value time.Duration) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encoded, false)
 }
 
-// SetAssumePasteTime stores the "assume-paste-time" session option as time.Duration (tmux 3.2a or later).
+// SetAssumePasteTime stores the "assume-paste-time" session option as time.Duration.
 // Read it with [SessionOptionValues.AssumePasteTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetAssumePasteTime(ctx context.Context, value time.Duration) error {
 	server := s.server
@@ -4633,7 +4615,7 @@ func (s GlobalSessionScope) SetAssumePasteTime(ctx context.Context, value time.D
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "assume-paste-time", encoded, false)
 }
 
-// SetAutomaticRename stores the "automatic-rename" window option as bool (tmux 3.2a or later).
+// SetAutomaticRename stores the "automatic-rename" window option as bool.
 // Read it with [WindowOptionValues.AutomaticRename] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAutomaticRename(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4643,7 +4625,7 @@ func (w Window) SetAutomaticRename(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAutomaticRename stores the "automatic-rename" window option as bool (tmux 3.2a or later).
+// SetAutomaticRename stores the "automatic-rename" window option as bool.
 // Read it with [WindowOptionValues.AutomaticRename] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAutomaticRename(ctx context.Context, value bool) error {
 	server := s.server
@@ -4651,7 +4633,7 @@ func (s GlobalWindowScope) SetAutomaticRename(ctx context.Context, value bool) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename", encodeTypedOptionBool(value), false)
 }
 
-// SetAutomaticRenameFormat stores the "automatic-rename-format" window option as string (tmux 3.2a or later).
+// SetAutomaticRenameFormat stores the "automatic-rename-format" window option as string.
 // Read it with [WindowOptionValues.AutomaticRenameFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetAutomaticRenameFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4661,7 +4643,7 @@ func (w Window) SetAutomaticRenameFormat(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename-format", value, false)
 }
 
-// SetAutomaticRenameFormat stores the "automatic-rename-format" window option as string (tmux 3.2a or later).
+// SetAutomaticRenameFormat stores the "automatic-rename-format" window option as string.
 // Read it with [WindowOptionValues.AutomaticRenameFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetAutomaticRenameFormat(ctx context.Context, value string) error {
 	server := s.server
@@ -4669,7 +4651,7 @@ func (s GlobalWindowScope) SetAutomaticRenameFormat(ctx context.Context, value s
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "automatic-rename-format", value, false)
 }
 
-// SetBackspace stores the "backspace" server option as string (tmux 3.2a or later).
+// SetBackspace stores the "backspace" server option as string.
 // Read it with [ServerOptionValues.Backspace] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetBackspace(ctx context.Context, value string) error {
 	server := s
@@ -4677,7 +4659,7 @@ func (s Server) SetBackspace(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "backspace", value, false)
 }
 
-// SetBaseIndex stores the "base-index" session option as int64 (tmux 3.2a or later).
+// SetBaseIndex stores the "base-index" session option as int64.
 // Read it with [SessionOptionValues.BaseIndex] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetBaseIndex(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -4687,7 +4669,7 @@ func (s Session) SetBaseIndex(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetBaseIndex stores the "base-index" session option as int64 (tmux 3.2a or later).
+// SetBaseIndex stores the "base-index" session option as int64.
 // Read it with [SessionOptionValues.BaseIndex] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetBaseIndex(ctx context.Context, value int64) error {
 	server := s.server
@@ -4695,7 +4677,7 @@ func (s GlobalSessionScope) SetBaseIndex(ctx context.Context, value int64) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetBellAction stores the "bell-action" session option as BellAction (tmux 3.2a or later).
+// SetBellAction stores the "bell-action" session option as BellAction.
 // Read it with [SessionOptionValues.BellAction] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetBellAction(ctx context.Context, value BellAction) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -4705,7 +4687,7 @@ func (s Session) SetBellAction(ctx context.Context, value BellAction) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "bell-action", value.String(), true)
 }
 
-// SetBellAction stores the "bell-action" session option as BellAction (tmux 3.2a or later).
+// SetBellAction stores the "bell-action" session option as BellAction.
 // Read it with [SessionOptionValues.BellAction] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetBellAction(ctx context.Context, value BellAction) error {
 	server := s.server
@@ -4713,7 +4695,7 @@ func (s GlobalSessionScope) SetBellAction(ctx context.Context, value BellAction)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "bell-action", value.String(), true)
 }
 
-// SetBufferLimit stores the "buffer-limit" server option as int64 (tmux 3.2a or later).
+// SetBufferLimit stores the "buffer-limit" server option as int64.
 // Read it with [ServerOptionValues.BufferLimit] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetBufferLimit(ctx context.Context, value int64) error {
 	server := s
@@ -4721,7 +4703,7 @@ func (s Server) SetBufferLimit(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "buffer-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetClockModeColour stores the "clock-mode-colour" window option as string (tmux 3.2a or later).
+// SetClockModeColour stores the "clock-mode-colour" window option as string.
 // Read it with [WindowOptionValues.ClockModeColour] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetClockModeColour(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4731,7 +4713,7 @@ func (w Window) SetClockModeColour(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-colour", value, false)
 }
 
-// SetClockModeColour stores the "clock-mode-colour" window option as string (tmux 3.2a or later).
+// SetClockModeColour stores the "clock-mode-colour" window option as string.
 // Read it with [WindowOptionValues.ClockModeColour] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetClockModeColour(ctx context.Context, value string) error {
 	server := s.server
@@ -4739,7 +4721,7 @@ func (s GlobalWindowScope) SetClockModeColour(ctx context.Context, value string)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-colour", value, false)
 }
 
-// SetClockModeStyle stores the "clock-mode-style" window option as ClockModeStyle (tmux 3.2a or later).
+// SetClockModeStyle stores the "clock-mode-style" window option as ClockModeStyle.
 // Read it with [WindowOptionValues.ClockModeStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetClockModeStyle(ctx context.Context, value ClockModeStyle) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4749,7 +4731,7 @@ func (w Window) SetClockModeStyle(ctx context.Context, value ClockModeStyle) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-style", value.String(), true)
 }
 
-// SetClockModeStyle stores the "clock-mode-style" window option as ClockModeStyle (tmux 3.2a or later).
+// SetClockModeStyle stores the "clock-mode-style" window option as ClockModeStyle.
 // Read it with [WindowOptionValues.ClockModeStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetClockModeStyle(ctx context.Context, value ClockModeStyle) error {
 	server := s.server
@@ -4757,7 +4739,7 @@ func (s GlobalWindowScope) SetClockModeStyle(ctx context.Context, value ClockMod
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "clock-mode-style", value.String(), true)
 }
 
-// SetCopyCommand stores the "copy-command" server option as string (tmux 3.2a or later).
+// SetCopyCommand stores the "copy-command" server option as string.
 // Read it with [ServerOptionValues.CopyCommand] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetCopyCommand(ctx context.Context, value string) error {
 	server := s
@@ -4783,7 +4765,7 @@ func (s GlobalWindowScope) SetCopyModeCurrentLineNumberStyle(ctx context.Context
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-current-line-number-style", value, false)
 }
 
-// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option as string (tmux 3.2a or later).
+// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option as string.
 // Read it with [WindowOptionValues.CopyModeCurrentMatchStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4793,7 +4775,7 @@ func (w Window) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-current-match-style", value, false)
 }
 
-// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option as string (tmux 3.2a or later).
+// SetCopyModeCurrentMatchStyle stores the "copy-mode-current-match-style" window option as string.
 // Read it with [WindowOptionValues.CopyModeCurrentMatchStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -4837,7 +4819,7 @@ func (s GlobalWindowScope) SetCopyModeLineNumbers(ctx context.Context, value Cop
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-line-numbers", value.String(), true)
 }
 
-// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option as string (tmux 3.2a or later).
+// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option as string.
 // Read it with [WindowOptionValues.CopyModeMarkStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeMarkStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4847,7 +4829,7 @@ func (w Window) SetCopyModeMarkStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-mark-style", value, false)
 }
 
-// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option as string (tmux 3.2a or later).
+// SetCopyModeMarkStyle stores the "copy-mode-mark-style" window option as string.
 // Read it with [WindowOptionValues.CopyModeMarkStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeMarkStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -4855,7 +4837,7 @@ func (s GlobalWindowScope) SetCopyModeMarkStyle(ctx context.Context, value strin
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-mark-style", value, false)
 }
 
-// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option as string (tmux 3.2a or later).
+// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option as string.
 // Read it with [WindowOptionValues.CopyModeMatchStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCopyModeMatchStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4865,7 +4847,7 @@ func (w Window) SetCopyModeMatchStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-match-style", value, false)
 }
 
-// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option as string (tmux 3.2a or later).
+// SetCopyModeMatchStyle stores the "copy-mode-match-style" window option as string.
 // Read it with [WindowOptionValues.CopyModeMatchStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCopyModeMatchStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -4937,7 +4919,7 @@ func (s GlobalWindowScope) SetCopyModeSelectionStyle(ctx context.Context, value 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "copy-mode-selection-style", value, false)
 }
 
-// SetCursorColour stores the "cursor-colour" window option as string (tmux 3.3 or later).
+// SetCursorColour stores the "cursor-colour" window option as string.
 // Read it with [WindowOptionValues.CursorColour] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCursorColour(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4947,7 +4929,7 @@ func (w Window) SetCursorColour(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-colour", value, false)
 }
 
-// SetCursorColour stores the "cursor-colour" window option as string (tmux 3.3 or later).
+// SetCursorColour stores the "cursor-colour" window option as string.
 // Read it with [WindowOptionValues.CursorColour] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCursorColour(ctx context.Context, value string) error {
 	server := s.server
@@ -4955,7 +4937,7 @@ func (s GlobalWindowScope) SetCursorColour(ctx context.Context, value string) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-colour", value, false)
 }
 
-// SetCursorColour stores the "cursor-colour" pane option as string (tmux 3.3 or later).
+// SetCursorColour stores the "cursor-colour" pane option as string.
 // Read it with [PaneOptionValues.CursorColour] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetCursorColour(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -4965,7 +4947,7 @@ func (p Pane) SetCursorColour(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "cursor-colour", value, false)
 }
 
-// SetCursorStyle stores the "cursor-style" window option as CursorStyle (tmux 3.3 or later).
+// SetCursorStyle stores the "cursor-style" window option as CursorStyle.
 // Read it with [WindowOptionValues.CursorStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -4975,7 +4957,7 @@ func (w Window) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-style", value.String(), true)
 }
 
-// SetCursorStyle stores the "cursor-style" window option as CursorStyle (tmux 3.3 or later).
+// SetCursorStyle stores the "cursor-style" window option as CursorStyle.
 // Read it with [WindowOptionValues.CursorStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	server := s.server
@@ -4983,7 +4965,7 @@ func (s GlobalWindowScope) SetCursorStyle(ctx context.Context, value CursorStyle
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "cursor-style", value.String(), true)
 }
 
-// SetCursorStyle stores the "cursor-style" pane option as CursorStyle (tmux 3.3 or later).
+// SetCursorStyle stores the "cursor-style" pane option as CursorStyle.
 // Read it with [PaneOptionValues.CursorStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetCursorStyle(ctx context.Context, value CursorStyle) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -5001,7 +4983,7 @@ func (s Server) SetDefaultClientCommand(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "default-client-command", value, false)
 }
 
-// SetDefaultCommand stores the "default-command" session option as string (tmux 3.2a or later).
+// SetDefaultCommand stores the "default-command" session option as string.
 // Read it with [SessionOptionValues.DefaultCommand] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDefaultCommand(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5011,7 +4993,7 @@ func (s Session) SetDefaultCommand(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-command", value, false)
 }
 
-// SetDefaultCommand stores the "default-command" session option as string (tmux 3.2a or later).
+// SetDefaultCommand stores the "default-command" session option as string.
 // Read it with [SessionOptionValues.DefaultCommand] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDefaultCommand(ctx context.Context, value string) error {
 	server := s.server
@@ -5019,7 +5001,7 @@ func (s GlobalSessionScope) SetDefaultCommand(ctx context.Context, value string)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-command", value, false)
 }
 
-// SetDefaultShell stores the "default-shell" session option as string (tmux 3.2a or later).
+// SetDefaultShell stores the "default-shell" session option as string.
 // Read it with [SessionOptionValues.DefaultShell] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDefaultShell(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5029,7 +5011,7 @@ func (s Session) SetDefaultShell(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-shell", value, false)
 }
 
-// SetDefaultShell stores the "default-shell" session option as string (tmux 3.2a or later).
+// SetDefaultShell stores the "default-shell" session option as string.
 // Read it with [SessionOptionValues.DefaultShell] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDefaultShell(ctx context.Context, value string) error {
 	server := s.server
@@ -5037,7 +5019,7 @@ func (s GlobalSessionScope) SetDefaultShell(ctx context.Context, value string) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-shell", value, false)
 }
 
-// SetDefaultSize stores the "default-size" session option as string (tmux 3.2a or later).
+// SetDefaultSize stores the "default-size" session option as string.
 // Read it with [SessionOptionValues.DefaultSize] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDefaultSize(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5047,7 +5029,7 @@ func (s Session) SetDefaultSize(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-size", value, false)
 }
 
-// SetDefaultSize stores the "default-size" session option as string (tmux 3.2a or later).
+// SetDefaultSize stores the "default-size" session option as string.
 // Read it with [SessionOptionValues.DefaultSize] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDefaultSize(ctx context.Context, value string) error {
 	server := s.server
@@ -5055,7 +5037,7 @@ func (s GlobalSessionScope) SetDefaultSize(ctx context.Context, value string) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "default-size", value, false)
 }
 
-// SetDefaultTerminal stores the "default-terminal" server option as string (tmux 3.2a or later).
+// SetDefaultTerminal stores the "default-terminal" server option as string.
 // Read it with [ServerOptionValues.DefaultTerminal] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetDefaultTerminal(ctx context.Context, value string) error {
 	server := s
@@ -5063,7 +5045,7 @@ func (s Server) SetDefaultTerminal(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "default-terminal", value, false)
 }
 
-// SetDestroyUnattached stores the "destroy-unattached" session option as DestroyUnattached (tmux 3.2a or later).
+// SetDestroyUnattached stores the "destroy-unattached" session option as DestroyUnattached.
 // Read it with [SessionOptionValues.DestroyUnattached] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDestroyUnattached(ctx context.Context, value DestroyUnattached) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5073,7 +5055,7 @@ func (s Session) SetDestroyUnattached(ctx context.Context, value DestroyUnattach
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "destroy-unattached", value.String(), true)
 }
 
-// SetDestroyUnattached stores the "destroy-unattached" session option as DestroyUnattached (tmux 3.2a or later).
+// SetDestroyUnattached stores the "destroy-unattached" session option as DestroyUnattached.
 // Read it with [SessionOptionValues.DestroyUnattached] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDestroyUnattached(ctx context.Context, value DestroyUnattached) error {
 	server := s.server
@@ -5081,7 +5063,7 @@ func (s GlobalSessionScope) SetDestroyUnattached(ctx context.Context, value Dest
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "destroy-unattached", value.String(), true)
 }
 
-// SetDetachOnDestroy stores the "detach-on-destroy" session option as DetachOnDestroy (tmux 3.2a or later).
+// SetDetachOnDestroy stores the "detach-on-destroy" session option as DetachOnDestroy.
 // Read it with [SessionOptionValues.DetachOnDestroy] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5091,7 +5073,7 @@ func (s Session) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "detach-on-destroy", value.String(), true)
 }
 
-// SetDetachOnDestroy stores the "detach-on-destroy" session option as DetachOnDestroy (tmux 3.2a or later).
+// SetDetachOnDestroy stores the "detach-on-destroy" session option as DetachOnDestroy.
 // Read it with [SessionOptionValues.DetachOnDestroy] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) error {
 	server := s.server
@@ -5099,7 +5081,7 @@ func (s GlobalSessionScope) SetDetachOnDestroy(ctx context.Context, value Detach
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "detach-on-destroy", value.String(), true)
 }
 
-// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option as string (tmux 3.2a or later).
+// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option as string.
 // Read it with [SessionOptionValues.DisplayPanesActiveColour] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayPanesActiveColour(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5109,7 +5091,7 @@ func (s Session) SetDisplayPanesActiveColour(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-active-colour", value, false)
 }
 
-// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option as string (tmux 3.2a or later).
+// SetDisplayPanesActiveColour stores the "display-panes-active-colour" session option as string.
 // Read it with [SessionOptionValues.DisplayPanesActiveColour] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayPanesActiveColour(ctx context.Context, value string) error {
 	server := s.server
@@ -5117,7 +5099,7 @@ func (s GlobalSessionScope) SetDisplayPanesActiveColour(ctx context.Context, val
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-active-colour", value, false)
 }
 
-// SetDisplayPanesColour stores the "display-panes-colour" session option as string (tmux 3.2a or later).
+// SetDisplayPanesColour stores the "display-panes-colour" session option as string.
 // Read it with [SessionOptionValues.DisplayPanesColour] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayPanesColour(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5127,7 +5109,7 @@ func (s Session) SetDisplayPanesColour(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-colour", value, false)
 }
 
-// SetDisplayPanesColour stores the "display-panes-colour" session option as string (tmux 3.2a or later).
+// SetDisplayPanesColour stores the "display-panes-colour" session option as string.
 // Read it with [SessionOptionValues.DisplayPanesColour] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayPanesColour(ctx context.Context, value string) error {
 	server := s.server
@@ -5135,7 +5117,7 @@ func (s GlobalSessionScope) SetDisplayPanesColour(ctx context.Context, value str
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-colour", value, false)
 }
 
-// SetDisplayPanesTime stores the "display-panes-time" session option as time.Duration (tmux 3.2a or later).
+// SetDisplayPanesTime stores the "display-panes-time" session option as time.Duration.
 // Read it with [SessionOptionValues.DisplayPanesTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayPanesTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5149,7 +5131,7 @@ func (s Session) SetDisplayPanesTime(ctx context.Context, value time.Duration) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encoded, false)
 }
 
-// SetDisplayPanesTime stores the "display-panes-time" session option as time.Duration (tmux 3.2a or later).
+// SetDisplayPanesTime stores the "display-panes-time" session option as time.Duration.
 // Read it with [SessionOptionValues.DisplayPanesTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayPanesTime(ctx context.Context, value time.Duration) error {
 	server := s.server
@@ -5161,7 +5143,7 @@ func (s GlobalSessionScope) SetDisplayPanesTime(ctx context.Context, value time.
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-panes-time", encoded, false)
 }
 
-// SetDisplayTime stores the "display-time" session option as time.Duration (tmux 3.2a or later).
+// SetDisplayTime stores the "display-time" session option as time.Duration.
 // Read it with [SessionOptionValues.DisplayTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetDisplayTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5175,7 +5157,7 @@ func (s Session) SetDisplayTime(ctx context.Context, value time.Duration) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encoded, false)
 }
 
-// SetDisplayTime stores the "display-time" session option as time.Duration (tmux 3.2a or later).
+// SetDisplayTime stores the "display-time" session option as time.Duration.
 // Read it with [SessionOptionValues.DisplayTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetDisplayTime(ctx context.Context, value time.Duration) error {
 	server := s.server
@@ -5187,7 +5169,7 @@ func (s GlobalSessionScope) SetDisplayTime(ctx context.Context, value time.Durat
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "display-time", encoded, false)
 }
 
-// SetEditor stores the "editor" server option as string (tmux 3.2a or later).
+// SetEditor stores the "editor" server option as string.
 // Read it with [ServerOptionValues.Editor] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetEditor(ctx context.Context, value string) error {
 	server := s
@@ -5195,7 +5177,7 @@ func (s Server) SetEditor(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "editor", value, false)
 }
 
-// SetEscapeTime stores the "escape-time" server option as time.Duration (tmux 3.2a or later).
+// SetEscapeTime stores the "escape-time" server option as time.Duration.
 // Read it with [ServerOptionValues.EscapeTime] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetEscapeTime(ctx context.Context, value time.Duration) error {
 	server := s
@@ -5207,7 +5189,7 @@ func (s Server) SetEscapeTime(ctx context.Context, value time.Duration) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "escape-time", encoded, false)
 }
 
-// SetExitEmpty stores the "exit-empty" server option as bool (tmux 3.2a or later).
+// SetExitEmpty stores the "exit-empty" server option as bool.
 // Read it with [ServerOptionValues.ExitEmpty] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExitEmpty(ctx context.Context, value bool) error {
 	server := s
@@ -5215,7 +5197,7 @@ func (s Server) SetExitEmpty(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "exit-empty", encodeTypedOptionBool(value), false)
 }
 
-// SetExitUnattached stores the "exit-unattached" server option as bool (tmux 3.2a or later).
+// SetExitUnattached stores the "exit-unattached" server option as bool.
 // Read it with [ServerOptionValues.ExitUnattached] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExitUnattached(ctx context.Context, value bool) error {
 	server := s
@@ -5223,7 +5205,7 @@ func (s Server) SetExitUnattached(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "exit-unattached", encodeTypedOptionBool(value), false)
 }
 
-// SetExtendedKeys stores the "extended-keys" server option as ExtendedKeys (tmux 3.2a or later).
+// SetExtendedKeys stores the "extended-keys" server option as ExtendedKeys.
 // Read it with [ServerOptionValues.ExtendedKeys] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetExtendedKeys(ctx context.Context, value ExtendedKeys) error {
 	server := s
@@ -5239,7 +5221,7 @@ func (s Server) SetExtendedKeysFormat(ctx context.Context, value ExtendedKeysFor
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "extended-keys-format", value.String(), true)
 }
 
-// SetFillCharacter stores the "fill-character" window option as string (tmux 3.3 or later).
+// SetFillCharacter stores the "fill-character" window option as string.
 // Read it with [WindowOptionValues.FillCharacter] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetFillCharacter(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5249,7 +5231,7 @@ func (w Window) SetFillCharacter(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "fill-character", value, false)
 }
 
-// SetFillCharacter stores the "fill-character" window option as string (tmux 3.3 or later).
+// SetFillCharacter stores the "fill-character" window option as string.
 // Read it with [WindowOptionValues.FillCharacter] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetFillCharacter(ctx context.Context, value string) error {
 	server := s.server
@@ -5257,7 +5239,7 @@ func (s GlobalWindowScope) SetFillCharacter(ctx context.Context, value string) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "fill-character", value, false)
 }
 
-// SetFocusEvents stores the "focus-events" server option as bool (tmux 3.2a or later).
+// SetFocusEvents stores the "focus-events" server option as bool.
 // Read it with [ServerOptionValues.FocusEvents] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetFocusEvents(ctx context.Context, value bool) error {
 	server := s
@@ -5291,7 +5273,7 @@ func (s Server) SetGetClipboard(ctx context.Context, value GetClipboard) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "get-clipboard", value.String(), true)
 }
 
-// SetHistoryFile stores the "history-file" server option as string (tmux 3.2a or later).
+// SetHistoryFile stores the "history-file" server option as string.
 // Read it with [ServerOptionValues.HistoryFile] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetHistoryFile(ctx context.Context, value string) error {
 	server := s
@@ -5299,7 +5281,7 @@ func (s Server) SetHistoryFile(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "history-file", value, false)
 }
 
-// SetHistoryLimit stores the "history-limit" session option as int64 (tmux 3.2a or later).
+// SetHistoryLimit stores the "history-limit" session option as int64.
 // Read it with [SessionOptionValues.HistoryLimit] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetHistoryLimit(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5309,7 +5291,7 @@ func (s Session) SetHistoryLimit(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "history-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetHistoryLimit stores the "history-limit" session option as int64 (tmux 3.2a or later).
+// SetHistoryLimit stores the "history-limit" session option as int64.
 // Read it with [SessionOptionValues.HistoryLimit] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetHistoryLimit(ctx context.Context, value int64) error {
 	server := s.server
@@ -5351,7 +5333,7 @@ func (s Server) SetInputBufferSize(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "input-buffer-size", encodeTypedOptionInt64(value), false)
 }
 
-// SetKeyTable stores the "key-table" session option as string (tmux 3.2a or later).
+// SetKeyTable stores the "key-table" session option as string.
 // Read it with [SessionOptionValues.KeyTable] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetKeyTable(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5361,7 +5343,7 @@ func (s Session) SetKeyTable(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "key-table", value, false)
 }
 
-// SetKeyTable stores the "key-table" session option as string (tmux 3.2a or later).
+// SetKeyTable stores the "key-table" session option as string.
 // Read it with [SessionOptionValues.KeyTable] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetKeyTable(ctx context.Context, value string) error {
 	server := s.server
@@ -5369,7 +5351,7 @@ func (s GlobalSessionScope) SetKeyTable(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "key-table", value, false)
 }
 
-// SetLockAfterTime stores the "lock-after-time" session option as time.Duration (tmux 3.2a or later).
+// SetLockAfterTime stores the "lock-after-time" session option as time.Duration.
 // Read it with [SessionOptionValues.LockAfterTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetLockAfterTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5383,7 +5365,7 @@ func (s Session) SetLockAfterTime(ctx context.Context, value time.Duration) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encoded, false)
 }
 
-// SetLockAfterTime stores the "lock-after-time" session option as time.Duration (tmux 3.2a or later).
+// SetLockAfterTime stores the "lock-after-time" session option as time.Duration.
 // Read it with [SessionOptionValues.LockAfterTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetLockAfterTime(ctx context.Context, value time.Duration) error {
 	server := s.server
@@ -5395,7 +5377,7 @@ func (s GlobalSessionScope) SetLockAfterTime(ctx context.Context, value time.Dur
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-after-time", encoded, false)
 }
 
-// SetLockCommand stores the "lock-command" session option as string (tmux 3.2a or later).
+// SetLockCommand stores the "lock-command" session option as string.
 // Read it with [SessionOptionValues.LockCommand] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetLockCommand(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5405,7 +5387,7 @@ func (s Session) SetLockCommand(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-command", value, false)
 }
 
-// SetLockCommand stores the "lock-command" session option as string (tmux 3.2a or later).
+// SetLockCommand stores the "lock-command" session option as string.
 // Read it with [SessionOptionValues.LockCommand] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetLockCommand(ctx context.Context, value string) error {
 	server := s.server
@@ -5413,7 +5395,7 @@ func (s GlobalSessionScope) SetLockCommand(ctx context.Context, value string) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "lock-command", value, false)
 }
 
-// SetMainPaneHeight stores the "main-pane-height" window option as string (tmux 3.2a or later).
+// SetMainPaneHeight stores the "main-pane-height" window option as string.
 // Read it with [WindowOptionValues.MainPaneHeight] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMainPaneHeight(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5423,7 +5405,7 @@ func (w Window) SetMainPaneHeight(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-height", value, false)
 }
 
-// SetMainPaneHeight stores the "main-pane-height" window option as string (tmux 3.2a or later).
+// SetMainPaneHeight stores the "main-pane-height" window option as string.
 // Read it with [WindowOptionValues.MainPaneHeight] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMainPaneHeight(ctx context.Context, value string) error {
 	server := s.server
@@ -5431,7 +5413,7 @@ func (s GlobalWindowScope) SetMainPaneHeight(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-height", value, false)
 }
 
-// SetMainPaneWidth stores the "main-pane-width" window option as string (tmux 3.2a or later).
+// SetMainPaneWidth stores the "main-pane-width" window option as string.
 // Read it with [WindowOptionValues.MainPaneWidth] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMainPaneWidth(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5441,7 +5423,7 @@ func (w Window) SetMainPaneWidth(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "main-pane-width", value, false)
 }
 
-// SetMainPaneWidth stores the "main-pane-width" window option as string (tmux 3.2a or later).
+// SetMainPaneWidth stores the "main-pane-width" window option as string.
 // Read it with [WindowOptionValues.MainPaneWidth] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMainPaneWidth(ctx context.Context, value string) error {
 	server := s.server
@@ -5521,7 +5503,7 @@ func (s GlobalWindowScope) SetMenuStyle(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "menu-style", value, false)
 }
 
-// SetMessageCommandStyle stores the "message-command-style" session option as string (tmux 3.2a or later).
+// SetMessageCommandStyle stores the "message-command-style" session option as string.
 // Read it with [SessionOptionValues.MessageCommandStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMessageCommandStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5531,7 +5513,7 @@ func (s Session) SetMessageCommandStyle(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-command-style", value, false)
 }
 
-// SetMessageCommandStyle stores the "message-command-style" session option as string (tmux 3.2a or later).
+// SetMessageCommandStyle stores the "message-command-style" session option as string.
 // Read it with [SessionOptionValues.MessageCommandStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMessageCommandStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -5557,7 +5539,7 @@ func (s GlobalSessionScope) SetMessageFormat(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-format", value, false)
 }
 
-// SetMessageLimit stores the "message-limit" server option as int64 (tmux 3.2a or later).
+// SetMessageLimit stores the "message-limit" server option as int64.
 // Read it with [ServerOptionValues.MessageLimit] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetMessageLimit(ctx context.Context, value int64) error {
 	server := s
@@ -5583,7 +5565,7 @@ func (s GlobalSessionScope) SetMessageLine(ctx context.Context, value MessageLin
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-line", value.String(), true)
 }
 
-// SetMessageStyle stores the "message-style" session option as string (tmux 3.2a or later).
+// SetMessageStyle stores the "message-style" session option as string.
 // Read it with [SessionOptionValues.MessageStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMessageStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5593,7 +5575,7 @@ func (s Session) SetMessageStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-style", value, false)
 }
 
-// SetMessageStyle stores the "message-style" session option as string (tmux 3.2a or later).
+// SetMessageStyle stores the "message-style" session option as string.
 // Read it with [SessionOptionValues.MessageStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMessageStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -5601,7 +5583,7 @@ func (s GlobalSessionScope) SetMessageStyle(ctx context.Context, value string) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "message-style", value, false)
 }
 
-// SetModeKeys stores the "mode-keys" window option as ModeKeys (tmux 3.2a or later).
+// SetModeKeys stores the "mode-keys" window option as ModeKeys.
 // Read it with [WindowOptionValues.ModeKeys] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetModeKeys(ctx context.Context, value ModeKeys) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5611,7 +5593,7 @@ func (w Window) SetModeKeys(ctx context.Context, value ModeKeys) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-keys", value.String(), true)
 }
 
-// SetModeKeys stores the "mode-keys" window option as ModeKeys (tmux 3.2a or later).
+// SetModeKeys stores the "mode-keys" window option as ModeKeys.
 // Read it with [WindowOptionValues.ModeKeys] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetModeKeys(ctx context.Context, value ModeKeys) error {
 	server := s.server
@@ -5619,7 +5601,7 @@ func (s GlobalWindowScope) SetModeKeys(ctx context.Context, value ModeKeys) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-keys", value.String(), true)
 }
 
-// SetModeStyle stores the "mode-style" window option as string (tmux 3.2a or later).
+// SetModeStyle stores the "mode-style" window option as string.
 // Read it with [WindowOptionValues.ModeStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetModeStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5629,7 +5611,7 @@ func (w Window) SetModeStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-style", value, false)
 }
 
-// SetModeStyle stores the "mode-style" window option as string (tmux 3.2a or later).
+// SetModeStyle stores the "mode-style" window option as string.
 // Read it with [WindowOptionValues.ModeStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetModeStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -5637,7 +5619,7 @@ func (s GlobalWindowScope) SetModeStyle(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "mode-style", value, false)
 }
 
-// SetMonitorActivity stores the "monitor-activity" window option as bool (tmux 3.2a or later).
+// SetMonitorActivity stores the "monitor-activity" window option as bool.
 // Read it with [WindowOptionValues.MonitorActivity] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMonitorActivity(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5647,7 +5629,7 @@ func (w Window) SetMonitorActivity(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-activity", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorActivity stores the "monitor-activity" window option as bool (tmux 3.2a or later).
+// SetMonitorActivity stores the "monitor-activity" window option as bool.
 // Read it with [WindowOptionValues.MonitorActivity] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMonitorActivity(ctx context.Context, value bool) error {
 	server := s.server
@@ -5655,7 +5637,7 @@ func (s GlobalWindowScope) SetMonitorActivity(ctx context.Context, value bool) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-activity", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorBell stores the "monitor-bell" window option as bool (tmux 3.2a or later).
+// SetMonitorBell stores the "monitor-bell" window option as bool.
 // Read it with [WindowOptionValues.MonitorBell] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMonitorBell(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5665,7 +5647,7 @@ func (w Window) SetMonitorBell(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-bell", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorBell stores the "monitor-bell" window option as bool (tmux 3.2a or later).
+// SetMonitorBell stores the "monitor-bell" window option as bool.
 // Read it with [WindowOptionValues.MonitorBell] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMonitorBell(ctx context.Context, value bool) error {
 	server := s.server
@@ -5673,7 +5655,7 @@ func (s GlobalWindowScope) SetMonitorBell(ctx context.Context, value bool) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-bell", encodeTypedOptionBool(value), false)
 }
 
-// SetMonitorSilence stores the "monitor-silence" window option as int64 (tmux 3.2a or later).
+// SetMonitorSilence stores the "monitor-silence" window option as int64.
 // Read it with [WindowOptionValues.MonitorSilence] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetMonitorSilence(ctx context.Context, value int64) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5683,7 +5665,7 @@ func (w Window) SetMonitorSilence(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-silence", encodeTypedOptionInt64(value), false)
 }
 
-// SetMonitorSilence stores the "monitor-silence" window option as int64 (tmux 3.2a or later).
+// SetMonitorSilence stores the "monitor-silence" window option as int64.
 // Read it with [WindowOptionValues.MonitorSilence] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetMonitorSilence(ctx context.Context, value int64) error {
 	server := s.server
@@ -5691,7 +5673,7 @@ func (s GlobalWindowScope) SetMonitorSilence(ctx context.Context, value int64) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "monitor-silence", encodeTypedOptionInt64(value), false)
 }
 
-// SetMouse stores the "mouse" session option as bool (tmux 3.2a or later).
+// SetMouse stores the "mouse" session option as bool.
 // Read it with [SessionOptionValues.Mouse] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetMouse(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -5701,7 +5683,7 @@ func (s Session) SetMouse(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "mouse", encodeTypedOptionBool(value), false)
 }
 
-// SetMouse stores the "mouse" session option as bool (tmux 3.2a or later).
+// SetMouse stores the "mouse" session option as bool.
 // Read it with [SessionOptionValues.Mouse] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetMouse(ctx context.Context, value bool) error {
 	server := s.server
@@ -5709,7 +5691,7 @@ func (s GlobalSessionScope) SetMouse(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "mouse", encodeTypedOptionBool(value), false)
 }
 
-// SetOtherPaneHeight stores the "other-pane-height" window option as string (tmux 3.2a or later).
+// SetOtherPaneHeight stores the "other-pane-height" window option as string.
 // Read it with [WindowOptionValues.OtherPaneHeight] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetOtherPaneHeight(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5719,7 +5701,7 @@ func (w Window) SetOtherPaneHeight(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-height", value, false)
 }
 
-// SetOtherPaneHeight stores the "other-pane-height" window option as string (tmux 3.2a or later).
+// SetOtherPaneHeight stores the "other-pane-height" window option as string.
 // Read it with [WindowOptionValues.OtherPaneHeight] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetOtherPaneHeight(ctx context.Context, value string) error {
 	server := s.server
@@ -5727,7 +5709,7 @@ func (s GlobalWindowScope) SetOtherPaneHeight(ctx context.Context, value string)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-height", value, false)
 }
 
-// SetOtherPaneWidth stores the "other-pane-width" window option as string (tmux 3.2a or later).
+// SetOtherPaneWidth stores the "other-pane-width" window option as string.
 // Read it with [WindowOptionValues.OtherPaneWidth] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetOtherPaneWidth(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5737,7 +5719,7 @@ func (w Window) SetOtherPaneWidth(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-width", value, false)
 }
 
-// SetOtherPaneWidth stores the "other-pane-width" window option as string (tmux 3.2a or later).
+// SetOtherPaneWidth stores the "other-pane-width" window option as string.
 // Read it with [WindowOptionValues.OtherPaneWidth] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetOtherPaneWidth(ctx context.Context, value string) error {
 	server := s.server
@@ -5745,7 +5727,7 @@ func (s GlobalWindowScope) SetOtherPaneWidth(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "other-pane-width", value, false)
 }
 
-// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option as string (tmux 3.2a or later).
+// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option as string.
 // Read it with [WindowOptionValues.PaneActiveBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneActiveBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5755,7 +5737,7 @@ func (w Window) SetPaneActiveBorderStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-active-border-style", value, false)
 }
 
-// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option as string (tmux 3.2a or later).
+// SetPaneActiveBorderStyle stores the "pane-active-border-style" window option as string.
 // Read it with [WindowOptionValues.PaneActiveBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneActiveBorderStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -5773,7 +5755,7 @@ func (p Pane) SetPaneActiveBorderStyle(ctx context.Context, value string) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "pane-active-border-style", value, false)
 }
 
-// SetPaneBaseIndex stores the "pane-base-index" window option as int64 (tmux 3.2a or later).
+// SetPaneBaseIndex stores the "pane-base-index" window option as int64.
 // Read it with [WindowOptionValues.PaneBaseIndex] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBaseIndex(ctx context.Context, value int64) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5783,7 +5765,7 @@ func (w Window) SetPaneBaseIndex(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetPaneBaseIndex stores the "pane-base-index" window option as int64 (tmux 3.2a or later).
+// SetPaneBaseIndex stores the "pane-base-index" window option as int64.
 // Read it with [WindowOptionValues.PaneBaseIndex] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBaseIndex(ctx context.Context, value int64) error {
 	server := s.server
@@ -5791,7 +5773,7 @@ func (s GlobalWindowScope) SetPaneBaseIndex(ctx context.Context, value int64) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-base-index", encodeTypedOptionInt64(value), false)
 }
 
-// SetPaneBorderFormat stores the "pane-border-format" window option as string (tmux 3.2a or later).
+// SetPaneBorderFormat stores the "pane-border-format" window option as string.
 // Read it with [WindowOptionValues.PaneBorderFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5801,7 +5783,7 @@ func (w Window) SetPaneBorderFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-format", value, false)
 }
 
-// SetPaneBorderFormat stores the "pane-border-format" window option as string (tmux 3.2a or later).
+// SetPaneBorderFormat stores the "pane-border-format" window option as string.
 // Read it with [WindowOptionValues.PaneBorderFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderFormat(ctx context.Context, value string) error {
 	server := s.server
@@ -5809,7 +5791,7 @@ func (s GlobalWindowScope) SetPaneBorderFormat(ctx context.Context, value string
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-format", value, false)
 }
 
-// SetPaneBorderFormat stores the "pane-border-format" pane option as string (tmux 3.3 or later).
+// SetPaneBorderFormat stores the "pane-border-format" pane option as string.
 // Read it with [PaneOptionValues.PaneBorderFormat] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetPaneBorderFormat(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -5819,7 +5801,7 @@ func (p Pane) SetPaneBorderFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "pane-border-format", value, false)
 }
 
-// SetPaneBorderIndicators stores the "pane-border-indicators" window option as PaneBorderIndicators (tmux 3.3 or later).
+// SetPaneBorderIndicators stores the "pane-border-indicators" window option as PaneBorderIndicators.
 // Read it with [WindowOptionValues.PaneBorderIndicators] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderIndicators(ctx context.Context, value PaneBorderIndicators) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5829,7 +5811,7 @@ func (w Window) SetPaneBorderIndicators(ctx context.Context, value PaneBorderInd
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-indicators", value.String(), true)
 }
 
-// SetPaneBorderIndicators stores the "pane-border-indicators" window option as PaneBorderIndicators (tmux 3.3 or later).
+// SetPaneBorderIndicators stores the "pane-border-indicators" window option as PaneBorderIndicators.
 // Read it with [WindowOptionValues.PaneBorderIndicators] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderIndicators(ctx context.Context, value PaneBorderIndicators) error {
 	server := s.server
@@ -5837,7 +5819,7 @@ func (s GlobalWindowScope) SetPaneBorderIndicators(ctx context.Context, value Pa
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-indicators", value.String(), true)
 }
 
-// SetPaneBorderLines stores the "pane-border-lines" window option as PaneBorderLines (tmux 3.2a or later).
+// SetPaneBorderLines stores the "pane-border-lines" window option as PaneBorderLines.
 // Read it with [WindowOptionValues.PaneBorderLines] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderLines(ctx context.Context, value PaneBorderLines) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5847,7 +5829,7 @@ func (w Window) SetPaneBorderLines(ctx context.Context, value PaneBorderLines) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-lines", value.String(), true)
 }
 
-// SetPaneBorderLines stores the "pane-border-lines" window option as PaneBorderLines (tmux 3.2a or later).
+// SetPaneBorderLines stores the "pane-border-lines" window option as PaneBorderLines.
 // Read it with [WindowOptionValues.PaneBorderLines] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderLines(ctx context.Context, value PaneBorderLines) error {
 	server := s.server
@@ -5855,7 +5837,7 @@ func (s GlobalWindowScope) SetPaneBorderLines(ctx context.Context, value PaneBor
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-lines", value.String(), true)
 }
 
-// SetPaneBorderStatus stores the "pane-border-status" window option as PaneBorderStatus (tmux 3.2a or later).
+// SetPaneBorderStatus stores the "pane-border-status" window option as PaneBorderStatus.
 // Read it with [WindowOptionValues.PaneBorderStatus] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5865,7 +5847,7 @@ func (w Window) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-status", value.String(), true)
 }
 
-// SetPaneBorderStatus stores the "pane-border-status" window option as PaneBorderStatus (tmux 3.2a or later).
+// SetPaneBorderStatus stores the "pane-border-status" window option as PaneBorderStatus.
 // Read it with [WindowOptionValues.PaneBorderStatus] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus) error {
 	server := s.server
@@ -5873,7 +5855,7 @@ func (s GlobalWindowScope) SetPaneBorderStatus(ctx context.Context, value PaneBo
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-status", value.String(), true)
 }
 
-// SetPaneBorderStyle stores the "pane-border-style" window option as string (tmux 3.2a or later).
+// SetPaneBorderStyle stores the "pane-border-style" window option as string.
 // Read it with [WindowOptionValues.PaneBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPaneBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -5883,7 +5865,7 @@ func (w Window) SetPaneBorderStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-border-style", value, false)
 }
 
-// SetPaneBorderStyle stores the "pane-border-style" window option as string (tmux 3.2a or later).
+// SetPaneBorderStyle stores the "pane-border-style" window option as string.
 // Read it with [WindowOptionValues.PaneBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPaneBorderStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6001,7 +5983,7 @@ func (s GlobalWindowScope) SetPaneStatusStyle(ctx context.Context, value string)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "pane-status-style", value, false)
 }
 
-// SetPopupBorderLines stores the "popup-border-lines" window option as PopupBorderLines (tmux 3.3 or later).
+// SetPopupBorderLines stores the "popup-border-lines" window option as PopupBorderLines.
 // Read it with [WindowOptionValues.PopupBorderLines] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPopupBorderLines(ctx context.Context, value PopupBorderLines) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6011,7 +5993,7 @@ func (w Window) SetPopupBorderLines(ctx context.Context, value PopupBorderLines)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-lines", value.String(), true)
 }
 
-// SetPopupBorderLines stores the "popup-border-lines" window option as PopupBorderLines (tmux 3.3 or later).
+// SetPopupBorderLines stores the "popup-border-lines" window option as PopupBorderLines.
 // Read it with [WindowOptionValues.PopupBorderLines] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPopupBorderLines(ctx context.Context, value PopupBorderLines) error {
 	server := s.server
@@ -6019,7 +6001,7 @@ func (s GlobalWindowScope) SetPopupBorderLines(ctx context.Context, value PopupB
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-lines", value.String(), true)
 }
 
-// SetPopupBorderStyle stores the "popup-border-style" window option as string (tmux 3.3 or later).
+// SetPopupBorderStyle stores the "popup-border-style" window option as string.
 // Read it with [WindowOptionValues.PopupBorderStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPopupBorderStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6029,7 +6011,7 @@ func (w Window) SetPopupBorderStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-style", value, false)
 }
 
-// SetPopupBorderStyle stores the "popup-border-style" window option as string (tmux 3.3 or later).
+// SetPopupBorderStyle stores the "popup-border-style" window option as string.
 // Read it with [WindowOptionValues.PopupBorderStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPopupBorderStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6037,7 +6019,7 @@ func (s GlobalWindowScope) SetPopupBorderStyle(ctx context.Context, value string
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-border-style", value, false)
 }
 
-// SetPopupStyle stores the "popup-style" window option as string (tmux 3.3 or later).
+// SetPopupStyle stores the "popup-style" window option as string.
 // Read it with [WindowOptionValues.PopupStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetPopupStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6047,7 +6029,7 @@ func (w Window) SetPopupStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-style", value, false)
 }
 
-// SetPopupStyle stores the "popup-style" window option as string (tmux 3.3 or later).
+// SetPopupStyle stores the "popup-style" window option as string.
 // Read it with [WindowOptionValues.PopupStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetPopupStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6055,7 +6037,7 @@ func (s GlobalWindowScope) SetPopupStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "popup-style", value, false)
 }
 
-// SetPrefix stores the "prefix" session option as string (tmux 3.2a or later).
+// SetPrefix stores the "prefix" session option as string.
 // Read it with [SessionOptionValues.Prefix] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPrefix(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6065,7 +6047,7 @@ func (s Session) SetPrefix(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix", value, false)
 }
 
-// SetPrefix stores the "prefix" session option as string (tmux 3.2a or later).
+// SetPrefix stores the "prefix" session option as string.
 // Read it with [SessionOptionValues.Prefix] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPrefix(ctx context.Context, value string) error {
 	server := s.server
@@ -6085,7 +6067,7 @@ func (s Server) SetPrefixTimeout(ctx context.Context, value time.Duration) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "prefix-timeout", encoded, false)
 }
 
-// SetPrefix2 stores the "prefix2" session option as string (tmux 3.2a or later).
+// SetPrefix2 stores the "prefix2" session option as string.
 // Read it with [SessionOptionValues.Prefix2] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetPrefix2(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6095,7 +6077,7 @@ func (s Session) SetPrefix2(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prefix2", value, false)
 }
 
-// SetPrefix2 stores the "prefix2" session option as string (tmux 3.2a or later).
+// SetPrefix2 stores the "prefix2" session option as string.
 // Read it with [SessionOptionValues.Prefix2] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetPrefix2(ctx context.Context, value string) error {
 	server := s.server
@@ -6157,7 +6139,7 @@ func (s GlobalSessionScope) SetPromptCursorStyle(ctx context.Context, value Prom
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "prompt-cursor-style", value.String(), true)
 }
 
-// SetPromptHistoryLimit stores the "prompt-history-limit" server option as int64 (tmux 3.3 or later).
+// SetPromptHistoryLimit stores the "prompt-history-limit" server option as int64.
 // Read it with [ServerOptionValues.PromptHistoryLimit] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetPromptHistoryLimit(ctx context.Context, value int64) error {
 	server := s
@@ -6165,7 +6147,7 @@ func (s Server) SetPromptHistoryLimit(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "prompt-history-limit", encodeTypedOptionInt64(value), false)
 }
 
-// SetRemainOnExit stores the "remain-on-exit" window option as RemainOnExit (tmux 3.2a or later).
+// SetRemainOnExit stores the "remain-on-exit" window option as RemainOnExit.
 // Read it with [WindowOptionValues.RemainOnExit] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6175,7 +6157,7 @@ func (w Window) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit", value.String(), true)
 }
 
-// SetRemainOnExit stores the "remain-on-exit" window option as RemainOnExit (tmux 3.2a or later).
+// SetRemainOnExit stores the "remain-on-exit" window option as RemainOnExit.
 // Read it with [WindowOptionValues.RemainOnExit] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	server := s.server
@@ -6183,7 +6165,7 @@ func (s GlobalWindowScope) SetRemainOnExit(ctx context.Context, value RemainOnEx
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit", value.String(), true)
 }
 
-// SetRemainOnExit stores the "remain-on-exit" pane option as RemainOnExit (tmux 3.2a or later).
+// SetRemainOnExit stores the "remain-on-exit" pane option as RemainOnExit.
 // Read it with [PaneOptionValues.RemainOnExit] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -6193,7 +6175,7 @@ func (p Pane) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "remain-on-exit", value.String(), true)
 }
 
-// SetRemainOnExitFormat stores the "remain-on-exit-format" window option as string (tmux 3.3 or later).
+// SetRemainOnExitFormat stores the "remain-on-exit-format" window option as string.
 // Read it with [WindowOptionValues.RemainOnExitFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6203,7 +6185,7 @@ func (w Window) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit-format", value, false)
 }
 
-// SetRemainOnExitFormat stores the "remain-on-exit-format" window option as string (tmux 3.3 or later).
+// SetRemainOnExitFormat stores the "remain-on-exit-format" window option as string.
 // Read it with [WindowOptionValues.RemainOnExitFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	server := s.server
@@ -6211,7 +6193,7 @@ func (s GlobalWindowScope) SetRemainOnExitFormat(ctx context.Context, value stri
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "remain-on-exit-format", value, false)
 }
 
-// SetRemainOnExitFormat stores the "remain-on-exit-format" pane option as string (tmux 3.3 or later).
+// SetRemainOnExitFormat stores the "remain-on-exit-format" pane option as string.
 // Read it with [PaneOptionValues.RemainOnExitFormat] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -6221,7 +6203,7 @@ func (p Pane) SetRemainOnExitFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "remain-on-exit-format", value, false)
 }
 
-// SetRenumberWindows stores the "renumber-windows" session option as bool (tmux 3.2a or later).
+// SetRenumberWindows stores the "renumber-windows" session option as bool.
 // Read it with [SessionOptionValues.RenumberWindows] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetRenumberWindows(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6231,7 +6213,7 @@ func (s Session) SetRenumberWindows(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "renumber-windows", encodeTypedOptionBool(value), false)
 }
 
-// SetRenumberWindows stores the "renumber-windows" session option as bool (tmux 3.2a or later).
+// SetRenumberWindows stores the "renumber-windows" session option as bool.
 // Read it with [SessionOptionValues.RenumberWindows] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetRenumberWindows(ctx context.Context, value bool) error {
 	server := s.server
@@ -6239,7 +6221,7 @@ func (s GlobalSessionScope) SetRenumberWindows(ctx context.Context, value bool) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "renumber-windows", encodeTypedOptionBool(value), false)
 }
 
-// SetRepeatTime stores the "repeat-time" session option as time.Duration (tmux 3.2a or later).
+// SetRepeatTime stores the "repeat-time" session option as time.Duration.
 // Read it with [SessionOptionValues.RepeatTime] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetRepeatTime(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6253,7 +6235,7 @@ func (s Session) SetRepeatTime(ctx context.Context, value time.Duration) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encoded, false)
 }
 
-// SetRepeatTime stores the "repeat-time" session option as time.Duration (tmux 3.2a or later).
+// SetRepeatTime stores the "repeat-time" session option as time.Duration.
 // Read it with [SessionOptionValues.RepeatTime] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetRepeatTime(ctx context.Context, value time.Duration) error {
 	server := s.server
@@ -6265,7 +6247,7 @@ func (s GlobalSessionScope) SetRepeatTime(ctx context.Context, value time.Durati
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "repeat-time", encoded, false)
 }
 
-// SetScrollOnClear stores the "scroll-on-clear" window option as bool (tmux 3.3 or later).
+// SetScrollOnClear stores the "scroll-on-clear" window option as bool.
 // Read it with [WindowOptionValues.ScrollOnClear] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetScrollOnClear(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6275,7 +6257,7 @@ func (w Window) SetScrollOnClear(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "scroll-on-clear", encodeTypedOptionBool(value), false)
 }
 
-// SetScrollOnClear stores the "scroll-on-clear" window option as bool (tmux 3.3 or later).
+// SetScrollOnClear stores the "scroll-on-clear" window option as bool.
 // Read it with [WindowOptionValues.ScrollOnClear] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetScrollOnClear(ctx context.Context, value bool) error {
 	server := s.server
@@ -6283,7 +6265,7 @@ func (s GlobalWindowScope) SetScrollOnClear(ctx context.Context, value bool) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "scroll-on-clear", encodeTypedOptionBool(value), false)
 }
 
-// SetScrollOnClear stores the "scroll-on-clear" pane option as bool (tmux 3.3 or later).
+// SetScrollOnClear stores the "scroll-on-clear" pane option as bool.
 // Read it with [PaneOptionValues.ScrollOnClear] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetScrollOnClear(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -6329,7 +6311,7 @@ func (s GlobalWindowScope) SetSessionStatusStyle(ctx context.Context, value stri
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "session-status-style", value, false)
 }
 
-// SetClipboard stores the "set-clipboard" server option as SetClipboard (tmux 3.2a or later).
+// SetClipboard stores the "set-clipboard" server option as SetClipboard.
 // Read it with [ServerOptionValues.SetClipboard] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 func (s Server) SetClipboard(ctx context.Context, value SetClipboard) error {
 	server := s
@@ -6337,7 +6319,7 @@ func (s Server) SetClipboard(ctx context.Context, value SetClipboard) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "set-clipboard", value.String(), true)
 }
 
-// SetTitles stores the "set-titles" session option as bool (tmux 3.2a or later).
+// SetTitles stores the "set-titles" session option as bool.
 // Read it with [SessionOptionValues.SetTitles] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetTitles(ctx context.Context, value bool) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6347,7 +6329,7 @@ func (s Session) SetTitles(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles", encodeTypedOptionBool(value), false)
 }
 
-// SetTitles stores the "set-titles" session option as bool (tmux 3.2a or later).
+// SetTitles stores the "set-titles" session option as bool.
 // Read it with [SessionOptionValues.SetTitles] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetTitles(ctx context.Context, value bool) error {
 	server := s.server
@@ -6355,7 +6337,7 @@ func (s GlobalSessionScope) SetTitles(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles", encodeTypedOptionBool(value), false)
 }
 
-// SetTitlesString stores the "set-titles-string" session option as string (tmux 3.2a or later).
+// SetTitlesString stores the "set-titles-string" session option as string.
 // Read it with [SessionOptionValues.SetTitlesString] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetTitlesString(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6365,7 +6347,7 @@ func (s Session) SetTitlesString(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles-string", value, false)
 }
 
-// SetTitlesString stores the "set-titles-string" session option as string (tmux 3.2a or later).
+// SetTitlesString stores the "set-titles-string" session option as string.
 // Read it with [SessionOptionValues.SetTitlesString] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetTitlesString(ctx context.Context, value string) error {
 	server := s.server
@@ -6373,7 +6355,7 @@ func (s GlobalSessionScope) SetTitlesString(ctx context.Context, value string) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "set-titles-string", value, false)
 }
 
-// SetSilenceAction stores the "silence-action" session option as SilenceAction (tmux 3.2a or later).
+// SetSilenceAction stores the "silence-action" session option as SilenceAction.
 // Read it with [SessionOptionValues.SilenceAction] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetSilenceAction(ctx context.Context, value SilenceAction) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6383,7 +6365,7 @@ func (s Session) SetSilenceAction(ctx context.Context, value SilenceAction) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "silence-action", value.String(), true)
 }
 
-// SetSilenceAction stores the "silence-action" session option as SilenceAction (tmux 3.2a or later).
+// SetSilenceAction stores the "silence-action" session option as SilenceAction.
 // Read it with [SessionOptionValues.SilenceAction] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetSilenceAction(ctx context.Context, value SilenceAction) error {
 	server := s.server
@@ -6391,7 +6373,7 @@ func (s GlobalSessionScope) SetSilenceAction(ctx context.Context, value SilenceA
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "silence-action", value.String(), true)
 }
 
-// SetStatus stores the "status" session option as Status (tmux 3.2a or later).
+// SetStatus stores the "status" session option as Status.
 // Read it with [SessionOptionValues.Status] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatus(ctx context.Context, value Status) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6401,7 +6383,7 @@ func (s Session) SetStatus(ctx context.Context, value Status) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status", value.String(), true)
 }
 
-// SetStatus stores the "status" session option as Status (tmux 3.2a or later).
+// SetStatus stores the "status" session option as Status.
 // Read it with [SessionOptionValues.Status] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatus(ctx context.Context, value Status) error {
 	server := s.server
@@ -6409,7 +6391,7 @@ func (s GlobalSessionScope) SetStatus(ctx context.Context, value Status) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status", value.String(), true)
 }
 
-// SetStatusBG stores the "status-bg" session option as string (tmux 3.2a or later).
+// SetStatusBG stores the "status-bg" session option as string.
 // Read it with [SessionOptionValues.StatusBG] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusBG(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6419,7 +6401,7 @@ func (s Session) SetStatusBG(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-bg", value, false)
 }
 
-// SetStatusBG stores the "status-bg" session option as string (tmux 3.2a or later).
+// SetStatusBG stores the "status-bg" session option as string.
 // Read it with [SessionOptionValues.StatusBG] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusBG(ctx context.Context, value string) error {
 	server := s.server
@@ -6427,7 +6409,7 @@ func (s GlobalSessionScope) SetStatusBG(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-bg", value, false)
 }
 
-// SetStatusFG stores the "status-fg" session option as string (tmux 3.2a or later).
+// SetStatusFG stores the "status-fg" session option as string.
 // Read it with [SessionOptionValues.StatusFG] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusFG(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6437,7 +6419,7 @@ func (s Session) SetStatusFG(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-fg", value, false)
 }
 
-// SetStatusFG stores the "status-fg" session option as string (tmux 3.2a or later).
+// SetStatusFG stores the "status-fg" session option as string.
 // Read it with [SessionOptionValues.StatusFG] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusFG(ctx context.Context, value string) error {
 	server := s.server
@@ -6445,7 +6427,7 @@ func (s GlobalSessionScope) SetStatusFG(ctx context.Context, value string) error
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-fg", value, false)
 }
 
-// SetStatusInterval stores the "status-interval" session option as time.Duration (tmux 3.2a or later).
+// SetStatusInterval stores the "status-interval" session option as time.Duration.
 // Read it with [SessionOptionValues.StatusInterval] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusInterval(ctx context.Context, value time.Duration) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6459,7 +6441,7 @@ func (s Session) SetStatusInterval(ctx context.Context, value time.Duration) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encoded, false)
 }
 
-// SetStatusInterval stores the "status-interval" session option as time.Duration (tmux 3.2a or later).
+// SetStatusInterval stores the "status-interval" session option as time.Duration.
 // Read it with [SessionOptionValues.StatusInterval] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusInterval(ctx context.Context, value time.Duration) error {
 	server := s.server
@@ -6471,7 +6453,7 @@ func (s GlobalSessionScope) SetStatusInterval(ctx context.Context, value time.Du
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-interval", encoded, false)
 }
 
-// SetStatusJustify stores the "status-justify" session option as StatusJustify (tmux 3.2a or later).
+// SetStatusJustify stores the "status-justify" session option as StatusJustify.
 // Read it with [SessionOptionValues.StatusJustify] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusJustify(ctx context.Context, value StatusJustify) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6481,7 +6463,7 @@ func (s Session) SetStatusJustify(ctx context.Context, value StatusJustify) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-justify", value.String(), true)
 }
 
-// SetStatusJustify stores the "status-justify" session option as StatusJustify (tmux 3.2a or later).
+// SetStatusJustify stores the "status-justify" session option as StatusJustify.
 // Read it with [SessionOptionValues.StatusJustify] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusJustify(ctx context.Context, value StatusJustify) error {
 	server := s.server
@@ -6489,7 +6471,7 @@ func (s GlobalSessionScope) SetStatusJustify(ctx context.Context, value StatusJu
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-justify", value.String(), true)
 }
 
-// SetStatusKeys stores the "status-keys" session option as StatusKeys (tmux 3.2a or later).
+// SetStatusKeys stores the "status-keys" session option as StatusKeys.
 // Read it with [SessionOptionValues.StatusKeys] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusKeys(ctx context.Context, value StatusKeys) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6499,7 +6481,7 @@ func (s Session) SetStatusKeys(ctx context.Context, value StatusKeys) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-keys", value.String(), true)
 }
 
-// SetStatusKeys stores the "status-keys" session option as StatusKeys (tmux 3.2a or later).
+// SetStatusKeys stores the "status-keys" session option as StatusKeys.
 // Read it with [SessionOptionValues.StatusKeys] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusKeys(ctx context.Context, value StatusKeys) error {
 	server := s.server
@@ -6507,7 +6489,7 @@ func (s GlobalSessionScope) SetStatusKeys(ctx context.Context, value StatusKeys)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-keys", value.String(), true)
 }
 
-// SetStatusLeft stores the "status-left" session option as string (tmux 3.2a or later).
+// SetStatusLeft stores the "status-left" session option as string.
 // Read it with [SessionOptionValues.StatusLeft] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusLeft(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6517,7 +6499,7 @@ func (s Session) SetStatusLeft(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left", value, false)
 }
 
-// SetStatusLeft stores the "status-left" session option as string (tmux 3.2a or later).
+// SetStatusLeft stores the "status-left" session option as string.
 // Read it with [SessionOptionValues.StatusLeft] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusLeft(ctx context.Context, value string) error {
 	server := s.server
@@ -6525,7 +6507,7 @@ func (s GlobalSessionScope) SetStatusLeft(ctx context.Context, value string) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left", value, false)
 }
 
-// SetStatusLeftLength stores the "status-left-length" session option as int64 (tmux 3.2a or later).
+// SetStatusLeftLength stores the "status-left-length" session option as int64.
 // Read it with [SessionOptionValues.StatusLeftLength] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusLeftLength(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6535,7 +6517,7 @@ func (s Session) SetStatusLeftLength(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusLeftLength stores the "status-left-length" session option as int64 (tmux 3.2a or later).
+// SetStatusLeftLength stores the "status-left-length" session option as int64.
 // Read it with [SessionOptionValues.StatusLeftLength] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusLeftLength(ctx context.Context, value int64) error {
 	server := s.server
@@ -6543,7 +6525,7 @@ func (s GlobalSessionScope) SetStatusLeftLength(ctx context.Context, value int64
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusLeftStyle stores the "status-left-style" session option as string (tmux 3.2a or later).
+// SetStatusLeftStyle stores the "status-left-style" session option as string.
 // Read it with [SessionOptionValues.StatusLeftStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusLeftStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6553,7 +6535,7 @@ func (s Session) SetStatusLeftStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-style", value, false)
 }
 
-// SetStatusLeftStyle stores the "status-left-style" session option as string (tmux 3.2a or later).
+// SetStatusLeftStyle stores the "status-left-style" session option as string.
 // Read it with [SessionOptionValues.StatusLeftStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusLeftStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6561,7 +6543,7 @@ func (s GlobalSessionScope) SetStatusLeftStyle(ctx context.Context, value string
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-left-style", value, false)
 }
 
-// SetStatusPosition stores the "status-position" session option as StatusPosition (tmux 3.2a or later).
+// SetStatusPosition stores the "status-position" session option as StatusPosition.
 // Read it with [SessionOptionValues.StatusPosition] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusPosition(ctx context.Context, value StatusPosition) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6571,7 +6553,7 @@ func (s Session) SetStatusPosition(ctx context.Context, value StatusPosition) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-position", value.String(), true)
 }
 
-// SetStatusPosition stores the "status-position" session option as StatusPosition (tmux 3.2a or later).
+// SetStatusPosition stores the "status-position" session option as StatusPosition.
 // Read it with [SessionOptionValues.StatusPosition] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusPosition(ctx context.Context, value StatusPosition) error {
 	server := s.server
@@ -6579,7 +6561,7 @@ func (s GlobalSessionScope) SetStatusPosition(ctx context.Context, value StatusP
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-position", value.String(), true)
 }
 
-// SetStatusRight stores the "status-right" session option as string (tmux 3.2a or later).
+// SetStatusRight stores the "status-right" session option as string.
 // Read it with [SessionOptionValues.StatusRight] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusRight(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6589,7 +6571,7 @@ func (s Session) SetStatusRight(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right", value, false)
 }
 
-// SetStatusRight stores the "status-right" session option as string (tmux 3.2a or later).
+// SetStatusRight stores the "status-right" session option as string.
 // Read it with [SessionOptionValues.StatusRight] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusRight(ctx context.Context, value string) error {
 	server := s.server
@@ -6597,7 +6579,7 @@ func (s GlobalSessionScope) SetStatusRight(ctx context.Context, value string) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right", value, false)
 }
 
-// SetStatusRightLength stores the "status-right-length" session option as int64 (tmux 3.2a or later).
+// SetStatusRightLength stores the "status-right-length" session option as int64.
 // Read it with [SessionOptionValues.StatusRightLength] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusRightLength(ctx context.Context, value int64) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6607,7 +6589,7 @@ func (s Session) SetStatusRightLength(ctx context.Context, value int64) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusRightLength stores the "status-right-length" session option as int64 (tmux 3.2a or later).
+// SetStatusRightLength stores the "status-right-length" session option as int64.
 // Read it with [SessionOptionValues.StatusRightLength] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusRightLength(ctx context.Context, value int64) error {
 	server := s.server
@@ -6615,7 +6597,7 @@ func (s GlobalSessionScope) SetStatusRightLength(ctx context.Context, value int6
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-length", encodeTypedOptionInt64(value), false)
 }
 
-// SetStatusRightStyle stores the "status-right-style" session option as string (tmux 3.2a or later).
+// SetStatusRightStyle stores the "status-right-style" session option as string.
 // Read it with [SessionOptionValues.StatusRightStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusRightStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6625,7 +6607,7 @@ func (s Session) SetStatusRightStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-style", value, false)
 }
 
-// SetStatusRightStyle stores the "status-right-style" session option as string (tmux 3.2a or later).
+// SetStatusRightStyle stores the "status-right-style" session option as string.
 // Read it with [SessionOptionValues.StatusRightStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusRightStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6633,7 +6615,7 @@ func (s GlobalSessionScope) SetStatusRightStyle(ctx context.Context, value strin
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-right-style", value, false)
 }
 
-// SetStatusStyle stores the "status-style" session option as string (tmux 3.2a or later).
+// SetStatusStyle stores the "status-style" session option as string.
 // Read it with [SessionOptionValues.StatusStyle] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetStatusStyle(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6643,7 +6625,7 @@ func (s Session) SetStatusStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-style", value, false)
 }
 
-// SetStatusStyle stores the "status-style" session option as string (tmux 3.2a or later).
+// SetStatusStyle stores the "status-style" session option as string.
 // Read it with [SessionOptionValues.StatusStyle] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetStatusStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6651,7 +6633,7 @@ func (s GlobalSessionScope) SetStatusStyle(ctx context.Context, value string) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "status-style", value, false)
 }
 
-// SetSynchronizePanes stores the "synchronize-panes" window option as bool (tmux 3.2a or later).
+// SetSynchronizePanes stores the "synchronize-panes" window option as bool.
 // Read it with [WindowOptionValues.SynchronizePanes] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetSynchronizePanes(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6661,7 +6643,7 @@ func (w Window) SetSynchronizePanes(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "synchronize-panes", encodeTypedOptionBool(value), false)
 }
 
-// SetSynchronizePanes stores the "synchronize-panes" window option as bool (tmux 3.2a or later).
+// SetSynchronizePanes stores the "synchronize-panes" window option as bool.
 // Read it with [WindowOptionValues.SynchronizePanes] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetSynchronizePanes(ctx context.Context, value bool) error {
 	server := s.server
@@ -6669,7 +6651,7 @@ func (s GlobalWindowScope) SetSynchronizePanes(ctx context.Context, value bool) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "synchronize-panes", encodeTypedOptionBool(value), false)
 }
 
-// SetSynchronizePanes stores the "synchronize-panes" pane option as bool (tmux 3.2a or later).
+// SetSynchronizePanes stores the "synchronize-panes" pane option as bool.
 // Read it with [PaneOptionValues.SynchronizePanes] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetSynchronizePanes(ctx context.Context, value bool) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -6751,7 +6733,7 @@ func (s Server) SetVariationSelectorAlwaysWide(ctx context.Context, value bool) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeServer, "variation-selector-always-wide", encodeTypedOptionBool(value), false)
 }
 
-// SetVisualActivity stores the "visual-activity" session option as VisualActivity (tmux 3.2a or later).
+// SetVisualActivity stores the "visual-activity" session option as VisualActivity.
 // Read it with [SessionOptionValues.VisualActivity] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetVisualActivity(ctx context.Context, value VisualActivity) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6761,7 +6743,7 @@ func (s Session) SetVisualActivity(ctx context.Context, value VisualActivity) er
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-activity", value.String(), true)
 }
 
-// SetVisualActivity stores the "visual-activity" session option as VisualActivity (tmux 3.2a or later).
+// SetVisualActivity stores the "visual-activity" session option as VisualActivity.
 // Read it with [SessionOptionValues.VisualActivity] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetVisualActivity(ctx context.Context, value VisualActivity) error {
 	server := s.server
@@ -6769,7 +6751,7 @@ func (s GlobalSessionScope) SetVisualActivity(ctx context.Context, value VisualA
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-activity", value.String(), true)
 }
 
-// SetVisualBell stores the "visual-bell" session option as VisualBell (tmux 3.2a or later).
+// SetVisualBell stores the "visual-bell" session option as VisualBell.
 // Read it with [SessionOptionValues.VisualBell] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetVisualBell(ctx context.Context, value VisualBell) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6779,7 +6761,7 @@ func (s Session) SetVisualBell(ctx context.Context, value VisualBell) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-bell", value.String(), true)
 }
 
-// SetVisualBell stores the "visual-bell" session option as VisualBell (tmux 3.2a or later).
+// SetVisualBell stores the "visual-bell" session option as VisualBell.
 // Read it with [SessionOptionValues.VisualBell] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetVisualBell(ctx context.Context, value VisualBell) error {
 	server := s.server
@@ -6787,7 +6769,7 @@ func (s GlobalSessionScope) SetVisualBell(ctx context.Context, value VisualBell)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-bell", value.String(), true)
 }
 
-// SetVisualSilence stores the "visual-silence" session option as VisualSilence (tmux 3.2a or later).
+// SetVisualSilence stores the "visual-silence" session option as VisualSilence.
 // Read it with [SessionOptionValues.VisualSilence] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetVisualSilence(ctx context.Context, value VisualSilence) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -6797,7 +6779,7 @@ func (s Session) SetVisualSilence(ctx context.Context, value VisualSilence) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-silence", value.String(), true)
 }
 
-// SetVisualSilence stores the "visual-silence" session option as VisualSilence (tmux 3.2a or later).
+// SetVisualSilence stores the "visual-silence" session option as VisualSilence.
 // Read it with [SessionOptionValues.VisualSilence] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetVisualSilence(ctx context.Context, value VisualSilence) error {
 	server := s.server
@@ -6805,7 +6787,7 @@ func (s GlobalSessionScope) SetVisualSilence(ctx context.Context, value VisualSi
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "visual-silence", value.String(), true)
 }
 
-// SetWindowActiveStyle stores the "window-active-style" window option as string (tmux 3.2a or later).
+// SetWindowActiveStyle stores the "window-active-style" window option as string.
 // Read it with [WindowOptionValues.WindowActiveStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowActiveStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6815,7 +6797,7 @@ func (w Window) SetWindowActiveStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-active-style", value, false)
 }
 
-// SetWindowActiveStyle stores the "window-active-style" window option as string (tmux 3.2a or later).
+// SetWindowActiveStyle stores the "window-active-style" window option as string.
 // Read it with [WindowOptionValues.WindowActiveStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowActiveStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6823,7 +6805,7 @@ func (s GlobalWindowScope) SetWindowActiveStyle(ctx context.Context, value strin
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-active-style", value, false)
 }
 
-// SetWindowActiveStyle stores the "window-active-style" pane option as string (tmux 3.2a or later).
+// SetWindowActiveStyle stores the "window-active-style" pane option as string.
 // Read it with [PaneOptionValues.WindowActiveStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetWindowActiveStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -6869,7 +6851,7 @@ func (s GlobalWindowScope) SetWindowPaneStatusFormat(ctx context.Context, value 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-pane-status-format", value, false)
 }
 
-// SetWindowSize stores the "window-size" window option as WindowSize (tmux 3.2a or later).
+// SetWindowSize stores the "window-size" window option as WindowSize.
 // Read it with [WindowOptionValues.WindowSize] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowSize(ctx context.Context, value WindowSize) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6879,7 +6861,7 @@ func (w Window) SetWindowSize(ctx context.Context, value WindowSize) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-size", value.String(), true)
 }
 
-// SetWindowSize stores the "window-size" window option as WindowSize (tmux 3.2a or later).
+// SetWindowSize stores the "window-size" window option as WindowSize.
 // Read it with [WindowOptionValues.WindowSize] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowSize(ctx context.Context, value WindowSize) error {
 	server := s.server
@@ -6887,7 +6869,7 @@ func (s GlobalWindowScope) SetWindowSize(ctx context.Context, value WindowSize) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-size", value.String(), true)
 }
 
-// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusActivityStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusActivityStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6897,7 +6879,7 @@ func (w Window) SetWindowStatusActivityStyle(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-activity-style", value, false)
 }
 
-// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusActivityStyle stores the "window-status-activity-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusActivityStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusActivityStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6905,7 +6887,7 @@ func (s GlobalWindowScope) SetWindowStatusActivityStyle(ctx context.Context, val
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-activity-style", value, false)
 }
 
-// SetWindowStatusBellStyle stores the "window-status-bell-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusBellStyle stores the "window-status-bell-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusBellStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusBellStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6915,7 +6897,7 @@ func (w Window) SetWindowStatusBellStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-bell-style", value, false)
 }
 
-// SetWindowStatusBellStyle stores the "window-status-bell-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusBellStyle stores the "window-status-bell-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusBellStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusBellStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6923,7 +6905,7 @@ func (s GlobalWindowScope) SetWindowStatusBellStyle(ctx context.Context, value s
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-bell-style", value, false)
 }
 
-// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option as string (tmux 3.2a or later).
+// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option as string.
 // Read it with [WindowOptionValues.WindowStatusCurrentFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusCurrentFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6933,7 +6915,7 @@ func (w Window) SetWindowStatusCurrentFormat(ctx context.Context, value string) 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-format", value, false)
 }
 
-// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option as string (tmux 3.2a or later).
+// SetWindowStatusCurrentFormat stores the "window-status-current-format" window option as string.
 // Read it with [WindowOptionValues.WindowStatusCurrentFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusCurrentFormat(ctx context.Context, value string) error {
 	server := s.server
@@ -6941,7 +6923,7 @@ func (s GlobalWindowScope) SetWindowStatusCurrentFormat(ctx context.Context, val
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-format", value, false)
 }
 
-// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusCurrentStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusCurrentStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6951,7 +6933,7 @@ func (w Window) SetWindowStatusCurrentStyle(ctx context.Context, value string) e
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-style", value, false)
 }
 
-// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusCurrentStyle stores the "window-status-current-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusCurrentStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusCurrentStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6959,7 +6941,7 @@ func (s GlobalWindowScope) SetWindowStatusCurrentStyle(ctx context.Context, valu
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-current-style", value, false)
 }
 
-// SetWindowStatusFormat stores the "window-status-format" window option as string (tmux 3.2a or later).
+// SetWindowStatusFormat stores the "window-status-format" window option as string.
 // Read it with [WindowOptionValues.WindowStatusFormat] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusFormat(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6969,7 +6951,7 @@ func (w Window) SetWindowStatusFormat(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-format", value, false)
 }
 
-// SetWindowStatusFormat stores the "window-status-format" window option as string (tmux 3.2a or later).
+// SetWindowStatusFormat stores the "window-status-format" window option as string.
 // Read it with [WindowOptionValues.WindowStatusFormat] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusFormat(ctx context.Context, value string) error {
 	server := s.server
@@ -6977,7 +6959,7 @@ func (s GlobalWindowScope) SetWindowStatusFormat(ctx context.Context, value stri
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-format", value, false)
 }
 
-// SetWindowStatusLastStyle stores the "window-status-last-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusLastStyle stores the "window-status-last-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusLastStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusLastStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -6987,7 +6969,7 @@ func (w Window) SetWindowStatusLastStyle(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-last-style", value, false)
 }
 
-// SetWindowStatusLastStyle stores the "window-status-last-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusLastStyle stores the "window-status-last-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusLastStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusLastStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -6995,7 +6977,7 @@ func (s GlobalWindowScope) SetWindowStatusLastStyle(ctx context.Context, value s
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-last-style", value, false)
 }
 
-// SetWindowStatusSeparator stores the "window-status-separator" window option as string (tmux 3.2a or later).
+// SetWindowStatusSeparator stores the "window-status-separator" window option as string.
 // Read it with [WindowOptionValues.WindowStatusSeparator] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusSeparator(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -7005,7 +6987,7 @@ func (w Window) SetWindowStatusSeparator(ctx context.Context, value string) erro
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-separator", value, false)
 }
 
-// SetWindowStatusSeparator stores the "window-status-separator" window option as string (tmux 3.2a or later).
+// SetWindowStatusSeparator stores the "window-status-separator" window option as string.
 // Read it with [WindowOptionValues.WindowStatusSeparator] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusSeparator(ctx context.Context, value string) error {
 	server := s.server
@@ -7013,7 +6995,7 @@ func (s GlobalWindowScope) SetWindowStatusSeparator(ctx context.Context, value s
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-separator", value, false)
 }
 
-// SetWindowStatusStyle stores the "window-status-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusStyle stores the "window-status-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStatusStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -7023,7 +7005,7 @@ func (w Window) SetWindowStatusStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-style", value, false)
 }
 
-// SetWindowStatusStyle stores the "window-status-style" window option as string (tmux 3.2a or later).
+// SetWindowStatusStyle stores the "window-status-style" window option as string.
 // Read it with [WindowOptionValues.WindowStatusStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStatusStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -7031,7 +7013,7 @@ func (s GlobalWindowScope) SetWindowStatusStyle(ctx context.Context, value strin
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-status-style", value, false)
 }
 
-// SetWindowStyle stores the "window-style" window option as string (tmux 3.2a or later).
+// SetWindowStyle stores the "window-style" window option as string.
 // Read it with [WindowOptionValues.WindowStyle] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWindowStyle(ctx context.Context, value string) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -7041,7 +7023,7 @@ func (w Window) SetWindowStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-style", value, false)
 }
 
-// SetWindowStyle stores the "window-style" window option as string (tmux 3.2a or later).
+// SetWindowStyle stores the "window-style" window option as string.
 // Read it with [WindowOptionValues.WindowStyle] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWindowStyle(ctx context.Context, value string) error {
 	server := s.server
@@ -7049,7 +7031,7 @@ func (s GlobalWindowScope) SetWindowStyle(ctx context.Context, value string) err
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "window-style", value, false)
 }
 
-// SetWindowStyle stores the "window-style" pane option as string (tmux 3.2a or later).
+// SetWindowStyle stores the "window-style" pane option as string.
 // Read it with [PaneOptionValues.WindowStyle] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 func (p Pane) SetWindowStyle(ctx context.Context, value string) error {
 	server, scope, err := paneOptionRuntimeScope(p)
@@ -7059,7 +7041,7 @@ func (p Pane) SetWindowStyle(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopePane, "window-style", value, false)
 }
 
-// SetWordSeparators stores the "word-separators" session option as string (tmux 3.2a or later).
+// SetWordSeparators stores the "word-separators" session option as string.
 // Read it with [SessionOptionValues.WordSeparators] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 func (s Session) SetWordSeparators(ctx context.Context, value string) error {
 	server, scope, err := sessionOptionRuntimeScope(s)
@@ -7069,7 +7051,7 @@ func (s Session) SetWordSeparators(ctx context.Context, value string) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "word-separators", value, false)
 }
 
-// SetWordSeparators stores the "word-separators" session option as string (tmux 3.2a or later).
+// SetWordSeparators stores the "word-separators" session option as string.
 // Read it with [SessionOptionValues.WordSeparators] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalSessionScope) SetWordSeparators(ctx context.Context, value string) error {
 	server := s.server
@@ -7077,7 +7059,7 @@ func (s GlobalSessionScope) SetWordSeparators(ctx context.Context, value string)
 	return setTypedOption(ctx, server, scope, generatedOptionScopeSession, "word-separators", value, false)
 }
 
-// SetWrapSearch stores the "wrap-search" window option as bool (tmux 3.2a or later).
+// SetWrapSearch stores the "wrap-search" window option as bool.
 // Read it with [WindowOptionValues.WrapSearch] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetWrapSearch(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -7087,7 +7069,7 @@ func (w Window) SetWrapSearch(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "wrap-search", encodeTypedOptionBool(value), false)
 }
 
-// SetWrapSearch stores the "wrap-search" window option as bool (tmux 3.2a or later).
+// SetWrapSearch stores the "wrap-search" window option as bool.
 // Read it with [WindowOptionValues.WrapSearch] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetWrapSearch(ctx context.Context, value bool) error {
 	server := s.server
@@ -7095,7 +7077,7 @@ func (s GlobalWindowScope) SetWrapSearch(ctx context.Context, value bool) error 
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "wrap-search", encodeTypedOptionBool(value), false)
 }
 
-// SetXTermKeys stores the "xterm-keys" window option as bool (tmux 3.2a or later).
+// SetXTermKeys stores the "xterm-keys" window option as bool.
 // Read it with [WindowOptionValues.XTermKeys] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 func (w Window) SetXTermKeys(ctx context.Context, value bool) error {
 	server, scope, err := windowOptionRuntimeScope(w)
@@ -7105,7 +7087,7 @@ func (w Window) SetXTermKeys(ctx context.Context, value bool) error {
 	return setTypedOption(ctx, server, scope, generatedOptionScopeWindow, "xterm-keys", encodeTypedOptionBool(value), false)
 }
 
-// SetXTermKeys stores the "xterm-keys" window option as bool (tmux 3.2a or later).
+// SetXTermKeys stores the "xterm-keys" window option as bool.
 // Read it with [WindowOptionValues.XTermKeys] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 func (s GlobalWindowScope) SetXTermKeys(ctx context.Context, value bool) error {
 	server := s.server
@@ -7122,7 +7104,7 @@ func (s Server) SetCodepointWidths(ctx context.Context, value SparseArray[string
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "codepoint-widths", value)
 }
 
-// SetCommandAlias replaces the complete "command-alias" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetCommandAlias replaces the complete "command-alias" server option array with SparseArray[string], preserving holes and empty values.
 // Read it with [ServerOptionValues.CommandAlias] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetCommandAlias(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7131,7 +7113,7 @@ func (s Server) SetCommandAlias(ctx context.Context, value SparseArray[string]) 
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "command-alias", value)
 }
 
-// SetPaneColours replaces the complete "pane-colours" window option array with SparseArray[string], preserving holes and empty values (tmux 3.3 or later).
+// SetPaneColours replaces the complete "pane-colours" window option array with SparseArray[string], preserving holes and empty values.
 // Read it with [WindowOptionValues.PaneColours] from [Window.Options]; [Window.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (w Window) SetPaneColours(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7142,7 +7124,7 @@ func (w Window) SetPaneColours(ctx context.Context, value SparseArray[string]) (
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeWindow, "pane-colours", value)
 }
 
-// SetPaneColours replaces the complete "pane-colours" window option array with SparseArray[string], preserving holes and empty values (tmux 3.3 or later).
+// SetPaneColours replaces the complete "pane-colours" window option array with SparseArray[string], preserving holes and empty values.
 // Read it with [WindowOptionValues.PaneColours] from [GlobalWindowScope.Options]; [GlobalWindowScope.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s GlobalWindowScope) SetPaneColours(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7151,7 +7133,7 @@ func (s GlobalWindowScope) SetPaneColours(ctx context.Context, value SparseArray
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeWindow, "pane-colours", value)
 }
 
-// SetPaneColours replaces the complete "pane-colours" pane option array with SparseArray[string], preserving holes and empty values (tmux 3.3 or later).
+// SetPaneColours replaces the complete "pane-colours" pane option array with SparseArray[string], preserving holes and empty values.
 // Read it with [PaneOptionValues.PaneColours] from [Pane.Options]; [Pane.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (p Pane) SetPaneColours(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7162,7 +7144,7 @@ func (p Pane) SetPaneColours(ctx context.Context, value SparseArray[string]) (Se
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopePane, "pane-colours", value)
 }
 
-// SetStatusFormat replaces the complete "status-format" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetStatusFormat replaces the complete "status-format" session option array with SparseArray[string], preserving holes and empty values.
 // Read it with [SessionOptionValues.StatusFormat] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Session) SetStatusFormat(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7173,7 +7155,7 @@ func (s Session) SetStatusFormat(ctx context.Context, value SparseArray[string])
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "status-format", value)
 }
 
-// SetStatusFormat replaces the complete "status-format" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetStatusFormat replaces the complete "status-format" session option array with SparseArray[string], preserving holes and empty values.
 // Read it with [SessionOptionValues.StatusFormat] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s GlobalSessionScope) SetStatusFormat(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7182,7 +7164,7 @@ func (s GlobalSessionScope) SetStatusFormat(ctx context.Context, value SparseArr
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "status-format", value)
 }
 
-// SetTerminalFeatures replaces the complete "terminal-features" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetTerminalFeatures replaces the complete "terminal-features" server option array with SparseArray[string], preserving holes and empty values.
 // Read it with [ServerOptionValues.TerminalFeatures] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetTerminalFeatures(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7191,7 +7173,7 @@ func (s Server) SetTerminalFeatures(ctx context.Context, value SparseArray[strin
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "terminal-features", value)
 }
 
-// SetTerminalOverrides replaces the complete "terminal-overrides" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetTerminalOverrides replaces the complete "terminal-overrides" server option array with SparseArray[string], preserving holes and empty values.
 // Read it with [ServerOptionValues.TerminalOverrides] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetTerminalOverrides(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7200,7 +7182,7 @@ func (s Server) SetTerminalOverrides(ctx context.Context, value SparseArray[stri
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeServer, "terminal-overrides", value)
 }
 
-// SetUpdateEnvironment replaces the complete "update-environment" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetUpdateEnvironment replaces the complete "update-environment" session option array with SparseArray[string], preserving holes and empty values.
 // Read it with [SessionOptionValues.UpdateEnvironment] from [Session.Options]; [Session.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Session) SetUpdateEnvironment(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7211,7 +7193,7 @@ func (s Session) SetUpdateEnvironment(ctx context.Context, value SparseArray[str
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "update-environment", value)
 }
 
-// SetUpdateEnvironment replaces the complete "update-environment" session option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetUpdateEnvironment replaces the complete "update-environment" session option array with SparseArray[string], preserving holes and empty values.
 // Read it with [SessionOptionValues.UpdateEnvironment] from [GlobalSessionScope.Options]; [GlobalSessionScope.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s GlobalSessionScope) SetUpdateEnvironment(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {
@@ -7220,7 +7202,7 @@ func (s GlobalSessionScope) SetUpdateEnvironment(ctx context.Context, value Spar
 	return setTypedOptionArray(ctx, server, scope, generatedOptionScopeSession, "update-environment", value)
 }
 
-// SetUserKeys replaces the complete "user-keys" server option array with SparseArray[string], preserving holes and empty values (tmux 3.2a or later).
+// SetUserKeys replaces the complete "user-keys" server option array with SparseArray[string], preserving holes and empty values.
 // Read it with [ServerOptionValues.UserKeys] from [Server.Options]; [Server.UnsetOption] restores inheritance or the global default.
 // Replacement is not atomic: the result reports confirmed writes, and failures stop without rollback. Serialize concurrent replacement of the same target and option.
 func (s Server) SetUserKeys(ctx context.Context, value SparseArray[string]) (SetArrayResult, error) {

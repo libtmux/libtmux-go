@@ -3,7 +3,7 @@ package tmux
 import "context"
 
 // PaneSelectDirection selects a pane relative to the command target on tmux
-// 3.2a or later. Its zero value selects no relative direction.
+// 3.3a or later. Its zero value selects no relative direction.
 type PaneSelectDirection uint8
 
 // Supported pane-selection directions.
@@ -22,7 +22,7 @@ const (
 	PaneSelectDirectionLast
 )
 
-// PaneMarkMode changes tmux's server-wide marked pane on tmux 3.2a or later.
+// PaneMarkMode changes tmux's server-wide marked pane on tmux 3.3a or later.
 // Its zero value leaves the mark unchanged.
 type PaneMarkMode uint8
 
@@ -38,7 +38,7 @@ const (
 	PaneMarkClear
 )
 
-// PaneInputMode changes whether a pane accepts input on tmux 3.2a or later.
+// PaneInputMode changes whether a pane accepts input on tmux 3.3a or later.
 // Its zero value leaves input state unchanged.
 type PaneInputMode uint8
 
@@ -88,7 +88,7 @@ type PaneSelectRequest struct {
 	Input PaneInputMode
 }
 
-// LastPaneRequest configures last-pane on tmux 3.2a or later. Its zero value
+// LastPaneRequest configures last-pane on tmux 3.3a or later. Its zero value
 // selects the previously active pane. Input and KeepZoom are mutually
 // exclusive and are validated before execution; an Input mode changes the
 // previous pane's input state without selecting it.
@@ -99,7 +99,7 @@ type LastPaneRequest struct {
 	KeepZoom bool
 }
 
-// RotateWindowDirection selects rotate-window's direction on tmux 3.2a or
+// RotateWindowDirection selects rotate-window's direction on tmux 3.3a or
 // later. Its zero value uses tmux's default rotation.
 type RotateWindowDirection uint8
 

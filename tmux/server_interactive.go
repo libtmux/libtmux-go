@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	serverInteractiveVersion33 = Version{raw: "3.3", major: 3, minor: 3}
 	serverInteractiveVersion34 = Version{raw: "3.4", major: 3, minor: 4}
 	serverInteractiveVersion35 = Version{raw: "3.5", major: 3, minor: 5}
 	serverInteractiveVersion36 = Version{raw: "3.6", major: 3, minor: 6}
@@ -177,7 +176,7 @@ type displayMenuValues struct {
 
 // ConfirmBefore asks tmux to display a background confirmation prompt and
 // returns after tmux accepts it, not after the user answers or Command runs.
-// It requires tmux 3.3. ConfirmKey and DefaultYes require tmux 3.4 and follow
+// It is available on every supported tmux. ConfirmKey and DefaultYes require tmux 3.4 and follow
 // [UnsupportedPolicy]. Completed stderr is an error; cancellation does not
 // prove prompt delivery or later command execution did not occur.
 func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest) error {
@@ -188,9 +187,6 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 	current, err := s.Version(ctx)
 	if err != nil {
 		return err
-	}
-	if !current.AtLeast(serverInteractiveVersion33) {
-		return &VersionTooLowError{Current: current, Minimum: serverInteractiveVersion33}
 	}
 
 	arguments := []string{"confirm-before", "-b"}
@@ -226,7 +222,7 @@ func (s Server) ConfirmBefore(ctx context.Context, request ConfirmBeforeRequest)
 
 // CommandPrompt asks tmux to display a background command prompt and returns
 // after tmux accepts it, not after input is submitted or Template runs. It
-// requires tmux 3.3. Later flags follow [UnsupportedPolicy]. Completed stderr
+// is available on every supported tmux. Later flags follow [UnsupportedPolicy]. Completed stderr
 // is an error; cancellation does not prove prompt delivery or later execution.
 func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest) error {
 	values, err := captureCommandPromptRequest(request)
@@ -236,9 +232,6 @@ func (s Server) CommandPrompt(ctx context.Context, request CommandPromptRequest)
 	current, err := s.Version(ctx)
 	if err != nil {
 		return err
-	}
-	if !current.AtLeast(serverInteractiveVersion33) {
-		return &VersionTooLowError{Current: current, Minimum: serverInteractiveVersion33}
 	}
 
 	arguments := []string{"command-prompt", "-b"}
