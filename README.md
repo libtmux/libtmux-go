@@ -521,9 +521,32 @@ name instead, so a test of your own code needs no tmux installed.
 
 ## Packages
 
-Each heading links to its directory on GitHub. `tmux`, `tmuxq`, and `tmuxtest`
-are packages of the module `go get` fetches. `workspace` and `mcp` are modules
-of their own, so `go get` on the library pulls in neither.
+| Package | Source | Reference | What it is |
+| --- | --- | --- | --- |
+| `tmux` | [`tmux/`](tmux/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) | The library. Sessions, windows, panes, options, hooks, formats, filters, snapshots, plans. |
+| `tmuxtest` | [`tmux/tmuxtest/`](tmux/tmuxtest/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | Run your program in a real tmux and assert on what it drew. |
+| `tmuxq` | [`tmuxq/`](tmuxq/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) | Model-free generic helpers for slices and `iter.Seq`. |
+
+Others ship as **separate modules**, so `go get` on the library pulls in none
+of them:
+
+| Module | Source | Reference | What it is |
+| --- | --- | --- | --- |
+| `mcp` | [`mcp/`](mcp/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp) | A tmux server for AI agents, over the Model Context Protocol |
+| `workspace` | [`workspace/`](workspace/) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace) | Loads tmuxp-style YAML workspaces and builds them, with a CLI |
+| `benchmarks` | [`benchmarks/`](benchmarks/) | — | Prints what each way of reaching tmux costs |
+
+The MCP server:
+
+```console
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
+```
+
+The workspace CLI:
+
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
 
 ### [`tmux`](https://github.com/libtmux/libtmux-go/tree/master/tmux): the library
 
@@ -627,15 +650,12 @@ the `tmux-workspace` command. Reference:
 [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
 [libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/), and the
 [command reference](https://libtmux.org/en/go/latest/workspace/cli/).
+[`workspace/CLI.md`][workspace-cli-md] covers every command and its output
+formats.
 
-Install the command:
-
-```console
-$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
-```
-
-With a [workspace file][workspace-file] saved as `project.yaml`, build it on a
-tmux socket named `project` without attaching to it:
+With the command installed as above and a [workspace file][workspace-file]
+saved as `project.yaml`, build it on a tmux socket named `project` without
+attaching to it:
 
 ```console
 $ tmux-workspace load \
@@ -646,20 +666,16 @@ $ tmux-workspace load \
 
 ### [`mcp`](https://github.com/libtmux/libtmux-go/tree/master/mcp): a tmux server for agents
 
-Serves one tmux server to Model Context Protocol clients, as the `libtmux-mcp`
-command or from a program of your own. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
+Serves one tmux server to Model Context Protocol clients, as the
+`libtmux-mcp` command or from a program of your own.
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
 [libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the
-[tool reference](https://libtmux.org/en/go/latest/mcp/tools/).
+[tool pages](https://libtmux.org/en/go/latest/mcp/tools/).
+[`mcp/README.md`][mcp-readme] covers client configuration, and
+[`mcp/TOOLS.md`][mcp-tools] lists each tool's arguments and results.
 
-Install the command:
-
-```console
-$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
-```
-
-An MCP client starts the server itself and speaks to it over stdin and stdout.
-Register it with Claude Code:
+An MCP client starts the server installed above itself and speaks to it over
+stdin and stdout. Register it with Claude Code:
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp
@@ -730,6 +746,8 @@ leads to its method without a lookup.
 | [`CHANGELOG.md`](CHANGELOG.md) | What each release changed |
 | [`SECURITY.md`](SECURITY.md) | What this software executes, and how to report a hole in it |
 | [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) | The gates a change has to pass, and where the writing rules live |
+| [`WRITING.md`](.github/WRITING.md) | How this repository writes: docs, the changelog, commits |
+| [`AGENTS.md`](AGENTS.md) | Which of the above applies to what you are changing |
 
 ## Attribution
 
@@ -749,6 +767,8 @@ discourse:
 
 MIT. See [`LICENSE`](LICENSE).
 
+[mcp-readme]: https://github.com/libtmux/libtmux-go/tree/master/mcp
+[mcp-tools]: https://github.com/libtmux/libtmux-go/blob/master/mcp/TOOLS.md
 [tmux-connectionoptions-lanes]: https://libtmux.org/en/go/latest/reference/tmux-connectionoptions-lanes/
 [tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
 [tmux-newplan]: https://libtmux.org/en/go/latest/reference/tmux-newplan/
@@ -784,4 +804,5 @@ MIT. See [`LICENSE`](LICENSE).
 [tmuxtest-runinpane]: https://libtmux.org/en/go/latest/reference/tmuxtest-runinpane/
 [tmuxtest-scriptedtmux]: https://libtmux.org/en/go/latest/reference/tmuxtest-scriptedtmux/
 [tmuxtest-waitfortext]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitfortext/
+[workspace-cli-md]: https://github.com/libtmux/libtmux-go/blob/master/workspace/CLI.md
 [workspace-file]: https://github.com/libtmux/libtmux-go/tree/master/workspace#a-workspace-file

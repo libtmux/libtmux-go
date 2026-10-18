@@ -366,11 +366,28 @@ rejected.
 
 ## The tmux-workspace CLI
 
-The `tmux-workspace` command loads, builds, and manages workspaces from a
-shell, with structured output and optional Python compatibility.
-[`CLI.md`](CLI.md) has every command and option, and
-[libtmux.org](https://libtmux.org/en/go/latest/workspace/cli/) renders it as a
-page.
+The [`tmux-workspace` CLI](CLI.md) loads, builds, and manages workspaces from
+a shell, with structured output and optional Python compatibility.
+
+The [command reference](https://libtmux.org/en/go/latest/workspace/cli/) on
+libtmux.org renders `CLI.md` as a page.
+
+The CLI and this library are separate implementations, and they read
+different dialects of the format: a file one accepts is not always a file the
+other accepts. The CLI is the tmuxp-compatible one. Build automation on it
+and parse its `--json` or `--ndjson` output. Where they differ:
+
+| Behaviour | This library | `tmux-workspace` |
+| --- | --- | --- |
+| `$VAR` in `start_directory` | left alone | expanded |
+| `description:` metadata | refused | accepted at every level |
+| Keys beginning with `x-` | refused | accepted at every level |
+| `before_script` | refused | run |
+| `plugins`, `workspace_builder` | refused | run through tmuxp |
+| `workspace_builder_options` | refused | read |
+| Waiting for a pane's prompt | never | before the pane's first command |
+| A missing `start_directory` | `MissingDirectories` | warned on load |
+| Problems reported | the first unreadable field, or every problem with what the fields ask for, with lines | one per window, with its line; a document-level refusal still stops at the first |
 
 ### `go install`: get the command
 
@@ -468,25 +485,6 @@ cannot express rather than dropping it. `import teamocil` takes the same
 arguments.
 
 Remove what these commands built with `tmux -L project kill-server`.
-
-### Where the CLI and this library differ
-
-The CLI and this library are separate implementations, and they read
-different dialects of the format: a file one accepts is not always a file the
-other accepts. The CLI is the tmuxp-compatible one. Build automation on it
-and parse its `--json` or `--ndjson` output. Where they differ:
-
-| Behaviour | This library | `tmux-workspace` |
-| --- | --- | --- |
-| `$VAR` in `start_directory` | left alone | expanded |
-| `description:` metadata | refused | accepted at every level |
-| Keys beginning with `x-` | refused | accepted at every level |
-| `before_script` | refused | run |
-| `plugins`, `workspace_builder` | refused | run through tmuxp |
-| `workspace_builder_options` | refused | read |
-| Waiting for a pane's prompt | never | before the pane's first command |
-| A missing `start_directory` | `MissingDirectories` | warned on load |
-| Problems reported | the first unreadable field, or every problem with what the fields ask for, with lines | one per window, with its line; a document-level refusal still stops at the first |
 
 ## See also
 

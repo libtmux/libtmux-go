@@ -49,22 +49,10 @@ first, and `libtmux-mcp -version` names this one.
 
 ### `claude mcp add`: tell a client about it
 
-Claude Code:
+#### Claude Code
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp
-```
-
-Codex CLI:
-
-```console
-$ codex mcp add tmux -- libtmux-mcp
-```
-
-Gemini CLI:
-
-```console
-$ gemini mcp add tmux libtmux-mcp
 ```
 
 Claude Code starts each server it lists, to check that it connects:
@@ -73,15 +61,32 @@ Claude Code starts each server it lists, to check that it connects:
 $ claude mcp list
 ```
 
+#### Codex CLI
+
+```console
+$ codex mcp add tmux -- libtmux-mcp
+```
+
+#### Gemini CLI
+
+```console
+$ gemini mcp add tmux libtmux-mcp
+```
+
+#### Claude Desktop
+
 Claude Desktop reads `claude_desktop_config.json`, and starts its servers
 without your shell's `PATH`. In place of the path below, give it the one
-`command -v libtmux-mcp` prints:
+`command -v libtmux-mcp` prints. Flags go in `args` and the environment in
+`env`:
 
 ```json
 {
   "mcpServers": {
     "tmux": {
-      "command": "/path/to/libtmux-mcp"
+      "command": "/path/to/libtmux-mcp",
+      "args": ["-socket-name", "my-application"],
+      "env": {"LIBTMUX_TOOLSETS": "inspect,manage,execute"}
     }
   }
 }
@@ -293,8 +298,9 @@ $ claude mcp add tmux \
 `LIBTMUX_EXCLUDE_TOOLS` then removes tools by name. Excluding a tool also
 removes it from what `call_read_tools_batch` may call. A name that matches no
 tool, or an empty item in either list, stops the server at startup, before it
-opens tmux. This lists the default tools without `send_keys` and
-`send_keys_batch`:
+opens tmux.
+
+This lists the default tools without `send_keys` and `send_keys_batch`:
 
 ```console
 $ LIBTMUX_EXCLUDE_TOOLS=send_keys,send_keys_batch libtmux-mcp -tools

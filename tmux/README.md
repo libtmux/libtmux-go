@@ -374,9 +374,13 @@ No window has that id, so this prints `kill-window exit status: 1`.
 
 ## Packages
 
-Each heading links to its directory on GitHub. `tmux`, `tmuxq`, and `tmuxtest`
-are packages of the module `go get` fetches. `workspace` and `mcp` are modules
-of their own, so `go get` on the library pulls in neither.
+| Package | Source | Reference | What it is |
+| --- | --- | --- | --- |
+| `tmux` | [`tmux/`](https://github.com/libtmux/libtmux-go/tree/master/tmux) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) | The library. Sessions, windows, panes, options, hooks, formats, filters, snapshots, plans. |
+| `tmuxtest` | [`tmux/tmuxtest/`](https://github.com/libtmux/libtmux-go/tree/master/tmux/tmuxtest) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | Run your program in a real tmux and assert on what it drew. |
+| `tmuxq` | [`tmuxq/`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) | Model-free generic helpers for slices and `iter.Seq`. |
+| `workspace` | [`workspace/`](https://github.com/libtmux/libtmux-go/tree/master/workspace) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace) | A module of its own. Loads tmuxp-style YAML workspaces and builds them, with a CLI. |
+| `mcp` | [`mcp/`](https://github.com/libtmux/libtmux-go/tree/master/mcp) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp) | A module of its own. A tmux server for AI agents, over the Model Context Protocol. |
 
 ### [`tmux`](https://github.com/libtmux/libtmux-go/tree/master/tmux): this package
 
