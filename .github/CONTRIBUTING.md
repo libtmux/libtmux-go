@@ -274,6 +274,12 @@ fixes that conflict within a package and then reports nothing on a second pass,
 so it reads as converged while leaving rewrites behind. Applying one analyzer
 at a time with `go fix -<analyzer>` does not.
 
+## What CI covers
+
+CI runs Linux, including WSL, across the supported tmux releases, and compiles
+and tests executable lookup on Windows. It does not run macOS. macOS is
+supported on a best-effort basis, and CI coverage for it is highly limited.
+
 ## Where a test goes
 
 `tmux/internal/integration` holds the tests that drive a real tmux through the
