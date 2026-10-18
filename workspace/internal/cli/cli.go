@@ -28,7 +28,7 @@ const referenceVersion = "1.74.0"
 // binaries derive it from build metadata; source builds use fallbackVersion.
 var Version = buildVersion()
 
-const fallbackVersion = "0.0.1-alpha.10"
+const fallbackVersion = "0.0.1-alpha.11"
 
 func buildVersion() string {
 	info, ok := debug.ReadBuildInfo()
