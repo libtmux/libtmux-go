@@ -39,8 +39,8 @@ settled. Pin an exact version.
 ## Quick start
 
 You need Go 1.26 or newer, and tmux 3.2a or newer on `PATH`. The install
-command above puts `libtmux-mcp` in `$(go env GOPATH)/bin`, or in `GOBIN`
-when that is set. An MCP client
+command above puts [`libtmux-mcp`][libtmux-mcp-command] in
+`$(go env GOPATH)/bin`, or in `GOBIN` when that is set. An MCP client
 launches it as a subprocess and speaks to it over stdin and stdout, so there
 is nothing to keep running yourself. If your shell cannot find
 `libtmux-mcp`, add that directory to `PATH`. The Python server installs a
@@ -49,22 +49,10 @@ first, and `libtmux-mcp -version` names this one.
 
 ### `claude mcp add`: tell a client about it
 
-Claude Code:
+#### Claude Code
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp
-```
-
-Codex CLI:
-
-```console
-$ codex mcp add tmux -- libtmux-mcp
-```
-
-Gemini CLI:
-
-```console
-$ gemini mcp add tmux libtmux-mcp
 ```
 
 Claude Code starts each server it lists, to check that it connects:
@@ -73,15 +61,32 @@ Claude Code starts each server it lists, to check that it connects:
 $ claude mcp list
 ```
 
+#### Codex CLI
+
+```console
+$ codex mcp add tmux -- libtmux-mcp
+```
+
+#### Gemini CLI
+
+```console
+$ gemini mcp add tmux libtmux-mcp
+```
+
+#### Claude Desktop
+
 Claude Desktop reads `claude_desktop_config.json`, and starts its servers
 without your shell's `PATH`. In place of the path below, give it the one
-`command -v libtmux-mcp` prints:
+`command -v libtmux-mcp` prints. Flags go in `args` and the environment in
+`env`:
 
 ```json
 {
   "mcpServers": {
     "tmux": {
-      "command": "/path/to/libtmux-mcp"
+      "command": "/path/to/libtmux-mcp",
+      "args": ["-socket-name", "my-application"],
+      "env": {"LIBTMUX_TOOLSETS": "inspect,manage,execute"}
     }
   }
 }
@@ -107,6 +112,16 @@ libtmux-mcp doctor
 Then ask the client for something only tmux can do, such as "create a tmux
 session called demo and tell me what panes it has".
 
+### `libtmux-mcp -tools`: see what a client would be offered
+
+```console
+$ libtmux-mcp -tools
+```
+
+It prints the tools the server would advertise: each one's toolset, which
+processes it can reach, and a sentence on what it does. Give it the flags and
+environment the client gives the server, because they decide the listing.
+
 ### `-socket-name`: choose which tmux it drives
 
 With no flag, the server drives a tmux server of its own, on a socket named
@@ -127,6 +142,15 @@ $ claude mcp add tmux -- libtmux-mcp -socket-name default
 
 The choice is made once, when the server starts, and a client cannot change
 it afterwards. [Settings](#settings) lists the other flags.
+
+A workspace that [`tmux-workspace load -L project`][workspace-cli] built lives
+on the socket `project`. To let a client read it and change nothing:
+
+```console
+$ claude mcp add tmux \
+    -e LIBTMUX_TOOLSETS=inspect \
+    -- libtmux-mcp -socket-name project
+```
 
 ## What it feels like
 
@@ -192,8 +216,8 @@ the scarce resources, not tmux:
 
 ## The tools
 
-The tools come in toolsets. A toolset is a named group of tools, and it is
-what an operator grants or withholds:
+The tools come in [toolsets][topic-tool-selection]. A toolset is a named group
+of tools, and it is what an operator grants or withholds:
 
 - `inspect` reads tmux and what panes show, and changes nothing.
 - `manage` rearranges what exists: it renames, resizes, selects, and moves.
@@ -252,6 +276,22 @@ ask for it by name.
 
 A value that is set and empty grants no toolset. There is no `none` keyword.
 
+To see the effect without a client, list what the server offers with one
+toolset:
+
+```console
+$ LIBTMUX_TOOLSETS=inspect libtmux-mcp -tools
+```
+
+A client gets the same selection from the environment it starts the server
+with:
+
+```console
+$ claude mcp add tmux \
+    -e LIBTMUX_TOOLSETS=inspect \
+    -- libtmux-mcp -socket-name default
+```
+
 ### [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] and [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable]: name exact tools
 
 `LIBTMUX_TOOLS` adds tools by name to what the toolsets grant, and
@@ -259,6 +299,13 @@ A value that is set and empty grants no toolset. There is no `none` keyword.
 removes it from what `call_read_tools_batch` may call. A name that matches no
 tool, or an empty item in either list, stops the server at startup, before it
 opens tmux.
+
+This lists the default tools without [`send_keys`][send_keys] and
+[`send_keys_batch`][send_keys_batch]:
+
+```console
+$ LIBTMUX_EXCLUDE_TOOLS=send_keys,send_keys_batch libtmux-mcp -tools
+```
 
 `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, and
 `LIBTMUX_MCP_PROMPTS_AS_TOOLS` are names from earlier releases. Setting one
@@ -369,11 +416,11 @@ This protects the pane you are in. It does not make the tools a sandbox.
 
 ## Known limits
 
-- **Every tool is annotated as destructive.** Each one, `list_sessions`
-  included, carries `destructiveHint=true` and `openWorldHint=true`, and none
-  carries `readOnlyHint`. A client that skips approval for read-only tools
-  prompts on all of them. Classify by `tmuxEffects` in each tool's `_meta`
-  instead.
+- **Every tool is annotated as destructive.** Each one,
+  [`list_sessions`][list_sessions] included, carries `destructiveHint=true` and
+  `openWorldHint=true`, and none carries `readOnlyHint`. A client that skips
+  approval for read-only tools prompts on all of them. Classify by
+  `tmuxEffects` in each tool's `_meta` instead.
 - **`tools/list` is large.** The reply is about 116 KB with every toolset and
   109 KB without `teardown`. More than half of it is the `_meta` description,
   which repeats each tool's text and schemas.
@@ -528,6 +575,8 @@ the MCP SDK it needs.
 [get_pane_info]: https://libtmux.org/en/go/latest/mcp/tools/get_pane_info/
 [get_server_info]: https://libtmux.org/en/go/latest/mcp/tools/get_server_info/
 [Go MCP SDK]: https://github.com/modelcontextprotocol/go-sdk
+[libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
+[list_sessions]: https://libtmux.org/en/go/latest/mcp/tools/list_sessions/
 [mcp-assumeresponsecommit]: https://libtmux.org/en/go/latest/mcp/reference/mcp-assumeresponsecommit/
 [mcp-auditenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-auditenvironmentvariable/
 [mcp-binaryenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-binaryenvironmentvariable/
@@ -546,8 +595,11 @@ the MCP SDK it needs.
 [paste_text]: https://libtmux.org/en/go/latest/mcp/tools/paste_text/
 [run_shell_command]: https://libtmux.org/en/go/latest/mcp/tools/run_shell_command/
 [send_keys]: https://libtmux.org/en/go/latest/mcp/tools/send_keys/
+[send_keys_batch]: https://libtmux.org/en/go/latest/mcp/tools/send_keys_batch/
 [show_environment]: https://libtmux.org/en/go/latest/mcp/tools/show_environment/
 [snapshot_pane]: https://libtmux.org/en/go/latest/mcp/tools/snapshot_pane/
 [split_window]: https://libtmux.org/en/go/latest/mcp/tools/split_window/
 [tmux module]: ../tmux/
+[topic-tool-selection]: https://libtmux.org/en/go/latest/mcp/topics/tool-selection/
 [wait_for_text]: https://libtmux.org/en/go/latest/mcp/tools/wait_for_text/
+[workspace-cli]: https://libtmux.org/en/go/latest/workspace/cli/

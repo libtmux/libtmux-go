@@ -28,7 +28,7 @@ settled. Pin an exact version.
 
 **Contents** — [A whole program](#a-whole-program) · [Records](#records) ·
 [Method names](#method-names) · [Options and hooks](#options-and-hooks) ·
-[Errors](#errors) · [See also](#see-also)
+[Errors](#errors) · [Packages](#packages) · [See also](#see-also)
 
 New here? The [top-level README](../README.md) opens with a program that runs
 a command in tmux and prints what it showed. This page is about how the
@@ -262,10 +262,10 @@ or what it looks like. Everything else returns only an error.
 
 ### [`Session.SetMouse`][tmux-session-setmouse]: set an option, then read it back
 
-Every tmux option and hook has a typed accessor. The tmux name maps to the Go
-name by one rule, given under "Naming and call shapes" in the package
-documentation. A setter returns only an error, because an option is not part
-of the record you hold. Read it back through
+Every tmux option and hook has a [typed accessor][topic-options-and-hooks]. The
+tmux name maps to the Go name by one rule, given under "Naming and call shapes"
+in the [package documentation][tmux-package]. A setter returns only an error,
+because an option is not part of the record you hold. Read it back through
 [`Session.Options`][tmux-session-options]:
 
 <!-- docs:options -->
@@ -325,8 +325,8 @@ program both blocks come from. It sets a hook the same way.
 
 ### [`tmux.ErrNotFound`][tmux-errnotfound]: a lookup that found nothing
 
-Failures are classified by what tmux refused, so a missing target and a
-misspelled option are different checks:
+Failures are [classified by what tmux refused][topic-errors], so a missing
+target and a misspelled option are different checks:
 
 <!-- docs:not-found -->
 
@@ -372,6 +372,161 @@ fmt.Println("kill-window exit status:", result.ExitCode)
 No window has that id, so this prints `kill-window exit status: 1`.
 <!-- docs:end -->
 
+## Packages
+
+| Package | Source | Reference | What it is |
+| --- | --- | --- | --- |
+| `tmux` | [`tmux/`](https://github.com/libtmux/libtmux-go/tree/master/tmux) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) | The library. Sessions, windows, panes, options, hooks, formats, filters, snapshots, plans. |
+| `tmuxtest` | [`tmux/tmuxtest/`](https://github.com/libtmux/libtmux-go/tree/master/tmux/tmuxtest) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest) | Run your program in a real tmux and assert on what it drew. |
+| `tmuxq` | [`tmuxq/`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) | Model-free generic helpers for slices and `iter.Seq`. |
+| `workspace` | [`workspace/`](https://github.com/libtmux/libtmux-go/tree/master/workspace) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace) | A module of its own. Loads tmuxp-style YAML workspaces and builds them, with a CLI. |
+| `mcp` | [`mcp/`](https://github.com/libtmux/libtmux-go/tree/master/mcp) | [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp) | A module of its own. A tmux server for AI agents, over the Model Context Protocol. |
+
+### [`tmux`](https://github.com/libtmux/libtmux-go/tree/master/tmux): this package
+
+Sessions, windows, panes, options, hooks, formats, filters, snapshots, and
+plans, with no dependency outside the standard library. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) and
+[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+
+[`Session.Run`][tmux-session-run] runs a command in a window of its own, with
+a terminal. A nonzero exit status is a result, not an error:
+
+<!-- docs:run-to-completion -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+// The command runs with a terminal, so test -t holds where a pipe fails.
+command := "test -t 1 && echo stdout is a terminal; exit 3"
+result, err := session.Run(ctx, command, tmux.RunOptions{})
+if err != nil {
+	return fmt.Errorf("run command: %w", err)
+}
+for _, line := range result.Lines {
+	fmt.Println("screen:", line)
+}
+fmt.Println("exited", result.Status)
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/run-to-completion/output.txt -->
+This prints `screen: stdout is a terminal`, then `exited 3`.
+<!-- docs:end -->
+
+### [`tmuxq`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq): filters for any slice
+
+Helpers that find records in a slice or an `iter.Seq`. The package imports no
+tmux type, so they work on a slice of your own as well as on the records
+`tmux` returns. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) and
+[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+
+[`tmuxq.Where`][tmuxq-where] keeps what a function accepts, and
+[`tmuxq.First`][tmuxq-first] returns the first match. This needs no tmux:
+
+<!-- docs:tmuxq-slice -->
+
+```go
+type task struct {
+	name string
+	done bool
+}
+tasks := []task{{"build", true}, {"test", false}, {"deploy", false}}
+open := func(t *task) bool { return !t.done }
+
+for _, t := range tmuxq.Where(tasks, open) {
+	fmt.Println("open:", t.name)
+}
+first, _ := tmuxq.First(tasks, open)
+fmt.Println("first open:", first.name)
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked examples/any-slice/output.txt -->
+This prints `open: test` and `open: deploy`, then `first open: test`.
+<!-- docs:end -->
+
+### [`tmuxtest`](https://github.com/libtmux/libtmux-go/tree/master/tmux/tmuxtest): a real tmux for tests
+
+Runs your program in a real pane and lets a test assert on what it drew. The
+server, its sessions, and its panes end with the test. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
+and [libtmux.org](https://libtmux.org/en/go/latest/reference/).
+
+[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
+itself a server on a socket of its own. This is the body of a test, in a
+package whose `TestMain` calls [`tmuxtest.Main`][tmuxtest-main]:
+
+<!-- docs:new-server -->
+
+```go
+// Given: ctx context.Context; t *testing.T
+server := tmuxtest.NewServer(ctx, t)
+
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+if err != nil {
+	t.Fatal(err)
+}
+if name, _ := session.Name(); name != "under-test" {
+	t.Errorf("session name = %q, want under-test", name)
+}
+```
+
+<!-- docs:end -->
+
+### [`workspace`](https://github.com/libtmux/libtmux-go/tree/master/workspace): tmuxp-style workspaces
+
+Loads tmuxp-style YAML workspace files and builds them in tmux, from Go or with
+the `tmux-workspace` command. Reference:
+[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
+[libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/), and the
+[command reference](https://libtmux.org/en/go/latest/workspace/cli/).
+
+Install the command:
+
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
+
+With a [workspace file][workspace-file] saved as `project.yaml`, build it on a
+tmux socket named `project` without attaching to it:
+
+```console
+$ tmux-workspace load \
+    -L project \
+    -d \
+    ./project.yaml
+```
+
+### [`mcp`](https://github.com/libtmux/libtmux-go/tree/master/mcp): a tmux server for agents
+
+Serves one tmux server to Model Context Protocol clients, as the
+[`libtmux-mcp`][libtmux-mcp-command] command or from a program of your own.
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
+[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the [tool
+reference](https://libtmux.org/en/go/latest/mcp/tools/).
+
+Install the command:
+
+```console
+$ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
+```
+
+An MCP client starts the server itself and speaks to it over stdin and stdout.
+Register it with Claude Code:
+
+```console
+$ claude mcp add tmux -- libtmux-mcp
+```
+
+Check which socket it reaches, and what that holds, without a client:
+
+```console
+$ libtmux-mcp -doctor
+```
+
 ## See also
 
 The package documentation is written to be read start to finish. It covers
@@ -392,9 +547,11 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |
 
+[libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [tmux-commandresult-exitcode]: https://libtmux.org/en/go/latest/reference/tmux-commandresult-exitcode/
 [tmux-errnotfound]: https://libtmux.org/en/go/latest/reference/tmux-errnotfound/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
+[tmux-package]: https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux
 [tmux-pane-capture]: https://libtmux.org/en/go/latest/reference/tmux-pane-capture/
 [tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
 [tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
@@ -409,6 +566,7 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmux-session-rawoption]: https://libtmux.org/en/go/latest/reference/tmux-session-rawoption/
 [tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
 [tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
+[tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
 [tmux-session-searchwindows]: https://libtmux.org/en/go/latest/reference/tmux-session-searchwindows/
 [tmux-session-setmouse]: https://libtmux.org/en/go/latest/reference/tmux-session-setmouse/
 [tmux-session-setoption]: https://libtmux.org/en/go/latest/reference/tmux-session-setoption/
@@ -418,3 +576,10 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmux-window-link]: https://libtmux.org/en/go/latest/reference/tmux-window-link/
 [tmux-window-splitpane]: https://libtmux.org/en/go/latest/reference/tmux-window-splitpane/
 [tmux-window]: https://libtmux.org/en/go/latest/reference/tmux-window/
+[tmuxq-first]: https://libtmux.org/en/go/latest/reference/tmuxq-first/
+[tmuxq-where]: https://libtmux.org/en/go/latest/reference/tmuxq-where/
+[tmuxtest-main]: https://libtmux.org/en/go/latest/reference/tmuxtest-main/
+[tmuxtest-newserver]: https://libtmux.org/en/go/latest/reference/tmuxtest-newserver/
+[topic-errors]: https://libtmux.org/en/go/latest/topics/errors-and-exceptions/
+[topic-options-and-hooks]: https://libtmux.org/en/go/latest/topics/options-and-hooks/
+[workspace-file]: https://github.com/libtmux/libtmux-go/tree/master/workspace#a-workspace-file

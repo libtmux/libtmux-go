@@ -36,12 +36,11 @@ import (
 	"github.com/libtmux/libtmux-go/tmuxq"
 )
 
-type task struct {
-	name string
-	done bool
-}
-
 func main() {
+	type task struct {
+		name string
+		done bool
+	}
 	tasks := []task{{"build", true}, {"test", false}, {"deploy", false}}
 	open := func(t *task) bool { return !t.done }
 

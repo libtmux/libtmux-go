@@ -245,20 +245,20 @@ That workspace names its session `review`, so the block prints `review 2`.
 <!-- docs:end -->
 
 A workspace that half exists is never what the caller wanted, so `Build` and
-`BuildInto` check every layout before they change anything: that the tmux
-they were handed knows the layout by that name, and that the layout has room
-for the panes its window asks for. A failure tmux raises while building, such
-as an option it does not know, is a tmux command error, and the tmux
-package's own errors classify it.
+[`BuildInto`][workspace-buildinto] check every layout before they change
+anything: that the tmux they were handed knows the layout by that name, and that
+the layout has room for the panes its window asks for. A failure tmux raises
+while building, such as an option it does not know, is a tmux command error, and
+the tmux package's own errors classify it.
 
 `Build` is not atomic. tmux has no transaction, so a failure partway through
 leaves what was already created in place. The returned session identifies it,
 so you can kill it.
 
-The session `Build` returns came from a creation call, so it carries no
-windows of its own: `session.Windows()` reports none. Ask tmux for them with
-[`Session.SearchWindows`][tmux-session-searchwindows], as the quick start
-does, or read everything at once with
+The session `Build` returns came from a creation call, so it carries no windows
+of its own: [`session.Windows()`][tmux-session-windows] reports none. Ask tmux
+for them with [`Session.SearchWindows`][tmux-session-searchwindows], as the
+quick start does, or read everything at once with
 [`Server.Snapshot`][tmux-server-snapshot].
 
 While it runs, `Build` holds one connection to tmux and sends every command
@@ -369,6 +369,9 @@ rejected.
 The [`tmux-workspace` CLI](CLI.md) loads, builds, and manages workspaces from
 a shell, with structured output and optional Python compatibility.
 
+The [command reference](https://libtmux.org/en/go/latest/workspace/cli/) on
+libtmux.org renders `CLI.md` as a page.
+
 The CLI and this library are separate implementations, and they read
 different dialects of the format: a file one accepts is not always a file the
 other accepts. The CLI is the tmuxp-compatible one. Build automation on it
@@ -386,6 +389,103 @@ and parse its `--json` or `--ndjson` output. Where they differ:
 | A missing `start_directory` | `MissingDirectories` | warned on load |
 | Problems reported | the first unreadable field, or every problem with what the fields ask for, with lines | one per window, with its line; a document-level refusal still stops at the first |
 
+### `go install`: get the command
+
+```console
+$ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
+```
+
+The command lands in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when
+`GOBIN` is unset. The examples below use a tmux socket named `project`, which
+keeps them off the tmux server you have open.
+
+### `tmux-workspace load`: build a workspace
+
+Save the file under [A workspace file](#a-workspace-file) as `project.yaml`.
+This builds it without attaching:
+
+```console
+$ tmux-workspace load \
+    -L project \
+    -d \
+    ./project.yaml
+```
+
+It prints `Loaded project` and the new session's id, and `tmux -L project
+attach` joins the session.
+Without `-d`, `load` attaches the terminal to the session, and it needs a
+terminal to do so. A second load of the same file finds the session by its
+name and reuses it. For a script, `--json` prints a summary of what loaded
+and never prompts:
+
+```console
+$ tmux-workspace load \
+    -L project \
+    -d \
+    --json \
+    ./project.yaml
+```
+
+### `tmux-workspace ls`: find workspace files
+
+```console
+$ tmux-workspace ls --tree
+```
+
+It lists a `.tmuxp.yaml`, `.tmuxp.yml`, or `.tmuxp.json` file in the current
+directory and each parent up to your home directory, and the files in the first
+workspace directory that exists: `$TMUXP_CONFIGDIR`, `$XDG_CONFIG_HOME/tmuxp`
+or `~/.config/tmuxp`, then `~/.tmuxp`. A file in that directory loads by its
+name, as `tmux-workspace load project`.
+
+### `tmux-workspace search`: find a workspace by what it holds
+
+```console
+$ tmux-workspace search \
+    --field window \
+    logs
+```
+
+It prints the name and path of each workspace with a window matching `logs`.
+Without `--field`, a term matches every field.
+
+### `tmux-workspace freeze`: capture a running session
+
+```console
+$ tmux-workspace freeze \
+    -L project \
+    --save-to ./frozen.yaml \
+    project
+```
+
+It writes the session named `project` to `frozen.yaml`, a workspace file that
+`load` accepts. With `--json` in place of `--save-to`, it prints the document.
+
+### `tmux-workspace convert`: change a document's format
+
+```console
+$ tmux-workspace convert \
+    --save-to ./project.json \
+    ./project.yaml
+```
+
+YAML becomes JSON, and JSON becomes YAML. Keys that native loading does not use
+are kept.
+
+### `tmux-workspace import`: bring in a tmuxinator or teamocil file
+
+```console
+$ tmux-workspace import tmuxinator \
+    --json \
+    ./sample.yml
+```
+
+It prints the document the file describes, and refuses what a native workspace
+cannot express rather than dropping it. `import teamocil` takes the same
+arguments.
+
+Remove what these commands built with `tmux -L project kill-server`.
+
 ## See also
 
 This is a module of its own, so `go get` on the tmux library never pulls in
@@ -402,6 +502,7 @@ its YAML parser.
 [tmux module]: ../tmux/
 [tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
 [tmux-session-searchwindows]: https://libtmux.org/en/go/latest/reference/tmux-session-searchwindows/
+[tmux-session-windows]: https://libtmux.org/en/go/latest/reference/tmux-session-windows/
 [workspace-bool]: https://libtmux.org/en/go/latest/workspace/reference/workspace-bool/
 [workspace-build]: https://libtmux.org/en/go/latest/workspace/reference/workspace-build/
 [workspace-buildinto]: https://libtmux.org/en/go/latest/workspace/reference/workspace-buildinto/

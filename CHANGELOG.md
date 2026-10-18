@@ -9,6 +9,15 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Development
+
+- The README link check now also follows absolute links to this repository's
+  `master` branch, and holds the root and `tmux` READMEs to a heading that
+  links each package's directory.
+- The `workspace` tests now hold every `tmux-workspace` command in the
+  Markdown to a subcommand and flags that exist, and the `mcp` tests do the
+  same for `libtmux-mcp` flags and the `LIBTMUX_` variables a command sets.
+
 ## v0.0.1-alpha.10, workspace/v0.0.1-alpha.10, mcp/v0.0.1-alpha.13
 
 ### Development

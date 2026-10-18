@@ -24,9 +24,12 @@ transport starts.
 Without a selector, it uses the dedicated socket `libtmux-mcp` and the shipped
 minimal configuration. A random launch marker proves which process created the
 daemon before default teardown tools are exposed, then disappears from tmux's
-environment. Otherwise set exactly one of `LIBTMUX_SOCKET` and the absolute
-`LIBTMUX_SOCKET_PATH`. `LIBTMUX_TMUX_CONFIG`, when present, must be a nonempty
-absolute path. Explicit or existing targets never gain teardown by default.
+environment. Otherwise set exactly one of
+[`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] and the absolute
+[`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable].
+[`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable], when present, must
+be a nonempty absolute path. Explicit or existing targets never gain teardown by
+default.
 
 ## Installing it
 
@@ -55,7 +58,7 @@ $ libtmux-mcp -tools
 
 Tool listing needs the tmux executable: it asks the socket it would serve
 whether a tmux server runs there, because that decides whether the
-`teardown` toolset is in the default.
+`teardown` [toolset][topic-tool-selection] is in the default.
 
 Check that the server can reach the tmux it was pointed at:
 
@@ -71,19 +74,61 @@ A client starts it as a subprocess; you rarely run it yourself:
 $ libtmux-mcp -socket-name my-application
 ```
 
-It then waits on stdin. Nothing is printed, because stdout is the protocol.
-Use `LIBTMUX_TOOLSETS` in the client-managed environment to select any
-unordered subset of `inspect`, `manage`, `execute`, and `teardown`.
-`LIBTMUX_TOOLS` includes exact names and `LIBTMUX_EXCLUDE_TOOLS` removes exact
-names after inclusion. Unknown names and malformed lists fail before tmux
+It then waits on stdin. Nothing is printed, because stdout is the protocol. Use
+[`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] in the client-managed
+environment to select any unordered subset of `inspect`, `manage`, `execute`,
+and `teardown`. [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] includes exact
+names and [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] removes
+exact names after inclusion. Unknown names and malformed lists fail before tmux
 opens. `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, and
 `LIBTMUX_MCP_PROMPTS_AS_TOOLS` are retired and also fail startup.
 
-The selected tools and the static `tmux://capabilities` resource come from one
-native manifest. Every listed tool carries the same capability row under
-`_meta["com.git-pull.libtmux-mcp/capability"]`. The resource also reports its
-schema version, frozen surface, effective names, connection provenance, and
-common trust boundary.
+The selected tools and the static [`tmux://capabilities`][tmux-capabilities]
+resource come from one native manifest. Every listed tool carries the same
+capability row under `_meta["com.git-pull.libtmux-mcp/capability"]`. The
+resource also reports its schema version, frozen surface, effective names,
+connection provenance, and common trust boundary.
+
+## Choosing what it serves
+
+`-socket-path` names the socket by its absolute path where `-socket-name` names
+it by name, and `-binary` names the tmux executable. `-doctor` reports what a
+choice selects:
+
+```console
+$ libtmux-mcp \
+    -doctor \
+    -socket-path /tmp/my-application.sock
+```
+
+The environment makes the same choices, which is how a client's configuration
+sets them:
+
+```console
+$ LIBTMUX_SOCKET=my-application libtmux-mcp -doctor
+```
+
+`LIBTMUX_TOOLSETS` narrows what the server offers. This lists only the tools
+that read tmux:
+
+```console
+$ LIBTMUX_TOOLSETS=inspect libtmux-mcp -tools
+```
+
+A client that reads a JSON configuration passes the flags as `args` and the
+environment as `env`:
+
+```json
+{
+  "mcpServers": {
+    "tmux": {
+      "command": "/path/to/libtmux-mcp",
+      "args": ["-socket-name", "my-application"],
+      "env": { "LIBTMUX_TOOLSETS": "inspect" }
+    }
+  }
+}
+```
 
 ## Worth knowing
 
@@ -97,6 +142,16 @@ environment hides the bugs that only appear under a curated one.
 
 ## See also
 
+- [Reference](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp) — this command on pkg.go.dev
 - [`mcp/README.md`](../../README.md) — client configuration
 - [`mcp/TOOLS.md`](../../TOOLS.md) — the tool reference
+- [Tool pages](https://libtmux.org/en/go/latest/mcp/tools/) — one page for each tool
 - [`mcp-swap`](../../../internal/tools/mcp-swap) — point the agent CLIs on this machine at a local build
+[mcp-excludetoolsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-excludetoolsenvironmentvariable/
+[mcp-socketenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketenvironmentvariable/
+[mcp-socketpathenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketpathenvironmentvariable/
+[mcp-tmuxconfigenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-tmuxconfigenvironmentvariable/
+[mcp-toolsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-toolsenvironmentvariable/
+[mcp-toolsetsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-toolsetsenvironmentvariable/
+[tmux-capabilities]: https://libtmux.org/en/go/latest/mcp/resources/tmux-capabilities/
+[topic-tool-selection]: https://libtmux.org/en/go/latest/mcp/topics/tool-selection/
