@@ -1,0 +1,29 @@
+# tmux library contracts
+
+What the `tmux` package promises beyond what the [README](../../README.md)
+needs to get a first program running. Each section is the full text behind a
+short bullet there. The package documentation, `go doc
+github.com/libtmux/libtmux-go/tmux`, is the reference for every call.
+
+## The tmux version check
+
+The library needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host.
+Before an operation reaches a daemon older than 3.3a, including unpatched 3.3,
+it returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] and sends nothing;
+a plan leaves its operations skipped.
+
+A tmux that names no release, such as OpenBSD's base tmux or a bare `master`
+build, is refused too, and its error says the version is unrecognized rather
+than too low. A tmux older than 3.2 cannot answer the check and is refused the
+same way.
+
+To fix it, upgrade tmux and restart its server, since a running daemon keeps
+its version until it exits, or pin the previous libtmux-go release.
+
+[`Server.Version`][tmux-server-version] and standalone `Cmd` calls with `-V` or
+`-h` report the executable, not a daemon, and do not clear later operations.
+The check relies on tmux's built-in commands, so a `command-alias` that
+redefines one defeats it.
+
+[tmux-errversiontoolow]: https://libtmux.org/en/go/latest/reference/tmux-errversiontoolow/
+[tmux-server-version]: https://libtmux.org/en/go/latest/reference/tmux-server-version/

@@ -25,8 +25,10 @@ Drive tmux from Go: [sessions][tmux-session], [windows][tmux-window], and
 [find][tmux-server-sessions] and [filter][tmuxq-matching] what a tmux server
 holds, [type into a pane and wait][tmux-paneobservation-waitfor] for its
 answer, and [hear about changes][tmux-session-opennotifications] as tmux makes
-them. It suits tools that drive a terminal program, test suites that need a
-real tmux, and agents that share a terminal.
+them.
+
+It suits tools that drive a terminal program, test suites that need a real
+tmux, and agents that share a terminal.
 
 Add it to your module:
 
@@ -37,20 +39,13 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 Alpha software. Releases carry an -alpha prerelease tag and the API is not
 settled. Pin an exact version.
 
-It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Before an
-operation reaches a daemon older than 3.3a, including unpatched 3.3, it returns
-`tmux.ErrVersionTooLow` and sends nothing; a plan leaves its operations
-skipped. A tmux that names no release, such as OpenBSD's base tmux or a bare
-`master` build, is refused too, and its error says the version is unrecognized
-rather than too low. A tmux older than 3.2 cannot answer the check and is
-refused the same way. To fix it, upgrade tmux and restart its server, since a
-running daemon keeps its version until it exits, or pin the previous
-libtmux-go release.
+It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
+older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
+and sends nothing.
 
-`Server.Version` and standalone `Cmd` calls with `-V` or `-h` report the
-executable, not a daemon, and do not clear later operations. The check relies
-on tmux's built-in commands, so a `command-alias` that redefines one defeats
-it.
+To fix it, upgrade tmux and restart its server, or pin the previous release.
+[The contract][contract-version] covers unrecognized versions and the calls
+that skip the check.
 
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
@@ -146,16 +141,17 @@ $ go mod init demo && \
 ```
 
 The program starts a tmux server on a socket and config of its own and kills
-it on the way out, so it leaves nothing behind and never touches a tmux you
-have open. Drop [`ServerOptions`][tmux-serveroptions] to its zero value and it
-drives the same server your `tmux` command does.
+it on the way out, so it never touches a tmux you have open. With
+[`ServerOptions`][tmux-serveroptions] at its zero value, it drives the same
+server your `tmux` command does.
 
 [`Session.Run`][tmux-session-run] is `os/exec` for a program that needs a
-terminal: the command runs in a window of its own with a tty, and what comes
-back is its exit status and the screen tmux rendered. A nonzero status is a
-result, not an error.
-[`examples/run-to-completion`](examples/run-to-completion) shows one, on a
-tmux server of its own.
+terminal. The command runs in a window of its own with a tty, and you get back
+its exit status and the screen tmux rendered.
+
+A nonzero exit status arrives in the result.
+[`examples/run-to-completion`](examples/run-to-completion) shows one, on a tmux
+server of its own.
 
 Every Go block on this page comes from a program or test that runs on every
 supported release, against a real tmux wherever the block uses one, and each
@@ -196,16 +192,18 @@ of the repository, with `go -C examples run ./filter-query`;
 This one prints `session: libtmux-filter`.
 <!-- docs:end -->
 
-What comes back is a record: a [`Session`][tmux-session] you hold is what tmux
-said when you asked, not a live handle that changes underneath you. When no tmux
-server is running, a listing returns an error matching
-[`ErrNoServer`][tmux-errnoserver] rather than an empty list, so "nothing there"
+What comes back is a record: the [`Session`][tmux-session] you hold is what
+tmux said when you asked, and it stays as it was when tmux changes.
+
+With no tmux server running, a listing returns an error matching
+[`ErrNoServer`][tmux-errnoserver] instead of an empty list, so "nothing there"
 and "nobody to ask" stay different answers.
 
 ### [`tmuxq.Matching`][tmuxq-matching]: several answers from one read
 
 Read the server once with [`Server.Snapshot`][tmux-server-snapshot] and filter
-that read in Go. `Matching` takes any filter the `tmux` package declares:
+that read in Go. [`Matching`][tmuxq-matching] takes any filter the `tmux`
+package declares:
 
 <!-- docs:query-in-go -->
 
@@ -294,17 +292,17 @@ fmt.Println("the pane answered 6 x 7 = 42")
 
 tmux pushes each write as it happens, so nothing polls. The terminal echoes
 what is typed, and that echo is output too, which is why the wait names the
-answer rather than the request.
+answer the command prints.
 
 Runnable: [`examples/pane-io`](examples/pane-io), which goes on to read the
 pane as an `io.Reader`.
 
-Typing is the wrong way to move a payload: the shell in the pane reads quotes,
-`$`, and backslashes in it as shell syntax.
+To move a payload, skip the typing: the shell in the pane reads quotes, `$`,
+and backslashes in it as syntax.
+
 [`Server.LoadBufferFrom`][tmux-server-loadbufferfrom] fills a tmux buffer from
-an `io.Reader` instead, and [`Pane.CaptureTo`][tmux-pane-captureto] writes a
-scrollback to an `io.Writer`. [`examples/byte-streams`](examples/byte-streams)
-does both.
+an `io.Reader`, and [`Pane.CaptureTo`][tmux-pane-captureto] writes a scrollback
+to an `io.Writer`. [`examples/byte-streams`](examples/byte-streams) does both.
 
 ## Watch tmux change
 
@@ -396,9 +394,9 @@ is the program both blocks come from.
 
 ## Choosing how to reach tmux
 
-Start with a plain [`Server`][tmux-server], which starts one tmux process per
-command. The other paths keep a tmux client attached, or send several commands
-at once, to start fewer:
+Start with a plain [`Server`][tmux-server]: one tmux process per command. The
+other paths keep a tmux client attached, or send several commands at once, to
+start fewer:
 
 | Path | Construct it with | Cost | Reach for it |
 | --- | --- | --- | --- |
@@ -412,6 +410,7 @@ at once, to start fewer:
 
 A plan records commands instead of running them, sends the ones needing no
 answer together, and hands back a reference to what a step will create.
+
 `new("echo built")` is how Go 1.26 writes a pointer to a value, for a field
 that may be left unset:
 
@@ -463,11 +462,13 @@ back the title the plan set, so its line ends `stdout ["editor"]`.
 <!-- docs:end -->
 
 A connection appears in `list-clients` and counts toward `session_attached`,
-which is why opening one is explicit. "Execution modes" in the
-[package documentation][tmux-package] has the rules each path follows, and
-[`BENCHMARKS.md`](BENCHMARKS.md) is what each costs, measured on every
-supported tmux. [`examples/fast-path`](examples/fast-path) runs the same reads
-down each path.
+which is why opening one is explicit.
+
+"Execution modes" in the [package documentation][tmux-package] has the rules
+each path follows. [`BENCHMARKS.md`](BENCHMARKS.md) is what each costs,
+measured on every supported tmux.
+
+[`examples/fast-path`](examples/fast-path) runs the same reads down each path.
 
 ## Testing your own code
 
@@ -512,9 +513,8 @@ func TestGreeterAnswersALine(t *testing.T) {
 
 ### [`tmuxtest.WaitForText`][tmuxtest-waitfortext]: a failed wait shows the screen
 
-A wait that runs out fails with the screen the pane last held, which is what
-you would have added a print statement to see. This one was waiting for
-`ready`:
+A wait that runs out fails with the screen the pane last held, which is what a
+print statement would have shown. This one was waiting for `ready`:
 
 <!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
 
@@ -532,6 +532,7 @@ the pane showed 3 line(s):
 
 [`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
 itself a server on a socket of its own, killed when the test ends.
+
 [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux] answers the tmux commands you
 name instead, so a test of your own code needs no tmux installed.
 [`tmux/tmuxtest`](tmux/tmuxtest/) shows both.
@@ -573,7 +574,7 @@ plans, with no dependency outside the standard library. Reference:
 [libtmux.org](https://libtmux.org/en/go/latest/reference/).
 
 [`Session.Run`][tmux-session-run] runs a command in a window of its own, with
-a terminal. A nonzero exit status is a result, not an error:
+a terminal. A nonzero exit status arrives in the result:
 
 <!-- docs:run-to-completion -->
 
@@ -671,8 +672,8 @@ the `tmux-workspace` command. Reference:
 formats.
 
 With the command installed as above and a [workspace file][workspace-file]
-saved as `project.yaml`, build it on a tmux socket named `project` without
-attaching to it:
+saved as `project.yaml`, [`tmux-workspace load`][workspace-cli-load] builds it
+on a tmux socket named `project` without attaching to it:
 
 ```console
 $ tmux-workspace load \
@@ -688,25 +689,26 @@ Serves one tmux server to Model Context Protocol clients, as the
 Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
 [libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the
 [tool pages](https://libtmux.org/en/go/latest/mcp/tools/).
+
 [`mcp/README.md`][mcp-readme] covers client configuration, and
 [`mcp/TOOLS.md`][mcp-tools] lists each tool's arguments and results.
 
-An MCP client starts the server installed above itself and speaks to it over
+An MCP client starts the server installed above itself, and speaks to it over
 stdin and stdout. Register it with Claude Code:
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp
 ```
 
-Check which socket it reaches, and what that holds, without a client:
+Check which socket it reaches, and what that holds, without a client, with
+[`libtmux-mcp -doctor`][guide-diagnose-startup]:
 
 ```console
 $ libtmux-mcp -doctor
 ```
 
 The [`benchmarks`](https://github.com/libtmux/libtmux-go/tree/master/benchmarks)
-module is a tool rather than a library. It prints what each way of reaching
-tmux costs.
+module is a command that prints what each way of reaching tmux costs.
 
 ## What it leaves out
 
@@ -732,17 +734,18 @@ period, so pin an exact version. Not recommended for production.
 - **Go 1.26+**, rising with Go's own support window, about twice a year.
   tmux **3.3a through 3.8** across the core, workspace, and MCP modules,
   tested on releases spanning that range.
-- **Unix.** Linux and macOS are tested on every change, and the BSDs, illumos,
-  and Plan 9 build. A Windows build compiles, so a cross-platform program
-  still builds, but there is no tmux there to reach.
+- **Linux, including WSL, and macOS.** CI runs every module's tests on Linux
+  across tmux 3.3a through 3.8, and on macOS against Homebrew's current tmux.
+- **Other hosts.** The BSDs, illumos, and Plan 9 build. A Windows build
+  compiles, and CI tests executable lookup there; no tmux runs there.
 - **Tagged per directory.** Each module carries its own version: the tags are
   `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the exact ones
   you want in your own go.mod; the commands here fetch the newest.
 
 ## Documentation
 
-The package documentation is the reference, written to be read start to finish
-rather than searched:
+The package documentation is the reference, written to be read start to
+finish:
 
 ```console
 $ go doc github.com/libtmux/libtmux-go/tmux
@@ -757,6 +760,7 @@ leads to its method without a lookup.
 | --- | --- |
 | [Reference](https://libtmux.org/en/go/latest/reference/) | Every exported identifier, method, and field, one page each |
 | [`tmux/`](tmux/) | How the library is shaped: records, naming, options, errors |
+| [`tmux/docs/contracts.md`](tmux/docs/contracts.md) | What the library promises: the tmux version check |
 | [`examples/`](examples/) | Runnable programs, one per topic, each with a page of notes |
 | [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to, and the bakeoffs behind them |
 | [`PARITY.md`](PARITY.md) | How the surface is checked against the Python libtmux |
@@ -788,8 +792,11 @@ MIT. See [`LICENSE`](LICENSE).
 [libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [mcp-readme]: https://github.com/libtmux/libtmux-go/tree/master/mcp
 [mcp-tools]: https://github.com/libtmux/libtmux-go/blob/master/mcp/TOOLS.md
+[contract-version]: tmux/docs/contracts.md#the-tmux-version-check
+[guide-diagnose-startup]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#diagnose-startup
 [tmux-connectionoptions-lanes]: https://libtmux.org/en/go/latest/reference/tmux-connectionoptions-lanes/
 [tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
+[tmux-errversiontoolow]: https://libtmux.org/en/go/latest/reference/tmux-errversiontoolow/
 [tmux-newplan]: https://libtmux.org/en/go/latest/reference/tmux-newplan/
 [tmux-newserver]: https://libtmux.org/en/go/latest/reference/tmux-newserver/
 [tmux-notificationstream-subscribe]: https://libtmux.org/en/go/latest/reference/tmux-notificationstream-subscribe/
@@ -829,5 +836,6 @@ MIT. See [`LICENSE`](LICENSE).
 [tmuxtest-waitfortext]: https://libtmux.org/en/go/latest/reference/tmuxtest-waitfortext/
 [topic-errors]: https://libtmux.org/en/go/latest/topics/errors-and-exceptions/
 [topic-options-and-hooks]: https://libtmux.org/en/go/latest/topics/options-and-hooks/
+[workspace-cli-load]: https://libtmux.org/en/go/latest/workspace/cli/load/
 [workspace-cli-md]: https://github.com/libtmux/libtmux-go/blob/master/workspace/CLI.md
 [workspace-file]: https://github.com/libtmux/libtmux-go/tree/master/workspace#a-workspace-file
