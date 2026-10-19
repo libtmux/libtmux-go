@@ -19,6 +19,59 @@ Modules are tagged per directory, so each carries its own version: the core as
 - The `workspace` README quotes `ExampleParse_unknownField`, so the refusal of
   an unknown field is shown by a test that runs.
 
+### tmux
+
+- Owned control clients, connections, notifications, and pane observations
+  require tmux 3.7. Acquisition pins the selected socket before starting
+  control mode; filesystems unable to retain it refuse acquisition. Cold
+  creation can return a detached session if later attachment fails. (#60)
+- Named buffer deletion and rename, including `CaptureToFile` abort cleanup,
+  require tmux 3.4. Explicit named paste-and-delete remains available on 3.3a.
+  Foreground `RunShell` captured client output requires 3.5; pane-targeted,
+  background, and `AsTmuxCommand` jobs retain native output semantics. (#60)
+- Exact tmux 3.7 refuses a colon or period in window and session names passed
+  to `new-window -n`, `new-session -n` or `-s`, `rename-window` and
+  `rename-session`, before any effect. (#60)
+- Control acquisition names its client `client-<pid>` instead of polling
+  `list-clients`, so a user's `after-list-clients` hook no longer fires.
+  (#60)
+- Raw `break-pane` and unnamed typed `BreakPane` refuse exact tmux 3.7;
+  explicitly named typed calls retain the naming repair. Literal
+  `split-window -p` refuses defective tmux 3.4; typed percentage requests
+  keep their conversion. (#60)
+- The same checks apply to literal commands sent through `Connection.Call` and
+  `ControlClient.Call`, and resolve aliases and unique prefixes the way tmux
+  does, so `breakp` and `new` are checked as the commands they name. (#60)
+- Literal `select-layout` on tmux 3.3a refuses an unparseable or empty layout
+  and `-o`, which exit the server. (#60)
+- Literal `refresh-client -l` refuses tmux 3.3a, which exits the server when
+  the client has a terminal; the typed `RefreshClient` request already withheld
+  the flag there. (#60)
+- The optional feature gates read their tmux floors from one capability
+  registry, and `capabilities.json` at the repository root is emitted from
+  it for the docs capability pages. A test fails when the two differ. (#60)
+
+### tmux/tmuxtest
+
+- Screen helpers use capture polling below tmux 3.7. Explicit control helpers
+  retain the control acquisition requirement. (#60)
+
+### workspace
+
+- `Build` keeps subprocess operations on tmux 3.3a through 3.6 and owns a
+  qualified control connection on newer daemons. (#60)
+
+### mcp
+
+- Startup, `capture_since`, and `run_shell_command` remain available on tmux
+  3.3a. Non-empty `paste_text` requires 3.4 before staging; `wait_for_text`
+  polls with `capture-pane` below 3.7, joining wrapped lines as the control
+  path does. (#60)
+- `wait_for_text` ends with `paneDied` and the output so far when the pane,
+  its program (under `remain-on-exit`), its window or session, or the server
+  goes, and with `streamLost` when the
+  pane is alive but its output stream ended. (#60)
+
 ## v0.0.1-alpha.11, workspace/v0.0.1-alpha.11, mcp/v0.0.1-alpha.14
 
 ### Development
