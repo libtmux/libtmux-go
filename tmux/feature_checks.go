@@ -3,10 +3,13 @@ package tmux
 import "strings"
 
 var (
-	namedBufferMinimumVersion   = Version{raw: "3.4", major: 3, minor: 4}
-	capturedShellMinimumVersion = Version{raw: "3.5", major: 3, minor: 5}
-	exactBreakPaneVersion       = Version{raw: "3.7", major: 3, minor: 7}
-	patchedBreakPaneVersion     = Version{raw: "3.7a", major: 3, minor: 7}
+	bufferDeleteNamedVersion = capabilitySince("buffer-delete-named")
+	bufferRenameVersion      = capabilitySince("buffer-rename")
+	capturedShellVersion     = workaroundFixedIn("run-shell-output-in-copy-mode")
+	percentSizeFixedVersion  = workaroundFixedIn("split-window-percent-size")
+	breakPaneFixedVersion    = workaroundFixedIn("break-pane-misnames-windows")
+	nameSeparatorsFixed      = workaroundFixedIn("name-separators-rejected")
+	selectLayoutFixed        = workaroundFixedIn("select-layout-invalid-string")
 )
 
 // checkCommandFeatures examines direct argv items. Nested tmux scripts and
@@ -28,18 +31,19 @@ func (s Server) checkCommandFeatures(arguments []string, commandList, raw bool) 
 	for _, item := range directCommandItems(arguments, commandList) {
 		if len(item) != 0 {
 			namedCleanup := false
+			namedMinimum := bufferDeleteNamedVersion
 			switch {
 			case matchesNativeCommand(item[0], "delete-buffer", "deleteb", 3):
 				namedCleanup = directCommandOptions(item, "b")['b']
 			case matchesNativeCommand(item[0], "set-buffer", "setb", 5):
+				namedMinimum = bufferRenameVersion
 				flags := directCommandOptions(item, "btn")
 				namedCleanup = flags['b'] && flags['n']
 			case matchesNativeCommand(item[0], "split-window", "splitw", 2):
-				if current.meetsMinimum(namedBufferMinimumVersion) &&
-					!current.meetsMinimum(capturedShellMinimumVersion) &&
+				if workaroundApplies("split-window-percent-size", current) &&
 					directCommandOptions(item, "ceFlpt")['p'] {
 					return &VersionTooLowError{
-						Current: current, Minimum: capturedShellMinimumVersion,
+						Current: current, Minimum: percentSizeFixedVersion,
 						Subcommand: item[0], Feature: "percentage",
 					}
 				}
@@ -59,16 +63,64 @@ func (s Server) checkCommandFeatures(arguments []string, commandList, raw bool) 
 				if err := checkExact37Positional(current, item, "t"); err != nil {
 					return err
 				}
+			case matchesNativeCommand(item[0], "select-layout", "selectl", 8):
+				if err := checkSelectLayout(current, item); err != nil {
+					return err
+				}
+			case matchesNativeCommand(item[0], "refresh-client", "refresh", 3):
+				// tmux 3.3a exits the server on -l when the client has a
+				// terminal. -l is a plain flag; the valued ones are skipped so
+				// that a value spelled "l" is not mistaken for it.
+				if !current.meetsMinimum(serverClientsClipboardVersion) &&
+					directCommandOptions(item, "ABCfFrt")['l'] {
+					return &VersionTooLowError{
+						Current: current, Minimum: serverClientsClipboardVersion,
+						Subcommand: item[0], Feature: "clipboard_query",
+					}
+				}
 			case matchesNativeCommand(item[0], "break-pane", "breakp", 2):
-				if raw && current.meetsMinimum(exactBreakPaneVersion) &&
-					!current.meetsMinimum(patchedBreakPaneVersion) {
-					return &VersionTooLowError{Current: current, Minimum: patchedBreakPaneVersion, Subcommand: item[0], Feature: "raw_break_pane"}
+				if raw && workaroundApplies("break-pane-misnames-windows", current) {
+					return &VersionTooLowError{Current: current, Minimum: breakPaneFixedVersion, Subcommand: item[0], Feature: "raw_break_pane"}
 				}
 			}
-			if namedCleanup && !current.meetsMinimum(namedBufferMinimumVersion) {
-				return &VersionTooLowError{Current: current, Minimum: namedBufferMinimumVersion, Subcommand: item[0], Feature: "named_buffer_identity"}
+			if namedCleanup && !current.meetsMinimum(namedMinimum) {
+				return &VersionTooLowError{Current: current, Minimum: namedMinimum, Subcommand: item[0], Feature: "named_buffer_identity"}
 			}
 		}
+	}
+	return nil
+}
+
+// checkSelectLayout refuses the select-layout forms that kill a tmux 3.3a
+// server: an operand that is neither a preset (or unique prefix of one) nor a
+// classic layout string, an empty operand, and -o. tmux frees an uninitialised
+// pointer when its layout parser rejects an operand, and -o sends even a preset
+// down that parser. tmux ignores the operand when -E, -n or -p is given, so
+// those forms pass. A preset or unique prefix resolves the way tmux's
+// layout_set_lookup does and never reaches the parser.
+func checkSelectLayout(current Version, item []string) error {
+	if !workaroundApplies("select-layout-invalid-string", current) {
+		return nil
+	}
+	flags := directCommandOptions(item, "t")
+	refuse := func(feature string) error {
+		return &VersionTooLowError{
+			Current: current, Minimum: selectLayoutFixed,
+			Subcommand: item[0], Feature: feature,
+		}
+	}
+	if flags['E'] || flags['n'] || flags['p'] {
+		return nil
+	}
+	if flags['o'] {
+		return refuse("select_layout_undo")
+	}
+	_, operands := directCommandValues(item, "t")
+	if len(operands) == 0 {
+		return nil
+	}
+	if _, err := validateLayout(operands[0], current); err != nil || operands[0] == "" {
+		return refuse("layout_string")
 	}
 	return nil
 }
@@ -138,7 +190,7 @@ func checkExact37Name(current Version, item []string, valued, names string) erro
 	for _, flag := range names {
 		if name, ok := values[byte(flag)]; ok && strings.ContainsAny(name, ":.") {
 			return &VersionTooLowError{
-				Current: current, Minimum: patchedBreakPaneVersion,
+				Current: current, Minimum: nameSeparatorsFixed,
 				Subcommand: item[0], Feature: "name_colon_or_period",
 			}
 		}
@@ -155,7 +207,7 @@ func checkExact37Positional(current Version, item []string, valued string) error
 	_, operands := directCommandValues(item, valued)
 	if len(operands) > 0 && strings.ContainsAny(operands[len(operands)-1], ":.") {
 		return &VersionTooLowError{
-			Current: current, Minimum: patchedBreakPaneVersion,
+			Current: current, Minimum: nameSeparatorsFixed,
 			Subcommand: item[0], Feature: "name_colon_or_period",
 		}
 	}
@@ -163,8 +215,7 @@ func checkExact37Positional(current Version, item []string, valued string) error
 }
 
 func isExact37(current Version) bool {
-	return current.meetsMinimum(exactBreakPaneVersion) &&
-		!current.meetsMinimum(patchedBreakPaneVersion)
+	return workaroundApplies("name-separators-rejected", current)
 }
 
 // directCommandValues returns the value of each valued flag in one command

@@ -39,7 +39,11 @@ anything is sent, and only on the releases that need it:
 - Raw `select-layout` with an unparseable layout, an empty one, or `-o` is
   refused on 3.3a. A preset or a unique prefix of one, a classic layout string,
   and `-n`, `-p` and `-E` are sent.
+- Raw `refresh-client` with `-l`, which asks a client for its clipboard, is
+  refused on 3.3a, where it exits the server for a client that has a terminal.
+  The typed `RefreshClient` request withholds the flag there instead.
 - Owned control clients, connections and observations need 3.7.
+- `NewPane` needs 3.7 and is refused as a whole below it.
 
 The checks read the literal command, and resolve its name the way tmux does: an
 alias such as `breakp` or `new`, or a unique prefix such as `break-p`, in any
@@ -51,10 +55,18 @@ tmux command strings nested in another command are not checked. That covers an
 there reaches tmux as written, so do not nest one this library would refuse.
 Shell programs and the contents of configured aliases are not checked either.
 
-The list above is what the capability manifest records. A flag that only one
-request field needs, such as a popup, search or `display-message` option, is
-documented on that field and refused where the request is built; the manifest
-does not list those.
+The bullets above are examples, not the full set. The capability manifest
+records every gate that names a tmux command: a command or whole API that needs
+a release, and a command a release mishandles. The generated capabilities page
+lists them.
+
+Other gates stay out of the manifest. A flag that only one request field
+needs, such as a popup, search or `display-message` option, is documented on
+that field and follows [`UnsupportedPolicy`][tmux-unsupportedpolicy] where the
+request is built: it warns and omits the flag, or fails with
+`ErrVersionTooLow`. The minimum supported release, which every API shares, is
+a floor and not a capability.
 
 [tmux-errversiontoolow]: https://libtmux.org/en/go/latest/reference/tmux-errversiontoolow/
 [tmux-server-version]: https://libtmux.org/en/go/latest/reference/tmux-server-version/
+[tmux-unsupportedpolicy]: https://libtmux.org/en/go/latest/reference/tmux-unsupportedpolicy/

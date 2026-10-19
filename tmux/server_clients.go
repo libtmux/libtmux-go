@@ -7,7 +7,7 @@ import "context"
 // ends the server on it for a client with a terminal, so the flag is withheld
 // below this rather than gated on the kind of client a caller happens to
 // target.
-var serverClientsClipboardVersion = Version{raw: "3.4", major: 3, minor: 4}
+var serverClientsClipboardVersion = capabilitySince("clipboard-query")
 
 // ServerAccessRequest configures tmux server access control. Its zero value is
 // invalid: List or exactly one nonempty Allow or Deny is required. Allow and

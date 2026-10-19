@@ -1,0 +1,439 @@
+{
+  "capabilities": [
+    {
+      "apis": [
+        "tmux.Server.OpenControl",
+        "tmux.Session.OpenControl",
+        "tmux.Server.NewSessionConnection"
+      ],
+      "commands": [
+        {
+          "command": "attach-session"
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "control-mode",
+      "name": "Control mode",
+      "since": "3.7",
+      "summary": "Attach a library-owned control client and stream events."
+    },
+    {
+      "apis": [
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call",
+        "tmux.Server.RefreshClient",
+        "tmux.RefreshClientRequest.RequestClipboard"
+      ],
+      "commands": [
+        {
+          "command": "refresh-client",
+          "flags": [
+            "-l"
+          ]
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "clipboard-query",
+      "name": "Clipboard query",
+      "since": "3.4",
+      "summary": "Ask a client for its clipboard; tmux 3.3a exits the server when the client has a terminal."
+    },
+    {
+      "apis": [
+        "tmux.Window.NewPane",
+        "tmux.Pane.NewPane",
+        "tmux.NewPaneRequest"
+      ],
+      "commands": [
+        {
+          "command": "new-pane"
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "floating-pane",
+      "name": "Floating panes",
+      "since": "3.7",
+      "summary": "Create a floating pane with new-pane."
+    },
+    {
+      "apis": [
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call",
+        "tmux.Pane.CaptureToFile"
+      ],
+      "commands": [
+        {
+          "command": "delete-buffer",
+          "flags": [
+            "-b"
+          ]
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "buffer-delete-named",
+      "name": "Named buffer deletion",
+      "since": "3.4",
+      "summary": "Delete one paste buffer by name without risking another buffer."
+    },
+    {
+      "apis": [
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call"
+      ],
+      "commands": [
+        {
+          "command": "set-buffer",
+          "flags": [
+            "-b",
+            "-n"
+          ]
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "buffer-rename",
+      "name": "Buffer rename",
+      "since": "3.4",
+      "summary": "Rename a paste buffer without risking another buffer."
+    },
+    {
+      "apis": [
+        "tmux.Window.SelectLayout",
+        "tmux.SelectLayoutRequest.Layout"
+      ],
+      "commands": [
+        {
+          "command": "select-layout"
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "layout-mirrored-main",
+      "name": "Mirrored main layouts",
+      "since": "3.5",
+      "summary": "Select the main-horizontal-mirrored and main-vertical-mirrored presets."
+    },
+    {
+      "apis": [
+        "tmux.Window.SelectLayout",
+        "tmux.SelectLayoutRequest.Layout"
+      ],
+      "commands": [
+        {
+          "command": "select-layout"
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "layout-json",
+      "name": "JSON layouts",
+      "since": "3.8-rc2",
+      "summary": "Select a layout given in the JSON shape tmux reports from window_layout."
+    },
+    {
+      "apis": [
+        "tmux.CapturePaneRequest.ModeScreen"
+      ],
+      "commands": [
+        {
+          "command": "capture-pane",
+          "flags": [
+            "-M"
+          ]
+        }
+      ],
+      "handling": "fallback",
+      "id": "capture-mode-screen",
+      "name": "Capture the mode screen",
+      "since": "3.6",
+      "summary": "Capture what a pane's active mode shows instead of the pane itself."
+    },
+    {
+      "apis": [
+        "tmux.CapturePaneRequest.Hyperlinks",
+        "tmux.CapturePaneRequest.LineNumbers",
+        "tmux.CapturePaneRequest.LineFlags"
+      ],
+      "commands": [
+        {
+          "command": "capture-pane",
+          "flags": [
+            "-F",
+            "-H",
+            "-L"
+          ]
+        }
+      ],
+      "handling": "fallback",
+      "id": "capture-line-flags",
+      "name": "Capture line numbers, flags and hyperlinks",
+      "since": "3.7",
+      "summary": "Prefix captured lines with their number or metadata flags, or keep hyperlinks."
+    },
+    {
+      "apis": [
+        "tmux.RunShellRequest.StartDirectory"
+      ],
+      "commands": [
+        {
+          "command": "run-shell",
+          "flags": [
+            "-c"
+          ]
+        }
+      ],
+      "handling": "fallback",
+      "id": "run-shell-start-directory",
+      "name": "run-shell working directory",
+      "since": "3.4",
+      "summary": "Start a run-shell job in a chosen directory."
+    },
+    {
+      "apis": [
+        "tmux.RunShellRequest.ShowStderr"
+      ],
+      "commands": [
+        {
+          "command": "run-shell",
+          "flags": [
+            "-E"
+          ]
+        }
+      ],
+      "handling": "fallback",
+      "id": "run-shell-show-stderr",
+      "name": "run-shell stderr",
+      "since": "3.6",
+      "summary": "Show a run-shell job's standard error as well as its output."
+    },
+    {
+      "apis": [
+        "tmux.RunShellRequest.Args"
+      ],
+      "commands": [
+        {
+          "command": "run-shell"
+        }
+      ],
+      "handling": "fallback",
+      "id": "run-shell-args",
+      "name": "run-shell job arguments",
+      "since": "3.7",
+      "summary": "Pass extra arguments to a run-shell job."
+    },
+    {
+      "apis": [
+        "tmux.PasteBufferRequest.NoVis"
+      ],
+      "commands": [
+        {
+          "command": "paste-buffer",
+          "flags": [
+            "-S"
+          ]
+        }
+      ],
+      "handling": "fallback",
+      "id": "paste-buffer-no-vis",
+      "name": "Paste raw bytes",
+      "since": "3.7",
+      "summary": "Paste a buffer without tmux rewriting its control characters."
+    },
+    {
+      "apis": [
+        "tmux.Server.OpenControl",
+        "tmux.Session.OpenControl",
+        "tmux.Server.NewSessionConnection"
+      ],
+      "commands": [
+        {
+          "command": "attach-session",
+          "flags": [
+            "-f"
+          ]
+        }
+      ],
+      "handling": "fallback",
+      "id": "control-no-detach-on-destroy",
+      "name": "Control clients survive session destruction",
+      "since": "3.6",
+      "summary": "Keep a library-owned control client attached when its session is destroyed."
+    },
+    {
+      "apis": [
+        "tmux.CapturePaneRequest.TrimTrailing",
+        "tmux.Pane.Capture"
+      ],
+      "commands": [
+        {
+          "command": "capture-pane",
+          "flags": [
+            "-T"
+          ]
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "capture-trim-blank-cells",
+      "name": "Trim blank capture cells",
+      "since": "3.4",
+      "summary": "Drop trailing positions that hold no character from a capture."
+    },
+    {
+      "apis": [
+        "tmux.Server.ListKeys",
+        "tmux.ListKeysRequest.Format"
+      ],
+      "commands": [
+        {
+          "command": "list-keys",
+          "flags": [
+            "-F"
+          ]
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "list-keys-format",
+      "name": "Formatted key listing",
+      "since": "3.7",
+      "summary": "Format each key binding with a caller-supplied template."
+    }
+  ],
+  "floor": {
+    "minimum": "3.3a"
+  },
+  "port": "go",
+  "schema": "libtmux-capabilities/1",
+  "workarounds": [
+    {
+      "apis": [
+        "tmux.Server.RunShell"
+      ],
+      "commands": [
+        {
+          "command": "run-shell"
+        }
+      ],
+      "handling": "refuse",
+      "id": "run-shell-output-in-copy-mode",
+      "name": "run-shell output lands in copy mode",
+      "releases": [
+        "3.3a",
+        "3.4"
+      ],
+      "summary": "Foreground run-shell output goes to the pane's copy mode instead of the client, so the call is refused."
+    },
+    {
+      "apis": [
+        "tmux.Pane.BreakPane",
+        "tmux.BreakPaneRequest.Name",
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call"
+      ],
+      "commands": [
+        {
+          "command": "break-pane"
+        }
+      ],
+      "handling": "repair",
+      "id": "break-pane-misnames-windows",
+      "name": "break-pane misnames windows",
+      "releases": [
+        "3.7"
+      ],
+      "summary": "break-pane without a name crashes or misnames the new window; a typed call names it first and repairs the result, a raw one is refused."
+    },
+    {
+      "apis": [
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call"
+      ],
+      "commands": [
+        {
+          "command": "split-window",
+          "flags": [
+            "-p"
+          ]
+        }
+      ],
+      "handling": "refuse",
+      "id": "split-window-percent-size",
+      "name": "split-window percentage size",
+      "releases": [
+        "3.4"
+      ],
+      "summary": "A literal split-window -p fails with a size error; typed percentage requests convert it."
+    },
+    {
+      "apis": [
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call"
+      ],
+      "commands": [
+        {
+          "command": "select-layout",
+          "flags": [
+            "-o"
+          ]
+        }
+      ],
+      "handling": "refuse",
+      "id": "select-layout-invalid-string",
+      "name": "select-layout kills the server",
+      "releases": [
+        "3.3a"
+      ],
+      "summary": "A layout operand tmux cannot parse, or -o, exits the server; typed requests validate the layout and a literal command that could reach the parser is refused."
+    },
+    {
+      "apis": [
+        "tmux.Server.Cmd",
+        "tmux.Connection.Call",
+        "tmux.ControlClient.Call",
+        "tmux.Server.NewSession",
+        "tmux.Session.NewWindow",
+        "tmux.Session.Rename",
+        "tmux.Window.Rename"
+      ],
+      "commands": [
+        {
+          "command": "new-session",
+          "flags": [
+            "-n",
+            "-s"
+          ]
+        },
+        {
+          "command": "new-window",
+          "flags": [
+            "-n"
+          ]
+        },
+        {
+          "command": "rename-session"
+        },
+        {
+          "command": "rename-window"
+        }
+      ],
+      "handling": "refuse",
+      "id": "name-separators-rejected",
+      "name": "Colon and period in names",
+      "releases": [
+        "3.7"
+      ],
+      "summary": "A window or session name holding a colon or period is rejected, so the call is refused before any effect."
+    }
+  ]
+}

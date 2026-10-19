@@ -86,6 +86,15 @@ it. The matrix lanes from 3.7 up export it and fail on a skip. After changing
 $ LIBTMUX_EMIT_CAPABILITIES=1 go test ./tmux -run TestTheCommittedManifestIsTheRegistry
 ```
 
+The test that ties each workaround's fixed release to its releases reads the
+tmux releases from the lanes of the `tmux-matrix` job in
+`.github/workflows/tests.yml` and from the registry. A new tmux release is
+known to it once it has a lane there.
+
+The lanes for 3.3a and 3.7 also name the tests that need exactly that release
+and fail if one of them does not run and pass, so a test that only skips there
+cannot go unnoticed.
+
 The install gates run the documented version-suffixed commands, so they test
 the latest published MCP server and workspace CLI rather than compiling current
 source against old sibling releases:

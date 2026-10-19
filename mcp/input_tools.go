@@ -1088,6 +1088,10 @@ func (t *tools) pasteText(
 // series rather than failing.
 const maximumBufferCommandBytes = 8 << 10
 
+// stagedBufferMinimum is the first tmux release with the named-buffer cleanup
+// that staging relies on: the core module's buffer-delete-named capability.
+const stagedBufferMinimum = "3.4"
+
 // stageBuffer stores contents in the named buffer, appending in chunks when it
 // is too large for one tmux command. Appending keeps the payload out of any
 // file and needs no tmux process, so it works over the control connection this
@@ -1098,7 +1102,7 @@ func (t *tools) stageBuffer(
 	name string,
 	contents string,
 ) error {
-	minimum, err := tmux.ParseVersion("3.4")
+	minimum, err := tmux.ParseVersion(stagedBufferMinimum)
 	if err != nil {
 		return err
 	}

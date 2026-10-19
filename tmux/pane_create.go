@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-var newPaneVersion37 = Version{raw: "3.7", major: 3, minor: 7}
+var newPaneVersion37 = capabilitySince("floating-pane")
 
 // NewPaneRequest configures a floating pane and requires tmux 3.7 or later.
 // Its zero value creates a detached floating pane with tmux's default size,

@@ -128,9 +128,9 @@ func (p Pane) BreakPane(ctx context.Context, request BreakPaneRequest) (Window, 
 	if err != nil {
 		return Window{}, err
 	}
-	isBroken37 := version.String() == "3.7"
+	isBroken37 := workaroundApplies("break-pane-misnames-windows", version)
 	if isBroken37 && request.Name == "" {
-		return Window{}, &VersionTooLowError{Current: version, Minimum: patchedBreakPaneVersion, Subcommand: "break-pane", Feature: "automatic_window_name"}
+		return Window{}, &VersionTooLowError{Current: version, Minimum: breakPaneFixedVersion, Subcommand: "break-pane", Feature: "automatic_window_name"}
 	}
 	arguments := []string{"break-pane", "-P", "-F#{window_id}"}
 	if !request.Attach {

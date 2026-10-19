@@ -391,6 +391,33 @@ jobs:
             ./scripts/test-module.sh "$module" -count=1
           done
 
+      # These tests skip on every release but the one they exercise, and the
+      # step above is not verbose, so a lane that stopped running its own would
+      # pass without them. The lane built for the release names them and fails
+      # if one does not run and pass.
+      - name: Run the tests that need exactly tmux ${{ matrix.tmux-version }}
+        if: contains(fromJSON('["3.3a", "3.7"]'), matrix.tmux-version)
+        env:
+          TMUX_VERSION: ${{ matrix.tmux-version }}
+        run: |
+          export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
+          test "$(tmux -V)" = "tmux $TMUX_VERSION"
+          mkdir -p "$TMUX_TMPDIR"
+          set -o pipefail
+          case "$TMUX_VERSION" in
+            3.3a)
+              required='TestRawSelectLayoutIsRefusedWhereItKillsTheServer TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer'
+              ;;
+            3.7)
+              required='TestExact37RefusesWindowNamesWithColonOrPeriod TestExact37ConnectionCallRefusesNamesWithColonOrPeriod TestOptionalExact37BreakPaneKeepsItsNamingContract TestOptionalExact37ConnectionCallRefusesRawBreakPane TestOpenControlBindsTheVersionItChecked'
+              ;;
+          esac
+          regex="^($(printf '%s ' $required | sed 's/ $//; s/ /|/g'))\$"
+          ./scripts/test-module.sh . -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/exact.log"
+          for name in $required; do
+            grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/exact.log" || { echo "::error::$name did not run and pass"; exit 1; }
+          done
+
       # Tests that put a 3.3a daemon beside this lane's newer client skip
       # without a 3.3a build, and a lane that skips them proves nothing. Lanes
       # from 3.7 up have the control client those tests start, so they build

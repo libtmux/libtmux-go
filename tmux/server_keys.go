@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-var serverKeysVersion37 = Version{raw: "3.7", major: 3, minor: 7}
+var serverKeysVersion37 = capabilitySince("list-keys-format")
 
 // BindKeyRequest configures one tmux key binding. Its zero value is invalid
 // because Key is required; nil KeyTable and Note omit their flags while

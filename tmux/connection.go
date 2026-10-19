@@ -17,12 +17,8 @@ var ErrConnectionRequiresProcess = errors.New(
 )
 
 var (
-	controlMinimumVersion = Version{
-		raw: MinimumConnectionVersion, major: 3, minor: 7,
-	}
-	controlNoDetachVersion36 = Version{
-		raw: "3.6", major: 3, minor: 6,
-	}
+	controlMinimumVersion    = capabilitySince("control-mode")
+	controlNoDetachVersion36 = capabilitySince("control-no-detach-on-destroy")
 )
 
 // controlDialect keeps version differences at the process boundary instead of

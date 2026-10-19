@@ -2,6 +2,8 @@ package tmux
 
 import "context"
 
+var pasteBufferNoVisVersion = capabilitySince("paste-buffer-no-vis")
+
 // PasteBufferRequest configures one tmux paste-buffer operation. Its zero value
 // pastes the top buffer, replaces linefeeds with tmux's default carriage-return
 // separator, and uses the version's default control-character handling.
@@ -155,10 +157,10 @@ func (p Pane) PasteBuffer(ctx context.Context, request PasteBufferRequest) error
 		if err != nil {
 			return err
 		}
-		if version.AtLeast(serverExecVersion37) {
+		if version.AtLeast(pasteBufferNoVisVersion) {
 			noVis = true
 		} else if err := p.server.unsupportedFeature(
-			"paste-buffer", "no_vis", version, serverExecVersion37,
+			"paste-buffer", "no_vis", version, pasteBufferNoVisVersion,
 		); err != nil {
 			return err
 		}

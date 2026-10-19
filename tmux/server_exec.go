@@ -16,9 +16,9 @@ var (
 	// cannot be represented safely as tmux arguments.
 	ErrInvalidServerCommandRequest = errors.New("tmux: invalid server command request")
 
-	serverExecVersion34 = Version{raw: "3.4", major: 3, minor: 4}
-	serverExecVersion36 = Version{raw: "3.6", major: 3, minor: 6}
-	serverExecVersion37 = Version{raw: "3.7", major: 3, minor: 7}
+	serverExecVersion34 = capabilitySince("run-shell-start-directory")
+	serverExecVersion36 = capabilitySince("run-shell-show-stderr")
+	serverExecVersion37 = capabilitySince("run-shell-args")
 )
 
 // ServerCommandRequestError reports a locally rejected server command request
@@ -189,7 +189,7 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 	}
 
 	if !request.Background && !request.AsTmuxCommand && request.TargetPane == "" {
-		s.requiredVersion = capturedShellMinimumVersion
+		s.requiredVersion = capturedShellVersion
 	}
 	checked, err := s.checkCore(ctx, false)
 	if err != nil {
