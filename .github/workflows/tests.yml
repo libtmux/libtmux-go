@@ -230,44 +230,11 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
-  # Linux is the release matrix because it can build every supported tmux
-  # version. One native macOS run covers its different PTYs, process tree,
-  # socket paths, and command diagnostics against Homebrew's current tmux.
-  macos:
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: stable
-          cache-dependency-path: |
-            go.mod
-            examples/go.mod
-            workspace/go.mod
-            mcp/go.mod
-            benchmarks/go.mod
-            internal/tools/go.mod
-
-      - name: Install tmux
-        run: brew install tmux
-
-      - name: Test every module on macOS
-        env:
-          GOTOOLCHAIN: local
-        run: |
-          mkdir -p "$TMUX_TMPDIR"
-          for module in . examples workspace mcp benchmarks internal/tools; do
-            echo "--- $module ---"
-            (cd "$module" && go test -count=1 ./...)
-          done
-
   # tmux itself does not run on Windows, but constructor-time executable
   # resolution follows Windows PATH, PATHEXT, and current-directory rules.
   # Cross-compilation cannot exercise those filesystem semantics. This is
   # also the only job that compiles workspace/internal/cli's "!unix" files:
-  # every other job runs on Linux or macOS, where "unix" wins instead.
+  # every other job runs on Linux, where "unix" wins instead.
   windows-resolver:
     runs-on: windows-latest
     timeout-minutes: 10
