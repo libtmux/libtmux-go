@@ -396,7 +396,7 @@ jobs:
       # pass without them. The lane built for the release names them and fails
       # if one does not run and pass.
       - name: Run the tests that need exactly tmux ${{ matrix.tmux-version }}
-        if: contains(fromJSON('["3.3a", "3.7"]'), matrix.tmux-version)
+        if: contains(fromJSON('["3.3a", "3.4", "3.5", "3.6", "3.7"]'), matrix.tmux-version)
         env:
           TMUX_VERSION: ${{ matrix.tmux-version }}
         run: |
@@ -407,6 +407,9 @@ jobs:
           case "$TMUX_VERSION" in
             3.3a)
               required='TestRawSelectLayoutIsRefusedWhereItKillsTheServer TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer'
+              ;;
+            3.4|3.5|3.6)
+              required='TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer'
               ;;
             3.7)
               required='TestExact37RefusesWindowNamesWithColonOrPeriod TestExact37ConnectionCallRefusesNamesWithColonOrPeriod TestOptionalExact37BreakPaneKeepsItsNamingContract TestOptionalExact37ConnectionCallRefusesRawBreakPane TestOpenControlBindsTheVersionItChecked'

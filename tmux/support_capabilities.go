@@ -74,8 +74,8 @@ var capabilityRegistry = []capabilityRecord{
 	{
 		ID:      "clipboard-query",
 		Name:    "Clipboard query",
-		Summary: "Ask a client for its clipboard; tmux 3.3a exits the server when the client has a terminal.",
-		Since:   "3.4", Handling: handlingRefuse, Error: versionTooLowAPI,
+		Summary: "Ask a client for its clipboard; earlier releases exit the server when the client has a terminal or leaves unanswered.",
+		Since:   "3.6a", Handling: handlingRefuse, Error: versionTooLowAPI,
 		APIs: []string{
 			"tmux.Server.Cmd",
 			"tmux.Connection.Call",
