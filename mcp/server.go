@@ -26,7 +26,7 @@ import (
 // from build metadata; source builds use fallbackVersion.
 var Version = buildVersion()
 
-const fallbackVersion = "v0.0.1-alpha.14"
+const fallbackVersion = "v0.0.1-alpha.15"
 
 // minimumTmuxVersion is the subprocess baseline. Control acquisition has
 // its own, higher feature requirement.
