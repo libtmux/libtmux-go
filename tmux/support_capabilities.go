@@ -220,7 +220,7 @@ var workaroundRegistry = []workaroundRecord{
 	{
 		ID:       "break-pane-misnames-windows",
 		Name:     "break-pane misnames windows",
-		Summary:  "break-pane without a name crashes or misnames the new window; a typed call names it first and repairs the result, a raw one is refused.",
+		Summary:  "break-pane without a name crashes or misnames the new window; a typed call names it first and repairs the result, a raw one is refused. A break-pane nested in if-shell or run-shell -C is not read, so on exact 3.7 name every break-pane or upgrade to 3.7a.",
 		Releases: []string{"3.7"}, FixedIn: "3.7a", Handling: handlingRepair,
 		APIs:     []string{"tmux.Pane.BreakPane", "tmux.BreakPaneRequest.Name", "tmux.Server.Cmd", "tmux.Connection.Call", "tmux.ControlClient.Call"},
 		Commands: []capabilityCommand{{Command: "break-pane"}},
