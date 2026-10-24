@@ -44,9 +44,10 @@ Modules are tagged per directory, so each carries its own version: the core as
   does, so `breakp` and `new` are checked as the commands they name. (#60)
 - Literal `select-layout` on tmux 3.3a refuses an unparseable or empty layout
   and `-o`, which exit the server. (#60)
-- Literal `refresh-client -l` refuses tmux 3.3a, which exits the server when
-  the client has a terminal; the typed `RefreshClient` request already withheld
-  the flag there. (#60)
+- Literal `refresh-client -l` refuses tmux below 3.6a: 3.3a exits the server
+  when the client has a terminal, and 3.4 through 3.6 exit it when that client
+  leaves before its terminal answers. The typed `RefreshClient` request
+  withholds the flag below the same release. (#60, #77)
 - The optional feature gates read their tmux floors from one capability
   registry, and `capabilities.json` at the repository root is emitted from
   it for the docs capability pages. A test fails when the two differ. (#60)
