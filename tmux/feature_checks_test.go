@@ -62,7 +62,11 @@ func TestLiteralCommandGatesResolveNamesLikeTmux(t *testing.T) {
 		{"l joined to the target flag", "3.3a", false, []string{"refresh-client", "-tl"}, false},
 		{"l joined to the client size flag", "3.3a", false, []string{"refresh-client", "-Cl"}, false},
 		{"l after a valued flag's value", "3.3a", false, []string{"refresh-client", "-fl", "-l"}, true},
-		{"refresh-client -l on 3.4", "3.4", false, []string{"refresh-client", "-l", "-t", "/dev/pts/1"}, false},
+		{"refresh-client -l on 3.4", "3.4", false, []string{"refresh-client", "-l", "-t", "/dev/pts/1"}, true},
+		{"refresh-client -l on 3.5a", "3.5a", false, []string{"refresh-client", "-l", "-t", "/dev/pts/1"}, true},
+		{"refresh-client -l on 3.6", "3.6", false, []string{"refresh-client", "-l", "-t", "/dev/pts/1"}, true},
+		{"refresh-client -l on 3.6a", "3.6a", false, []string{"refresh-client", "-l", "-t", "/dev/pts/1"}, false},
+		{"refresh-client -l on 3.8", "3.8", false, []string{"refresh-client", "-l", "-t", "/dev/pts/1"}, false},
 
 		{"break-pane", "3.7", false, []string{"break-pane", "-d", "-s", "%1"}, true},
 		{"breakp", "3.7", false, []string{"breakp", "-d", "-s", "%1"}, true},

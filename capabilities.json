@@ -38,8 +38,8 @@
       "handling": "refuse",
       "id": "clipboard-query",
       "name": "Clipboard query",
-      "since": "3.4",
-      "summary": "Ask a client for its clipboard; tmux 3.3a exits the server when the client has a terminal."
+      "since": "3.6a",
+      "summary": "Ask a client for its clipboard; earlier releases exit the server when the client has a terminal or leaves unanswered."
     },
     {
       "apis": [

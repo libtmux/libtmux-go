@@ -259,7 +259,7 @@ func TestRefreshClientRequestsClipboardOnceItIsSafe(t *testing.T) {
 
 	target := ClientName("/dev/pts/9")
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.4"}}},
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6a"}}},
 		{result: tmuxcmd.Result{}},
 	}}
 	err := serverWithRunner(runner).RefreshClient(
@@ -292,7 +292,7 @@ func TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe(t *testing.T) {
 	target := ClientName("/dev/pts/9")
 	var warnings []Warning
 	runner := &versionQueueRunner{responses: []versionResponse{
-		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.3a"}}},
+		{result: tmuxcmd.Result{Stdout: []string{"tmux 3.6"}}},
 		{result: tmuxcmd.Result{}},
 	}}
 	server := serverWithOptionsAndRunner(ServerOptions{
@@ -323,9 +323,9 @@ func TestRefreshClientWarnsAndOmitsClipboardBeforeItIsSafe(t *testing.T) {
 	if warning.Kind != WarningUnsupportedFeature ||
 		warning.Subcommand != "refresh-client" ||
 		warning.Feature != "request_clipboard" ||
-		warning.CurrentVersion.String() != "3.3a" ||
-		warning.RequiredVersion.String() != "3.4" {
-		t.Fatalf("warning = %#v, want refresh-client clipboard minimum 3.4", warning)
+		warning.CurrentVersion.String() != "3.6" ||
+		warning.RequiredVersion.String() != "3.6a" {
+		t.Fatalf("warning = %#v, want refresh-client clipboard minimum 3.6a", warning)
 	}
 }
 

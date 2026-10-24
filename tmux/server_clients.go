@@ -4,9 +4,10 @@ import "context"
 
 // serverClientsClipboardVersion is where refresh-client -l becomes safe to
 // send. tmux has accepted the flag since before the supported range, but 3.3a
-// ends the server on it for a client with a terminal, so the flag is withheld
-// below this rather than gated on the kind of client a caller happens to
-// target.
+// ends the server on it for a client with a terminal, and 3.4 through 3.6 end
+// it when that client leaves before its terminal answers, so the flag is
+// withheld below this rather than gated on the kind of client a caller happens
+// to target.
 var serverClientsClipboardVersion = capabilitySince("clipboard-query")
 
 // ServerAccessRequest configures tmux server access control. Its zero value is
@@ -33,7 +34,7 @@ type ServerAccessRequest struct {
 type RefreshClientRequest struct {
 	// TargetClient selects a stable client; zero selects tmux's current client.
 	TargetClient ClientName
-	// RequestClipboard requests clipboard data and requires tmux 3.4; older tmux
+	// RequestClipboard requests clipboard data and requires tmux 3.6a; older tmux
 	// versions may exit when given the flag, so it follows UnsupportedPolicy.
 	RequestClipboard bool
 }
@@ -142,7 +143,7 @@ func (s Server) LockServer(ctx context.Context) error {
 }
 
 // RefreshClient redraws a client, or tmux's current client when no target is set.
-// RequestClipboard requires tmux 3.4 and follows [UnsupportedPolicy].
+// RequestClipboard requires tmux 3.6a and follows [UnsupportedPolicy].
 func (s Server) RefreshClient(ctx context.Context, request RefreshClientRequest) error {
 	targetClient, hasTargetClient, err := requestClientTarget(request.TargetClient)
 	if err != nil {
@@ -154,7 +155,8 @@ func (s Server) RefreshClient(ctx context.Context, request RefreshClientRequest)
 		if versionErr != nil {
 			return versionErr
 		}
-		if current.AtLeast(serverClientsClipboardVersion) {
+		// The floor names a patch release, so compare the letter too.
+		if current.meetsMinimum(serverClientsClipboardVersion) {
 			requestClipboard = true
 		} else if err := s.unsupportedFeature(
 			"refresh-client",

@@ -63,10 +63,11 @@ var gatedFlags = []gatedFlag{
 	{"send-keys", "-K", "key_table", "3.4", "", ""},
 	{
 		subcommand: "refresh-client", flag: "-l", feature: "request_clipboard",
-		minimum: "3.4",
+		minimum: "3.6a",
 		reason: "tmux has offered the flag since before the supported range, " +
-			"but 3.2a ends the server on it for any client and 3.3a for a " +
-			"client with a terminal",
+			"but 3.2a ends the server on it for any client, 3.3a for a " +
+			"client with a terminal, and 3.4 through 3.6 when that client " +
+			"leaves before its terminal answers",
 	},
 }
 

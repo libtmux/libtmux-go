@@ -14,9 +14,10 @@ import (
 )
 
 // tmux 3.3a exits the server when refresh-client -l reaches a client that has a
-// terminal. Literal refresh-client with -l is refused there before it is sent,
-// in every spelling tmux resolves to the command and inside a command list, and
-// the attached client and the server survive.
+// terminal, and 3.4 through 3.6 exit it when that client leaves before its
+// terminal answers. Literal refresh-client with -l is refused on those releases
+// before it is sent, in every spelling tmux resolves to the command and inside
+// a command list, and the attached client and the server survive.
 //
 //libtmux:real-tmux
 func TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer(t *testing.T) {
@@ -28,8 +29,10 @@ func TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version.String() != "3.3a" {
-		t.Skipf("refresh-client -l only kills tmux 3.3a, not %s", version)
+	// Written out rather than read from the registry, so moving the floor fails
+	// this test on the releases it leaves exposed.
+	if !slices.Contains([]string{"3.3a", "3.4", "3.5", "3.5a", "3.6"}, version.String()) {
+		t.Skipf("refresh-client -l does not kill tmux %s", version)
 	}
 	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "anchor"}); err != nil {
 		t.Fatal(err)
@@ -142,7 +145,7 @@ func TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer(t *testing
 	}
 	alive("supported forms")
 
-	// The typed request withholds the flag below 3.4 instead of sending it.
+	// The typed request withholds the flag below 3.6a instead of sending it.
 	_ = server.RefreshClient(ctx, tmux.RefreshClientRequest{
 		TargetClient: tmux.ClientName(client), RequestClipboard: true,
 	})

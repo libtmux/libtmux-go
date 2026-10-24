@@ -40,8 +40,9 @@ anything is sent, and only on the releases that need it:
   refused on 3.3a. A preset or a unique prefix of one, a classic layout string,
   and `-n`, `-p` and `-E` are sent.
 - Raw `refresh-client` with `-l`, which asks a client for its clipboard, is
-  refused on 3.3a, where it exits the server for a client that has a terminal.
-  The typed `RefreshClient` request withholds the flag there instead.
+  refused below 3.6a. 3.3a exits the server for a client that has a terminal,
+  and 3.4 through 3.6 exit it when that client leaves before its terminal
+  answers. The typed `RefreshClient` request withholds the flag there instead.
 - Owned control clients, connections and observations need 3.7.
 - `NewPane` needs 3.7 and is refused as a whole below it.
 
