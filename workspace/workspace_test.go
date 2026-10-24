@@ -164,7 +164,7 @@ func TestBuildIntoRequiresAMaterializedSession(t *testing.T) {
 }
 
 //libtmux:real-tmux
-func TestBuildCreatesTheSessionOnItsOwnedConnection(t *testing.T) {
+func TestBuildOwnsTheConnectionAfterItsColdBootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
@@ -178,7 +178,8 @@ func TestBuildCreatesTheSessionOnItsOwnedConnection(t *testing.T) {
 transport=process
 operation=other
 for argument do
-    if [ "$argument" = -C ]; then transport=control; fi
+    if [ "$argument" = run-shell ]; then probe=1; fi
+    if [ "$argument" = -C ] && [ -z "$probe" ]; then transport=control; fi
     if [ "$argument" = new-session ]; then operation=creation; fi
 done
 printf '%s %s\n' "$transport" "$operation" >> "$LIBTMUX_WORKSPACE_INVOCATIONS"
@@ -219,14 +220,18 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	creation := slices.Index(lines, "process creation")
+	if creation < 0 || slices.Index(lines[creation+1:], "process creation") >= 0 {
+		t.Fatalf("tmux invocations = %q, want one detached process creation", lines)
+	}
+	if slices.Contains(lines, "control creation") {
+		t.Fatalf("tmux invocations = %q, want detached creation before attachment", lines)
+	}
 	if version.AtLeast(minimum) {
-		if !slices.Contains(lines, "control creation") {
-			t.Fatalf("tmux invocations = %q, want control-mode session creation", lines)
+		if slices.Index(lines, "control other") <= creation {
+			t.Fatalf("tmux invocations = %q, want control attachment after creation", lines)
 		}
-		if slices.Contains(lines, "process creation") {
-			t.Fatalf("tmux invocations = %q, want no process session creation", lines)
-		}
-	} else if !slices.Contains(lines, "process creation") {
+	} else if slices.Contains(lines, "control other") {
 		t.Fatalf("tmux invocations = %q, want process fallback on tmux %s", lines, version)
 	}
 	if session.Server().ConnectionBound() {
@@ -311,8 +316,20 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 			if err == nil {
 				t.Fatal("Build() error = nil, want destroyed-session lifecycle error")
 			}
-			const prefix = "refresh built session after closing workspace connection: "
-			if !strings.HasPrefix(err.Error(), prefix) {
+			// Below the connection floor Build owns no connection, so the
+			// destroyed session or exited server is met by whichever build
+			// step runs next, not by the refresh after the connection
+			// closes; only the error class is stable there.
+			prefix := "refresh built session after closing workspace connection: "
+			minimum, parseErr := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+			if parseErr != nil {
+				t.Fatal(parseErr)
+			}
+			version, versionErr := server.Version(ctx)
+			if versionErr != nil {
+				t.Fatal(versionErr)
+			}
+			if version.AtLeast(minimum) && !strings.HasPrefix(err.Error(), prefix) {
 				t.Fatalf("Build() error = %q, want prefix %q", err, prefix)
 			}
 			if !errors.Is(err, test.wantErr) {
@@ -360,6 +377,7 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitialSessionRequest() error = %v", err)
 	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	_, connection, err := server.NewSessionConnection(
 		ctx,
 		request,

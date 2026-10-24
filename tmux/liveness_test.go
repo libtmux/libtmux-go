@@ -238,6 +238,9 @@ func TestForegroundShellCommandsReportAServerKilledUnderThem(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			server := tmuxtest.NewServer(ctx, t)
+			if test.name == "run-shell" {
+				tmuxtest.RequireVersion(ctx, t, server, "3.5")
+			}
 			if err := test.run(ctx, server); !errors.Is(err, tmux.ErrNoServer) {
 				t.Fatalf("%s with the server killed under it = %v, want ErrNoServer", test.name, err)
 			}

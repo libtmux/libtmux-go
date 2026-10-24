@@ -16,9 +16,9 @@ var (
 	// cannot be represented safely as tmux arguments.
 	ErrInvalidServerCommandRequest = errors.New("tmux: invalid server command request")
 
-	serverExecVersion34 = Version{raw: "3.4", major: 3, minor: 4}
-	serverExecVersion36 = Version{raw: "3.6", major: 3, minor: 6}
-	serverExecVersion37 = Version{raw: "3.7", major: 3, minor: 7}
+	serverExecVersion34 = capabilitySince("run-shell-start-directory")
+	serverExecVersion36 = capabilitySince("run-shell-show-stderr")
+	serverExecVersion37 = capabilitySince("run-shell-args")
 )
 
 // ServerCommandRequestError reports a locally rejected server command request
@@ -149,9 +149,11 @@ type SourceFileRequest struct {
 }
 
 // RunShell executes a shell command through tmux and returns an owned stdout
-// slice. A background request returns nil after tmux accepts the job. tmux 3.3
-// and 3.4 hand a foreground command's output to no client, so the slice is
-// empty there whatever the command printed.
+// slice. Captured foreground shell jobs require tmux 3.5 before execution;
+// older releases deliver that output to no client. A background request
+// returns nil after tmux accepts the job. TargetPane delivers output to that
+// pane on older supported daemons. AsTmuxCommand uses native tmux command
+// semantics rather than promising captured shell-job output.
 // Unsupported optional flags follow [UnsupportedPolicy]. A completed stderr
 // result is an error; context cancellation can be observed with [errors.Is] but
 // does not establish that tmux did not start the job.
@@ -186,6 +188,14 @@ func (s Server) RunShell(ctx context.Context, request RunShellRequest) ([]string
 		}
 	}
 
+	if !request.Background && !request.AsTmuxCommand && request.TargetPane == "" {
+		s.requiredVersion = capturedShellVersion
+	}
+	checked, err := s.checkCore(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	s = checked
 	extraArguments := request.Args
 	var current Version
 	if request.StartDirectory != nil || request.ShowStderr || len(extraArguments) != 0 {

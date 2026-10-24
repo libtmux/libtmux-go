@@ -75,6 +75,9 @@ func (s Server) runCommand(
 		if absentCleanup && checked.daemon == nil && checked.connection == nil {
 			return tmuxcmd.Result{Command: s.originalCommand(kind, args, false), ExitCode: 0}, nil
 		}
+		if err := checked.checkCommandFeatures(args, commandList, commandList); err != nil {
+			return tmuxcmd.Result{ExitCode: -1}, err
+		}
 		result, err := checked.runCheckedCommand(ctx, kind, args, stdio, commandList)
 		if cached && (errors.Is(err, ErrDaemonReplaced) ||
 			(err == nil && result.ExitCode != 0 && neverReachedServer(result.Stderr))) {
@@ -97,7 +100,7 @@ func (s Server) checkForDispatch(
 				return Server{}, false, err
 			}
 			bound := s.withDaemon(*remembered)
-			if err := requireSupportedVersion(bound.daemon.version); err != nil {
+			if err := s.requireDaemonVersion(bound.daemon.version); err != nil {
 				return Server{}, false, err
 			}
 			return bound, true, nil

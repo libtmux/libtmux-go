@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
 const (
@@ -45,6 +46,7 @@ type ControlMode struct {
 // cleanup with t. It requires an explicitly configured process environment and
 // validates that session belongs to server. The client pins the server's frozen
 // effective socket path. Validation or startup failures call [testing.TB.Fatal].
+// Releases below tmux 3.7 skip this positive fixture before control startup.
 // ctx bounds startup and registration only, not the returned client's lifetime.
 func NewControlMode(
 	ctx context.Context,
@@ -53,6 +55,7 @@ func NewControlMode(
 	session tmux.Session,
 ) *ControlMode {
 	t.Helper()
+	RequireVersion(ctx, t, server, tmux.MinimumConnectionVersion)
 	ctx, cancel := context.WithTimeout(ctx, controlStartTimeout)
 	defer cancel()
 	control, err := startControlMode(ctx, server, session)
@@ -170,17 +173,22 @@ func startControlMode(
 	if err := validateControlTarget(server, session); err != nil {
 		return nil, err
 	}
-	prefix, err := controlCommandPrefix(ctx, server)
+	environment, err := controlProcessEnvironment(server)
 	if err != nil {
 		return nil, err
 	}
-	environment, err := controlProcessEnvironment(server)
+	launch, release, err := pinControlTarget(ctx, server, session)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = release() }()
+	prefix, err := controlCommandPrefix(ctx, launch)
 	if err != nil {
 		return nil, err
 	}
 	arguments := append(
 		slices.Clone(prefix),
-		"-C", "attach-session", "-t", session.ID().String(),
+		"-N", "-C", "attach-session", "-t", session.ID().String(),
 	)
 	command := exec.Command(arguments[0], arguments[1:]...)
 	command.WaitDelay = controlStopGrace
@@ -219,11 +227,54 @@ func startControlMode(
 		close(control.done)
 	}()
 
-	if err := control.waitForRegistration(ctx, server, stderr.String); err != nil {
+	if err := control.waitForRegistration(ctx, session.Server(), stderr.String); err != nil {
 		closeErr := control.Close()
 		return nil, errors.Join(err, closeErr)
 	}
+	if err := release(); err != nil {
+		return nil, errors.Join(err, control.Close())
+	}
 	return control, nil
+}
+
+func pinControlTarget(ctx context.Context, server tmux.Server, session tmux.Session) (tmux.Server, func() error, error) {
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	if err != nil {
+		return tmux.Server{}, nil, err
+	}
+	if err := server.RequireVersion(ctx, minimum); err != nil {
+		return tmux.Server{}, nil, err
+	}
+	const identity = "#{q:pid}|#{q:start_time}|#{q:socket_path}|#{q:version}="
+	expected, err := session.Server().Cmd(ctx, "display-message", "-p", identity)
+	if err != nil {
+		return tmux.Server{}, nil, err
+	}
+	if expected.ExitCode != 0 {
+		return tmux.Server{}, nil, fmt.Errorf("control identity probe exited %d", expected.ExitCode)
+	}
+	alias, release, err := tmuxcmd.PinSocket(server.SocketPath())
+	if err != nil {
+		return tmux.Server{}, nil, err
+	}
+	fail := func(err error) (tmux.Server, func() error, error) {
+		return tmux.Server{}, nil, errors.Join(err, release())
+	}
+	launch, err := server.WithSocketPath(alias)
+	if err != nil {
+		return fail(err)
+	}
+	if err := launch.RequireVersion(ctx, minimum); err != nil {
+		return fail(err)
+	}
+	pinned, err := launch.Cmd(ctx, "display-message", "-p", identity)
+	if err != nil {
+		return fail(err)
+	}
+	if pinned.ExitCode != 0 || string(pinned.RawStdout) != string(expected.RawStdout) {
+		return fail(tmux.ErrDaemonReplaced)
+	}
+	return launch, release, nil
 }
 
 func controlProcessEnvironment(server tmux.Server) ([]string, error) {

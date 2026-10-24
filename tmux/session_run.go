@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+// paneExitDrainPipeVersion is the first release that drains a pane's pending
+// terminal bytes on exit without an open pipe. It is a repair applied
+// internally, not something a caller can request or be refused, so it has no
+// capability record.
+var paneExitDrainPipeVersion = Version{raw: "3.7", major: 3, minor: 7}
+
 // RunOptions configures [Session.Run] and [Session.Start]. Its zero value
 // runs the command in a window tmux names, in the session's default directory
 // and environment, and removes that window once the command has finished.
@@ -197,7 +203,7 @@ func (s Session) Start(
 	// records the attempt's own result so finish stops only the pipe it
 	// opened, never one a caller's own hook installed.
 	var installedPipe bool
-	if piping, _ := pane.Piping(); !piping && !version.AtLeast(captureVersion37) {
+	if piping, _ := pane.Piping(); !piping && !version.AtLeast(paneExitDrainPipeVersion) {
 		installedPipe = pane.Pipe(ctx, PipePaneRequest{Command: new("exec cat")}) == nil
 	}
 	// Channels are server-global, and tmux keeps a signal nobody is waiting

@@ -66,6 +66,9 @@ func TestEmptyCollectionsAnswerTheirSchema(t *testing.T) {
 		}},
 	} {
 		t.Run(empty.tool, func(t *testing.T) {
+			if empty.tool == "wait_for_text" {
+				tmuxtest.RequireVersion(ctx, t, target, tmux.MinimumConnectionVersion)
+			}
 			tool, offered := advertised[empty.tool]
 			if !offered {
 				t.Fatalf("%s is not advertised", empty.tool)

@@ -51,6 +51,7 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 		t.Fatalf("Sessions() = (%d, %v), want one session", len(sessions), err)
 	}
 
+	tmuxtest.RequireVersion(t.Context(), t, sessions[0].Server(), tmux.MinimumConnectionVersion)
 	connection, err := sessions[0].OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)
@@ -214,6 +215,7 @@ func TestTypedTextReachesThePaneAsItself(t *testing.T) {
 	defer cancel()
 
 	pane := tmuxtest.RunInPane(ctx, t, "cat")
+	tmuxtest.RequireVersion(t.Context(), t, pane.Server(), tmux.MinimumConnectionVersion)
 	observation, err := pane.OpenObservation(ctx)
 	if err != nil {
 		t.Fatalf("OpenObservation() error = %v", err)

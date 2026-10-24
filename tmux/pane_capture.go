@@ -17,9 +17,9 @@ var (
 	// represented safely as tmux arguments.
 	ErrInvalidCaptureRequest = errors.New("tmux: invalid capture request")
 
-	captureVersion34 = Version{raw: "3.4", major: 3, minor: 4}
-	captureVersion36 = Version{raw: "3.6", major: 3, minor: 6}
-	captureVersion37 = Version{raw: "3.7", major: 3, minor: 7}
+	captureVersion34 = capabilitySince("capture-trim-blank-cells")
+	captureVersion36 = capabilitySince("capture-mode-screen")
+	captureVersion37 = capabilitySince("capture-line-flags")
 )
 
 // CaptureRequestError reports a [CapturePaneRequest] field that cannot be
@@ -175,8 +175,9 @@ var captureFileSequence atomic.Uint64
 // It is replaced and left for the caller. Concurrent calls must use distinct
 // paths. The scratch tmux buffer is deleted before return when possible.
 //
-// Validation and version gating match [Pane.Capture]. Capture, save, and
-// file-read failures return an error with no lines; buffer cleanup is best effort.
+// Safe named-buffer cleanup requires tmux 3.4 before staging. Other version
+// gates match [Pane.Capture]. Capture, save, and file-read failures return an
+// error with no lines; buffer cleanup is best effort.
 func (p Pane) CaptureToFile(
 	ctx context.Context,
 	path string,
@@ -191,6 +192,7 @@ func (p Pane) CaptureToFile(
 		os.Getpid(),
 		captureFileSequence.Add(1),
 	)
+	p.server.requiredVersion = bufferDeleteNamedVersion
 	if err := p.CaptureToBuffer(ctx, buffer, request); err != nil {
 		return nil, err
 	}

@@ -31,6 +31,7 @@ func TestKeysThatRunACommandDoNotShiftTheReplies(t *testing.T) {
 	}
 	pane := panes[0].ID().String()
 
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	control, err := server.OpenControl(ctx, session)
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)

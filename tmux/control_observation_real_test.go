@@ -32,6 +32,7 @@ func TestPaneObservationKeepsOnlyItsPanesOutput(t *testing.T) {
 	tmuxtest.WaitForShellReady(ctx, t, quiet)
 	tmuxtest.WaitForShellReady(ctx, t, busy)
 
+	tmuxtest.RequireVersion(t.Context(), t, quiet.Server(), tmux.MinimumConnectionVersion)
 	observation, err := quiet.OpenObservation(ctx)
 	if err != nil {
 		t.Fatal(err)

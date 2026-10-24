@@ -244,7 +244,11 @@ type paneRead struct {
 	// after tmux has renumbered the grid underneath it.
 	leadingRows []string
 	lines       []string
-	missed      bool
+	// joined is lines with each wrapped row joined to the row that continues
+	// it, the way capture-pane -J reads them. Only readDelta fills it, for the
+	// polling wait; empty means use lines.
+	joined []string
+	missed bool
 }
 
 // readSince reads either the visible screen or what came after a cursor.
@@ -328,7 +332,7 @@ func readDelta(ctx context.Context, pane tmux.Pane, cursor captureCursor) (paneR
 			return missedRead(ctx, pane, cursor.PanePID)
 		}
 
-		rows, at, found, err := locateAnchor(ctx, pane, cursor, before)
+		rows, base, at, found, err := locateAnchor(ctx, pane, cursor, before)
 		if err != nil {
 			return paneRead{}, err
 		}
@@ -338,6 +342,14 @@ func readDelta(ctx context.Context, pane tmux.Pane, cursor captureCursor) (paneR
 		anchor, leading, err := captureFingerprintRows(ctx, pane, before)
 		if err != nil {
 			return paneRead{}, err
+		}
+		unseen, skipped := unseenRows(rows[at:], cursor)
+		var joined []string
+		if len(unseen) > 0 {
+			joined, err = joinedRowsFrom(ctx, pane, base+at+skipped)
+			if err != nil {
+				return paneRead{}, err
+			}
 		}
 		after, err := readPaneState(ctx, pane)
 		if err != nil {
@@ -356,7 +368,8 @@ func readDelta(ctx context.Context, pane tmux.Pane, cursor captureCursor) (paneR
 			// The blank rows below what the pane has written are the unused
 			// part of the screen rather than output, and they are most of a
 			// quiet pane's reply.
-			lines: trimTrailingBlank(dropSeenRows(rows[at:], cursor)),
+			lines:  trimTrailingBlank(unseen),
+			joined: joined,
 		}, nil
 	}
 	return missedRead(ctx, pane, cursor.PanePID)
@@ -364,12 +377,14 @@ func readDelta(ctx context.Context, pane tmux.Pane, cursor captureCursor) (paneR
 
 // locateAnchor checks its predicted position first. After tmux renumbers
 // trimmed history without reporting the removed count, it searches all retained rows.
+// base is the capture line number of rows[0], where line 0 is the top of the
+// screen and history is negative.
 func locateAnchor(
 	ctx context.Context,
 	pane tmux.Pane,
 	cursor captureCursor,
 	state paneState,
-) (rows []string, at int, found bool, err error) {
+) (rows []string, base, at int, found bool, err error) {
 	if len(cursor.Leading) == 0 {
 		// The pane had written nothing when this cursor was taken, so its
 		// anchor is the oldest row there is and no row above it can identify
@@ -379,20 +394,20 @@ func locateAnchor(
 			Start: tmux.CaptureBoundary,
 		})
 		if err != nil {
-			return nil, 0, false, err
+			return nil, 0, 0, false, err
 		}
 		if state.historySize == 0 {
 			// Nothing has scrolled away, so the first row is still the anchor.
-			return rows, 0, true, nil
+			return rows, 0, 0, true, nil
 		}
 		// Rows have moved into history since, and only an anchor that still
 		// reads the same proves this one was not among those discarded. A blank
 		// row proves nothing: every blank row hashes alike.
 		if len(rows) == 0 || strings.TrimSpace(rows[0]) == "" ||
 			cursor.AnchorHash == "" || lineHash(rows[0]) != cursor.AnchorHash {
-			return nil, 0, false, nil
+			return nil, 0, 0, false, nil
 		}
-		return rows, 0, true, nil
+		return rows, -state.historySize, 0, true, nil
 	}
 
 	lead := len(cursor.Leading)
@@ -401,23 +416,23 @@ func locateAnchor(
 		Start: tmux.CaptureLine(start),
 	})
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, 0, false, err
 	}
 	if len(rows) > lead && matchesFingerprint(rows[:lead], cursor.Leading) {
-		return rows, lead, true, nil
+		return rows, start, lead, true, nil
 	}
 
 	whole, err := captureRawRows(ctx, pane, tmux.CapturePaneRequest{
 		Start: tmux.CaptureBoundary,
 	})
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, 0, false, err
 	}
 	match := uniqueFingerprintMatch(whole, cursor.Leading)
 	if match < 0 {
-		return nil, 0, false, nil
+		return nil, 0, 0, false, nil
 	}
-	return whole, match + lead, true, nil
+	return whole, -state.historySize, match + lead, true, nil
 }
 
 // matchesFingerprint reports whether rows hash to the recorded run.
@@ -565,19 +580,22 @@ func anchorLost(cursor captureCursor, state paneState) bool {
 	return state.historySize < cursor.HistorySize && state.height <= cursor.PaneHeight
 }
 
-// dropSeenRows removes the rows a cursor already reported.
+// unseenRows removes the rows a cursor already reported, and reports how many
+// it skipped before the first row it kept so a caller can read the same rows
+// another way.
 //
 // The anchor row is where the cursor sat, which is a row a program may still
 // have been writing. It is dropped only when it is unchanged: a prompt that
 // has since had a command typed onto it is new text on an old row, and a
 // client that never saw it would be missing the line it most wants.
-func dropSeenRows(rows []string, cursor captureCursor) []string {
+func unseenRows(rows []string, cursor captureCursor) (kept []string, skipped int) {
 	if len(rows) == 0 {
-		return nil
+		return nil, 0
 	}
 	anchorHash := cursor.AnchorHash
-	kept := make([]string, 0, len(rows))
-	if anchorHash == "" || lineHash(rows[0]) != anchorHash {
+	kept = make([]string, 0, len(rows))
+	anchorKept := anchorHash == "" || lineHash(rows[0]) != anchorHash
+	if anchorKept {
 		kept = append(kept, rows[0])
 	}
 	tail := rows[1:]
@@ -588,7 +606,28 @@ func dropSeenRows(rows []string, cursor captureCursor) []string {
 		}
 		drop++
 	}
-	return append(kept, tail[drop:]...)
+	if !anchorKept {
+		skipped = 1 + drop
+	}
+	return append(kept, tail[drop:]...), skipped
+}
+
+// joinedRowsFrom reads the screen from one capture line down to its bottom
+// with wrapped rows joined, so text a program wrote across a wrap is one line
+// again. Trailing blank rows are the unused screen and are dropped, and so are
+// the trailing spaces -J preserves.
+func joinedRowsFrom(ctx context.Context, pane tmux.Pane, line int) ([]string, error) {
+	rows, err := captureRawRows(ctx, pane, tmux.CapturePaneRequest{
+		Start:       tmux.CaptureLine(line),
+		JoinWrapped: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for index, row := range rows {
+		rows[index] = strings.TrimRight(row, " ")
+	}
+	return trimTrailingBlank(rows), nil
 }
 
 // lineHash fingerprints one row. Rows are compared by content because their

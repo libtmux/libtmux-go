@@ -237,7 +237,16 @@ func appendInspectDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogFindPaneByPosition),
 		defineTool(toolDefinition{
 			name: "wait_for_text", title: "Wait for pane text",
-			details: "Waits for new pane output without accepting executable input.",
+			details: "Waits for new pane output without accepting executable input. " +
+				"Follows control output from tmux 3.7 and polls capture-pane below it, " +
+				"joining wrapped lines on both. outcome says why it ended: matched, " +
+				"alreadyOnScreen, stopped, output, idle, timeout, paneDied or streamLost. " +
+				"paneDied means the pane was killed, its program exited under " +
+				"remain-on-exit, its window or session went, or the server stopped; " +
+				"lines holds the output it wrote first. The wait asks tmux once a " +
+				"second whether the pane is dead, and tmux's answer decides. streamLost " +
+				"means the pane is still alive but its output stream ended, so lines " +
+				"may be incomplete: read it again with capture_since.",
 			toolset: toolsetInspect, processReach: processNone,
 			effects: effects(effectObserve), outputClasses: terminal,
 			mayExposeSecrets: true, mayReturnUntrustedContent: true,
@@ -525,7 +534,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogSendKeysBatch),
 		defineTool(toolDefinition{
 			name: "paste_text", title: "Paste text",
-			details: "Pastes literal text only to its target; optional Enter appends one newline to the same private buffer.",
+			details: "Pastes literal text only to its target; optional Enter appends one newline to the same private buffer. Non-empty text requires tmux 3.4 for safe named-buffer cleanup.",
 			toolset: toolsetExecute, processReach: processPaneInput,
 			effects: effects(effectObserve, effectChange), outputClasses: outputs(outputTmuxMetadata),
 			mayReturnUntrustedContent: true,

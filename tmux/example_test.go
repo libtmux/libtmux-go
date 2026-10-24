@@ -1654,13 +1654,7 @@ func ExamplePane_CaptureToFile() {
 		fmt.Println("create session:", err)
 		return
 	}
-	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
-	if err != nil {
-		fmt.Println("open connection:", err)
-		return
-	}
-	defer func() { _ = connection.Close() }()
-	pane, err := connection.Session().ResolveActivePane(ctx)
+	pane, err := session.ResolveActivePane(ctx)
 	if err != nil {
 		fmt.Println("resolve pane:", err)
 		return

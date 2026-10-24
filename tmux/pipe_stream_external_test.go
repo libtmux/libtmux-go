@@ -162,6 +162,7 @@ func TestBufferStreamUnderConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
+	tmuxtest.RequireVersion(ctx, t, session.Server(), tmux.MinimumConnectionVersion)
 	connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
 	if err != nil {
 		t.Fatalf("OpenControl() error = %v", err)

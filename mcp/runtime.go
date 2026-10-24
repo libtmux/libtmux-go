@@ -160,7 +160,7 @@ func (r *tmuxRuntime) acquireCommand(
 		r.mutex.Lock()
 		switch r.state {
 		case runtimeBound:
-			server := r.commandConnection.Server()
+			server := r.commandServerLocked()
 			r.mutex.Unlock()
 			return &runtimeAcquisition{server: server}, nil
 		case runtimeClosed:
@@ -284,7 +284,25 @@ func (r *tmuxRuntime) current() tmux.Server {
 	if r.state == runtimeUnbound {
 		return r.base
 	}
+	if r.state == runtimeBound {
+		return r.original.Server()
+	}
 	return tmux.Server{}
+}
+
+func (r *tmuxRuntime) commandServerLocked() tmux.Server {
+	if r.commandConnection != nil {
+		return r.commandConnection.Server()
+	}
+	return r.original.Server()
+}
+
+func requireRuntimeControl(ctx context.Context, server tmux.Server) error {
+	minimum, err := tmux.ParseVersion(tmux.MinimumConnectionVersion)
+	if err != nil {
+		return err
+	}
+	return server.RequireVersion(ctx, minimum)
 }
 
 // createSession serializes first creation with discovery. The first session
@@ -394,6 +412,21 @@ func (r *tmuxRuntime) bootstrap(
 ) (tmux.Session, error) {
 	operationCtx, cancel := r.operationContext(ctx)
 	defer cancel()
+	if err := requireRuntimeControl(operationCtx, r.base); err != nil {
+		if !errors.Is(err, tmux.ErrVersionTooLow) {
+			r.failBinding(tmux.Session{}, nil, err, true)
+			return tmux.Session{}, err
+		}
+		created, err := r.base.NewSession(operationCtx, request)
+		if err != nil {
+			r.failBinding(created, nil, err, true)
+			return created, err
+		}
+		if err := r.finishBinding(created, nil); err != nil {
+			return created, err
+		}
+		return created, nil
+	}
 	original, commandConnection, err := r.deps.newSessionConnection(
 		operationCtx, r.base, request,
 	)
@@ -416,6 +449,21 @@ func (r *tmuxRuntime) bind(
 	defer cancel()
 	var err error
 	if commandConnection == nil {
+		if err := requireRuntimeControl(operationCtx, original.Server()); err != nil {
+			if !errors.Is(err, tmux.ErrVersionTooLow) {
+				reset := r.failBinding(original, nil, err, false)
+				return tmux.Server{}, reset, err
+			}
+			refreshed, err := original.Refresh(operationCtx)
+			if err != nil {
+				reset := r.failBinding(original, nil, err, false)
+				return tmux.Server{}, reset, err
+			}
+			if err := r.finishBinding(refreshed, nil); err != nil {
+				return tmux.Server{}, false, err
+			}
+			return refreshed.Server(), false, nil
+		}
 		commandConnection, err = original.OpenControl(operationCtx, tmux.ConnectionOptions{})
 		if err != nil {
 			reset := r.failBinding(original, nil, err, false)

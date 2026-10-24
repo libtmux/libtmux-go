@@ -11,8 +11,7 @@ import (
 
 // NotificationStream owns one observation-only control client attached to a
 // session. It yields tmux notifications in wire order and must be closed.
-// Before tmux 3.6, destroying the attached session follows that session's
-// detach-on-destroy policy and may end the stream.
+// Acquisition requires tmux 3.7 before any control client is started.
 //
 // A stream ends in one of three ways, and none can be resumed. A stream is one
 // tmux client, so a new one is a new client: it starts at tmux's present, with

@@ -854,9 +854,9 @@ func (w controlRejectWriteCloser) Write([]byte) (int, error) {
 
 func (controlRejectWriteCloser) Close() error { return nil }
 
-// A control client for a known daemon must not start a tmux server of its
-// own on that socket, so its process gets -N first: before the socket flags
-// and before -C. A selector with no daemon yet may start one, so it gets none.
+// A control client starts only against a known daemon, so its process gets -N
+// first: before the socket flags and before -C, and never starting a tmux
+// server of its own on that socket.
 func TestControlProcessForAKnownDaemonStartsNoServer(t *testing.T) {
 	t.Parallel()
 
@@ -865,7 +865,6 @@ func TestControlProcessForAKnownDaemonStartsNoServer(t *testing.T) {
 		knownDaemon bool
 	}{
 		{name: "known daemon", knownDaemon: true},
-		{name: "no daemon yet"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

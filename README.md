@@ -47,6 +47,36 @@ To fix it, upgrade tmux and restart its server, or pin the previous release.
 [The contract][contract-version] covers unrecognized versions and the calls
 that skip the check.
 
+Optional features have their own requirements:
+
+| Operation | Required tmux |
+| --- | --- |
+| Ordinary subprocess operations, polling, workspace builds, MCP startup | 3.3a |
+| Named buffer deletion or rename; `CaptureToFile`; MCP `paste_text` staging | 3.4 |
+| Foreground `RunShell` captured client output without `TargetPane` | 3.5 |
+| Owned control clients, connections, notifications, pane observations | 3.7 |
+| Native raw `break-pane` and unnamed typed `BreakPane` on exact 3.7 | 3.7a |
+| Window and session names holding `:` or `.` on exact 3.7 | 3.7a |
+| Native raw `select-layout` with an unparseable layout, or `-o`, on 3.3a | 3.4 |
+
+On exact 3.7, typed `BreakPane` with an explicit name retains its naming repair.
+The restriction does not affect older supported versions. Raw percentage
+`split-window -p` is refused only on tmux 3.4, where its percentage behavior
+is defective; typed percentage requests retain their `-l N%` repair. Direct named
+`paste-buffer -d -b` retains tmux's exact lookup semantics on 3.3a. Raw `Cmd`
+returns native client output and does not promise capture of nested shell-job
+stdout. Background, pane-targeted, and `AsTmuxCommand` requests retain their
+native semantics and individual flag requirements.
+
+These checks cover library operations, plans, staging, and literal argv command
+items in flat batches, whether sent through `Server.Cmd`, `Connection.Call` or
+`ControlClient.Call`. tmux command strings nested inside another command, such
+as `if-shell` bodies, `run-shell -C` and brace blocks, are not checked, so do
+not nest a command this library would refuse. Shell programs and configured
+alias contents retain native semantics. Control startup pins the qualified Unix
+socket in a private directory before `-C`; it fails if the filesystem cannot
+hard-link that socket. The carrier is removed once the client is registered.
+
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
 

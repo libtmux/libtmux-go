@@ -53,9 +53,9 @@ type JoinPaneRequest struct {
 }
 
 // BreakPaneRequest configures break-pane on tmux 3.3a or later. Its zero value
-// moves the receiver to a detached new window with tmux's default name, except
-// for the documented raw-version 3.7 workaround in [Pane.BreakPane]. Empty
-// Name means omission and is validated before the version probe.
+// moves the receiver to a detached new window with tmux's default name.
+// Exact tmux 3.7 requires an explicit Name for the repair in [Pane.BreakPane].
+// Name is validated before the version probe.
 type BreakPaneRequest struct {
 	// Attach lets the new winlink become current in the receiver session.
 	Attach bool
@@ -109,9 +109,9 @@ func (p Pane) Join(ctx context.Context, request JoinPaneRequest) (Pane, error) {
 // receiver SessionID rather than by canonical ID-only refresh.
 //
 // Before tmux 3.6, the sole-pane path may print no ID and retain WindowID; this
-// method refreshes that identity. Raw version "3.7" alone uses a placeholder
-// name and optional second rename; with an empty Name, the window may remain
-// named "libtmux". Suffixed 3.7 releases do not use the workaround.
+// method refreshes that identity. Exact 3.7 requires an explicit name before
+// mutation, supplies it to prevent the native crash, then renames the result to
+// repair the multi-pane naming defect. Suffixed 3.7 releases use native naming.
 //
 // After a reported ID, rename failure, or refresh failure, the partial result
 // carries the known WindowID and receiver session with Index -1. Earlier
@@ -128,15 +128,16 @@ func (p Pane) BreakPane(ctx context.Context, request BreakPaneRequest) (Window, 
 	if err != nil {
 		return Window{}, err
 	}
-	isBroken37 := version.String() == "3.7"
+	isBroken37 := workaroundApplies("break-pane-misnames-windows", version)
+	if isBroken37 && request.Name == "" {
+		return Window{}, &VersionTooLowError{Current: version, Minimum: breakPaneFixedVersion, Subcommand: "break-pane", Feature: "automatic_window_name"}
+	}
 	arguments := []string{"break-pane", "-P", "-F#{window_id}"}
 	if !request.Attach {
 		arguments = append(arguments, "-d")
 	}
 	if request.Name != "" {
 		arguments = append(arguments, "-n", request.Name)
-	} else if isBroken37 {
-		arguments = append(arguments, "-n", "libtmux")
 	}
 	arguments = append(arguments, "-s", source, "-t", p.sessionID.String()+":")
 	result, err := p.server.literalCmd(ctx, arguments...)

@@ -109,7 +109,12 @@ func TestUnsupportedFeaturesAreRefusedByDefault(t *testing.T) {
 			runner := &versionQueueRunner{responses: []versionResponse{
 				{result: tmuxcmd.Result{Stdout: []string{"tmux " + test.version}}},
 			}}
-			err := test.operate(serverWithRunner(runner))
+			server := serverWithRunner(runner)
+			wantCalls := 1
+			if test.name == "run-shell args" {
+				server = versionedServerWithRunner(runner)
+			}
+			err := test.operate(server)
 
 			var tooLow *VersionTooLowError
 			if !errors.As(err, &tooLow) {
@@ -126,8 +131,8 @@ func TestUnsupportedFeaturesAreRefusedByDefault(t *testing.T) {
 			}
 			// The refusal happens before tmux is asked to do anything, so the
 			// version probe is all that ran.
-			if calls := runner.callCount(); calls != 1 {
-				t.Fatalf("runner calls = %d, want only the version probe", calls)
+			if calls := runner.callCount(); calls != wantCalls {
+				t.Fatalf("runner calls = %d, want %d version probes", calls, wantCalls)
 			}
 		})
 	}

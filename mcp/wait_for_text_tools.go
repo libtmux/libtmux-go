@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -76,6 +77,16 @@ const (
 	outcomeIdle = "idle"
 	// outcomeTimeout means the deadline arrived first.
 	outcomeTimeout = "timeout"
+	// outcomePaneDied means the pane stopped existing before anything ended the
+	// wait: it was killed or its window or session went, or the server
+	// stopped. The thing waited for is not going to happen on this pane. Lines
+	// holds the output it wrote first.
+	outcomePaneDied = "paneDied"
+	// outcomeStreamLost means the wait could no longer see the pane's output
+	// although the pane is still alive. Lines holds what was read, and output
+	// written after the last of it may be missing: read the pane again, from a
+	// cursor, instead of treating the pane as finished.
+	outcomeStreamLost = "streamLost"
 )
 
 // waitForTextOutput reports how the wait ended.
@@ -83,7 +94,7 @@ type waitForTextOutput struct {
 	// PaneID is the pane that was watched.
 	PaneID string `json:"paneId"`
 	// Outcome is why the wait ended: matched, alreadyOnScreen, stopped,
-	// output, idle, or timeout.
+	// output, idle, timeout, paneDied, or streamLost.
 	Outcome string `json:"outcome"`
 	// Found reports whether one of Patterns appeared, which is the common
 	// question and would otherwise mean comparing Outcome against two values.
@@ -108,6 +119,9 @@ type waitForTextOutput struct {
 	// reason it out from two other fields: sinceEntry ignored what was already
 	// there, and the same call without it would have returned at once.
 	EntryNote string `json:"entryNote,omitempty"`
+	// EndNote says what paneDied and streamLost mean for the next step, since
+	// they are the two endings a client is most likely to treat alike.
+	EndNote string `json:"endNote,omitempty"`
 	// Lines are what the pane wrote while waiting, or what it already showed
 	// when the match was there on entry.
 	Lines []string `json:"lines,omitempty"`
@@ -124,10 +138,17 @@ type waitForTextOutput struct {
 	truncation
 }
 
-// waitForText follows pane output without polling. Text already on the screen
-// answers outcomeAlreadyOnScreen rather than a match, unless SinceEntry skips
-// the entry read; an authored command should use run_shell_command, which
-// reports its exit status.
+// waitForText follows pane output from tmux 3.7 control and polls below it.
+// Both paths end the same way when the pane goes: paneDied, with the output it
+// wrote first, for a pane that was killed, whose window or session went, or
+// whose server stopped, or whose program exited under remain-on-exit, and
+// streamLost for a pane that is still alive but can no longer be followed.
+// Tmux's answer decides which: a hook-free query, asked when a read fails and
+// once a second for the whole wait, because a pane that stays in its window
+// after its program exits raises no error to react to.
+// Text already on the screen answers outcomeAlreadyOnScreen rather than a
+// match, unless SinceEntry skips the entry read; an authored command should use
+// run_shell_command, which reports its exit status.
 func (t *tools) waitForText(
 	ctx context.Context,
 	request *mcp.CallToolRequest,
@@ -179,6 +200,21 @@ func (t *tools) waitForText(
 		}
 		return nil, output, err
 	}
+	// finishEnded answers an error from reading the pane: the wait's own
+	// deadline is a timeout, a pane that no longer exists is paneDied, and
+	// anything else stays the error it was.
+	var processPane tmux.Pane
+	finishEnded := func(err error) (*mcp.CallToolResult, waitForTextOutput, error) {
+		if isOwnWaitDeadline(ctx, waitCtx, err) {
+			return finishTimeout(err)
+		}
+		if ended, probeErr := probePane(waitCtx, processPane); probeErr == nil && ended == paneEnded {
+			return finishWait(
+				&output, outcomePaneDied, "", false, false, nil, limits, truncation{}, started,
+			)
+		}
+		return finishTimeout(err)
+	}
 	reporter := newProgressReporter(waitCtx, request, timeout, "watching the pane")
 	defer reporter.stop()
 
@@ -197,17 +233,33 @@ func (t *tools) waitForText(
 			"the cursor belongs to pane %s, not %s", cursor.PaneID, pane.ID())
 	}
 	output.PaneID = pane.ID().String()
-	processPane, err := process.Pane(waitCtx, pane.ID())
+	processPane, err = process.Pane(waitCtx, pane.ID())
 	if err != nil {
 		return finishTimeout(err)
 	}
 
-	observation, err := t.runtime.openObservation(waitCtx, processPane)
+	// Below tmux 3.7 no control observation exists, so the wait polls with
+	// capture-pane. That is chosen before any control client is attempted.
+	var observation paneTextSource
+	var entry []string
+	polling, err := controlObservationUnavailable(waitCtx, processPane)
 	if err != nil {
 		return finishTimeout(err)
 	}
-	defer t.runtime.releaseObservation(observation)
-	entry := observation.Baseline()
+	if polling {
+		polled, err := openPollingObservation(waitCtx, processPane)
+		if err != nil {
+			return finishEnded(err)
+		}
+		observation, entry = polled, polled.Baseline()
+	} else {
+		controlled, err := t.runtime.openObservation(waitCtx, processPane)
+		if err != nil {
+			return finishEnded(err)
+		}
+		defer t.runtime.releaseObservation(controlled)
+		observation, entry = controlled, controlled.Baseline()
+	}
 	// The server knows every key it sent this pane; a match confined to that
 	// unsubmitted line is not a match, however new the bytes look. Every read
 	// of it is fresh. It has to be for the cursor branch below, which reads
@@ -269,12 +321,27 @@ func (t *tools) waitForText(
 		}
 	}
 	idle := time.Duration(input.IdleSeconds) * time.Second
-	watched := watchPane(waitCtx, observation, patterns, stops, pendingNow, idle)
+	// A pane whose program exited stays readable under remain-on-exit, so no
+	// read fails and nothing else ends the wait. Asking tmux now and then is
+	// the only signal there is.
+	watchCtx, watchStop := context.WithCancelCause(waitCtx)
+	defer watchStop(nil)
+	go watchForExitedPane(watchCtx, processPane, watchStop)
+	watched := watchPane(watchCtx, observation, patterns, stops, pendingNow, idle)
+	if watched.err != nil && errors.Is(context.Cause(watchCtx), errPaneExited) && waitCtx.Err() == nil {
+		watched.err, watched.outcome = nil, outcomePaneDied
+	}
 	if watched.err != nil {
-		if !isOwnWaitDeadline(ctx, waitCtx, watched.err) {
-			return nil, output, watched.err
+		switch {
+		case isOwnWaitDeadline(ctx, waitCtx, watched.err):
+			watched.outcome = outcomeTimeout
+		default:
+			ended, ok := t.classifyEnd(waitCtx, processPane, polling, watched.err)
+			if !ok {
+				return nil, output, watched.err
+			}
+			watched.outcome = ended
 		}
-		watched.outcome = outcomeTimeout
 	}
 	if watched.outcome == outcomeTimeout {
 		logToClient(ctx, request, "warning", map[string]any{
@@ -296,6 +363,30 @@ func (t *tools) waitForText(
 		watched.truncation,
 		started,
 	)
+}
+
+// classifyEnd decides what a failed read of the pane means. It asks tmux, once,
+// whether the pane is alive. A pane that is gone died, on either path. A live
+// pane is a lost stream only on the control path, where the failure is the
+// observation's; a polling read that failed on a live pane is an error of its
+// own, and not a verdict on the pane.
+func (t *tools) classifyEnd(
+	ctx context.Context,
+	pane tmux.Pane,
+	polling bool,
+	err error,
+) (string, bool) {
+	liveness, probeErr := probePane(ctx, pane)
+	if probeErr != nil {
+		return "", false
+	}
+	switch {
+	case liveness == paneEnded:
+		return outcomePaneDied, true
+	case !polling && errors.Is(err, tmux.ErrPaneObservationLost):
+		return outcomeStreamLost, true
+	}
+	return "", false
 }
 
 type paneWatchResult struct {
@@ -384,6 +475,32 @@ func watchPane(
 	return result
 }
 
+// errPaneExited ends a wait whose pane is still in its window but no longer
+// runs anything.
+var errPaneExited = errors.New("pane program exited")
+
+// paneExitedPollInterval is how often a wait asks whether its pane's program
+// exited.
+const paneExitedPollInterval = time.Second
+
+// watchForExitedPane stops the wait once the pane's program has exited. It
+// returns when ctx ends.
+func watchForExitedPane(ctx context.Context, pane tmux.Pane, stop context.CancelCauseFunc) {
+	ticker := time.NewTicker(paneExitedPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if liveness, err := probePane(ctx, pane); err == nil && liveness == paneEnded {
+				stop(errPaneExited)
+				return
+			}
+		}
+	}
+}
+
 // errPaneQuiet ends a wait whose pane wrote nothing for its idle window.
 var errPaneQuiet = errors.New("pane went quiet")
 
@@ -420,6 +537,15 @@ func finishWait(
 	case atEntry && outcome == outcomeAlreadyOnScreen && !pendingOnly:
 		output.EntryNote = "this text was already real output on the pane " +
 			"before this wait attached, not something the wait saw happen."
+	}
+	switch outcome {
+	case outcomePaneDied:
+		output.EndNote = "the pane no longer exists, its program exited, or its server stopped, so " +
+			"the text cannot appear on it. lines is the output it wrote first."
+	case outcomeStreamLost:
+		output.EndNote = "the pane is still alive but its output stream " +
+			"ended, so output after the last line here may be missing. Read " +
+			"the pane with capture_since, or wait again."
 	}
 	output.Lines = kept
 	output.truncation = addTruncation(report, earlier)

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	tmuxmcp "github.com/libtmux/libtmux-go/mcp"
+	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
 // TestAgentWorkflowPrintsItsPublishedOutput runs the program against a real
@@ -20,6 +22,13 @@ import (
 // It takes about a second: the program starts work that sleeps for one, so
 // that there is something to inspect while it runs.
 func TestAgentWorkflowPrintsItsPublishedOutput(t *testing.T) {
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: filepath.Join(t.TempDir(), "s"), ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	// The program drives whatever tmux it is pointed at, with that tmux's own
 	// configuration and shell. A home with neither, and a plain shell, is the
 	// server its page describes.

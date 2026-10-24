@@ -131,6 +131,29 @@ agent no way to change its mind in the middle of a call.
 The ceiling is
 [`LIBTMUX_MCP_WAIT_MAX_SECONDS`][mcp-waitceilingenvironmentvariable].
 
+### How a wait ends
+
+`wait_for_text` follows control output from tmux 3.7 and polls `capture-pane`
+below it. Both read wrapped lines as one line, so a pattern the terminal split
+across a wrap still matches. The reply's `outcome` is one of `matched`,
+`alreadyOnScreen`, `stopped`, `output`, `idle`, `timeout`, `paneDied` or
+`streamLost`.
+
+- `paneDied` means the pane was killed, its program exited under
+  `remain-on-exit`, its window or session went, or the server stopped. `lines`
+  holds the output the wait saw before the end. The text will not appear on
+  that pane. tmux clears a `remain-on-exit` pane when it dies and can lose what
+  the program wrote just before it exited, so the last write may be missing.
+- `streamLost` means the wait could no longer see the output of a pane that is
+  still alive, which only the control path can lose. `lines` may be incomplete,
+  so read the pane again with `capture_since` or wait again.
+
+The server decides between the two by asking tmux, with `run-shell -C`, which
+runs no owner hook. It asks when a read of the pane fails, and a pane that stays
+in its window after its program exits raises no failure, so the wait also asks
+once a second whether the pane is dead. The question is scheduled by a ticker;
+tmux's answer decides.
+
 ## Input and synchronized panes
 
 **Input goes where tmux sends it.** With `synchronize-panes` on, tmux types
@@ -191,6 +214,13 @@ user's authority.
 
 ## Known limits
 
+- **Some tools require a newer tmux.** Startup and ordinary tools support
+  3.3a, including `capture_since` and `run_shell_command`. Non-empty
+  `paste_text` requires 3.4 before staging any buffer; `wait_for_text` polls
+  with `capture-pane` below 3.7 and follows control output from 3.7. Restricted
+  tools return an explicit version error on older supported daemons. The
+  runtime uses subprocess commands below 3.7 and a retained control connection
+  from 3.7.
 - **Every tool is annotated as destructive.** Each one,
   [`list_sessions`][list_sessions] included, carries `destructiveHint=true` and
   `openWorldHint=true`, and none carries `readOnlyHint`. A client that skips
@@ -211,10 +241,6 @@ user's authority.
 - **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
   `TMUX_PANE` is set to nothing, because the server then cannot tell whether
   it is in a pane. Unset them instead.
-- **Before tmux 3.6, killing one session can end the server.** The server
-  holds a connection attached to the first session it reached, and that
-  session's `detach-on-destroy` option decides what happens when it goes.
-  tmux 3.6 and later move the connection to a session that remains.
 - **Nothing but tools.** There is one resource, and no prompts, resource
   templates, completions, or background job handles.
 

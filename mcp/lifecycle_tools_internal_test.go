@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -26,6 +28,9 @@ func TestKillSessionAddressesADottedName(t *testing.T) {
 	target := tmuxtest.NewServer(ctx, t)
 
 	result, err := target.Cmd(ctx, "new-session", "-d", "-s", "victim.name")
+	if errors.Is(err, tmux.ErrVersionTooLow) {
+		t.Skipf("the library refuses a dotted session name here: %v", err)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
