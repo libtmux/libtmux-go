@@ -311,8 +311,10 @@ the filters that run in Go and the helpers that apply them.
 
 ### [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor]: wait for what a command prints
 
-Needs tmux 3.7; below it, poll [`Pane.Capture`][tmux-pane-capture] with
-[`tmux.Poll`][tmux-poll].
+Needs tmux 3.7. Below it the core library has no pane-text wait (tracked in
+[#80](https://github.com/libtmux/libtmux-go/issues/80)). [`tmux.Poll`][tmux-poll]
+re-reads [`Pane.Capture`][tmux-pane-capture] but is not made for pane text,
+since a re-read can match the shell's echo of the typed line.
 
 A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
 newline is the Enter key. Open an observation with
