@@ -599,8 +599,9 @@ It serves one tmux server over stdin and stdout. Reference:
 
 - **Go 1.26+ and tmux 3.3a or newer.** The server refuses an older tmux before
   the MCP transport starts. CI runs tmux 3.3a through 3.8.
-- **Linux, including WSL, and macOS.** On macOS, CI runs this module's tests
-  against Homebrew's current tmux. The matrix runs on Linux.
+- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
+  across tmux 3.3a through 3.8. macOS is supported on a best-effort basis, and
+  CI coverage for it is highly limited.
 - **A module of its own.** `go get` on the tmux library never pulls in the MCP
   SDK.
 - **Tagged as `mcp/vN`.** Pin an exact version in your own `go.mod`; the

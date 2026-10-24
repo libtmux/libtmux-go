@@ -29,7 +29,7 @@ socket holding two panes:
 
 Six of the seven call a tool for real. The seventh connects.
 
-- **claude** — `status: connected`, 58 tools, a model-driven `list_panes` then
+- **claude** — `status: connected`, the full tool list, a model-driven `list_panes` then
   `set_pane_title`; the socket showed the title afterwards.
 - **cursor** — returned the pane ids from a real tool call.
 - **codex** — `mcp: tmux/list_panes (completed)`, then the ids.

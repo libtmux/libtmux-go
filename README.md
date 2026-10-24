@@ -54,10 +54,17 @@ Optional features have their own requirements:
 | Ordinary subprocess operations, polling, workspace builds, MCP startup | 3.3a |
 | Named buffer deletion or rename; `CaptureToFile`; MCP `paste_text` staging | 3.4 |
 | Foreground `RunShell` captured client output without `TargetPane` | 3.5 |
+| Native raw `refresh-client -l`, the clipboard query | 3.6a |
 | Owned control clients, connections, notifications, pane observations | 3.7 |
+| Floating panes through `Window.NewPane` and `Pane.NewPane` | 3.7 |
 | Native raw `break-pane` and unnamed typed `BreakPane` on exact 3.7 | 3.7a |
 | Window and session names holding `:` or `.` on exact 3.7 | 3.7a |
 | Native raw `select-layout` with an unparseable layout, or `-o`, on 3.3a | 3.4 |
+| `Window.SelectLayout` with a layout in the JSON shape of `window_layout` | 3.8-rc2 |
+
+[`capabilities.json`](capabilities.json) is the full list: each entry names the
+releases affected, the commands and APIs it covers, and whether the library
+refuses or repairs the call. This table follows it.
 
 On exact 3.7, typed `BreakPane` with an explicit name retains its naming repair.
 The restriction does not affect older supported versions. Raw percentage
@@ -72,7 +79,19 @@ These checks cover library operations, plans, staging, and literal argv command
 items in flat batches, whether sent through `Server.Cmd`, `Connection.Call` or
 `ControlClient.Call`. tmux command strings nested inside another command, such
 as `if-shell` bodies, `run-shell -C` and brace blocks, are not checked, so do
-not nest a command this library would refuse. Shell programs and configured
+not nest a command this library would refuse. The commands at stake, and what
+tmux does with each:
+
+- `break-pane` without `-n` exits the server on exact 3.7; 3.7a survives. On
+  exact 3.7, name every `break-pane`, nested or not, or upgrade to 3.7a.
+- `select-layout` with an invalid layout string exits the server on 3.3 and
+  3.3a. 3.4 answers "invalid layout".
+- `refresh-client -l` exits the server below 3.6a when an attached client's
+  terminal does not answer.
+- `delete-buffer -b NAME` and `set-buffer -b NAME -n` on a name that does not
+  exist act on the newest buffer instead, silently, below 3.4.
+- `split-window -p` on 3.4, and `:` or `.` in session and window names on exact
+  3.7, make tmux answer with an error and change nothing. Shell programs and configured
 alias contents retain native semantics. Control startup pins the qualified Unix
 socket in a private directory before `-C`; it fails if the filesystem cannot
 hard-link that socket. The carrier is removed once the client is registered.
@@ -286,6 +305,9 @@ the filters that run in Go and the helpers that apply them.
 ## Type into a pane and wait
 
 ### [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor]: wait for what a command prints
+
+Needs tmux 3.7; below it, poll [`Pane.Capture`][tmux-pane-capture] with
+[`tmux.Poll`][tmux-poll].
 
 A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
 newline is the Enter key. Open an observation with
@@ -841,6 +863,7 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
 [tmux-paneobservation]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation/
 [tmux-plan-run]: https://libtmux.org/en/go/latest/reference/tmux-plan-run/
+[tmux-poll]: https://libtmux.org/en/go/latest/reference/tmux-poll/
 [tmux-server-loadbufferfrom]: https://libtmux.org/en/go/latest/reference/tmux-server-loadbufferfrom/
 [tmux-server-panes]: https://libtmux.org/en/go/latest/reference/tmux-server-panes/
 [tmux-server-searchsessions]: https://libtmux.org/en/go/latest/reference/tmux-server-searchsessions/

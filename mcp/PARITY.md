@@ -265,7 +265,7 @@ agent testing skill under `.agents/skills/testing-the-mcp-server/`; it defines
 isolated sockets, raw-wire checks, real-client preflights, and which failure
 belongs to the server versus a client adapter.
 
-Go's focused manifest tests enumerate the 45 tools, all 16 toolset subsets,
+Go's focused manifest tests enumerate every tool, every toolset subset,
 named include/exclude precedence, zero-authority batch behavior, schema-to-sink
 equality, wire metadata/resource parity, response caps, and authenticated
 startup ownership. Live tests prove a losing launch cannot claim teardown and

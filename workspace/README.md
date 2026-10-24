@@ -503,8 +503,9 @@ The program above, with a page of its own, ready to run from a clone.
 
 - **Go 1.26+ and tmux 3.3a or newer.** CI runs tmux 3.3a through 3.8 against
   this module.
-- **Linux, including WSL, and macOS.** On macOS, CI runs this module's tests
-  against Homebrew's current tmux. On Windows, CI vets the module, and tmux
+- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
+  across the tmux matrix. macOS is supported on a best-effort basis, and CI
+  coverage for it is highly limited. On Windows, CI vets the module, and tmux
   does not run there.
 - **A module of its own.** `go get` on the tmux library never pulls in its YAML
   parser.

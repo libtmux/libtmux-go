@@ -239,7 +239,9 @@ func appendInspectDefinitions(definitions []toolDefinition) []toolDefinition {
 			name: "wait_for_text", title: "Wait for pane text",
 			details: "Waits for new pane output without accepting executable input. " +
 				"Follows control output from tmux 3.7 and polls capture-pane below it, " +
-				"joining wrapped lines on both. outcome says why it ended: matched, " +
+				"joining wrapped lines on both. Below 3.7, rows that scroll past between " +
+				"two reads, or out of the pane's history, can be missed without a flag; " +
+				"capture_since reports linesMissed. outcome says why it ended: matched, " +
 				"alreadyOnScreen, stopped, output, idle, timeout, paneDied or streamLost. " +
 				"paneDied means the pane was killed, its program exited under " +
 				"remain-on-exit, its window or session went, or the server stopped; " +

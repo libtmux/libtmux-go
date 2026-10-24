@@ -553,8 +553,9 @@ $ libtmux-mcp -doctor
 - **Go 1.26+ and tmux 3.3a or newer.** An older tmux gets
   [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] and nothing is sent. CI runs
   tmux 3.3a through 3.8, and [the contract][contract-version] has the details.
-- **Linux, including WSL, and macOS.** On macOS, CI runs this module's tests
-  against Homebrew's current tmux.
+- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
+  across tmux 3.3a through 3.8. macOS is supported on a best-effort
+  basis, and CI coverage for it is highly limited.
 - **Alpha.** Any release may change exported identifiers. Pin an exact version.
 
 ## See also
