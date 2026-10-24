@@ -269,8 +269,9 @@ a suite a temporary directory of its own and points the test process's
 
 - **Go 1.26+ and tmux 3.3a or newer.** CI runs this package's tests on tmux
   3.3a through 3.8.
-- **Linux, including WSL, and macOS.** On macOS, CI runs the package's tests
-  against Homebrew's current tmux.
+- **Linux, including WSL, and macOS.** CI runs the package's tests on Linux
+  across the tmux matrix. macOS is supported on a best-effort basis, and CI
+  coverage for it is highly limited.
 - **Part of the tmux module.** It adds no dependency outside the standard
   library and the tmux package.
 - **Alpha.** Any release may change exported identifiers. Pin an exact version.

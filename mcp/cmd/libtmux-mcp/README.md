@@ -178,7 +178,8 @@ one.
   daemon, restart that socket's server from a newer tmux, or point
   [`LIBTMUX_TMUX_BIN`][mcp-binaryenvironmentvariable] at one.
 - **Linux, including WSL, and macOS.** CI runs the module's tests on Linux
-  across the tmux matrix, and on macOS against Homebrew's current tmux.
+  across the tmux matrix. macOS is supported on a best-effort basis, and CI
+  coverage for it is highly limited.
 - **Alpha.** Releases carry an -alpha prerelease tag. Pin an exact version.
 
 ## See also

@@ -340,7 +340,8 @@ That also keeps this package from creating an import cycle with the library.
 - **Go 1.26+.** The package needs no tmux. The examples that read a server
   need tmux 3.3a or newer.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  across tmux 3.3a through 3.8, and on macOS against Homebrew's current tmux.
+  across tmux 3.3a through 3.8. macOS is supported on a best-effort basis, and
+  CI coverage for it is highly limited.
 - **Alpha.** Any release may change exported identifiers. Pin an exact version.
 
 ## See also
