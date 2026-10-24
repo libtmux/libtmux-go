@@ -755,8 +755,9 @@ func TestCommandErrorClassifiesAMissingTarget(t *testing.T) {
 // TestNestedBreakPaneIsNotReadByTheGuard pins a documented limit: the guard
 // reads argv, not the command text inside an if-shell body. On exact 3.7 a
 // nameless break-pane exits the server, so a nested one reaches tmux
-// unchanged. The controls show the direct form is still refused and the
-// named nested form passes.
+// unchanged. The controls show the direct form is refused with or without a
+// name, so the advice to name it applies to nested and key-bound text only,
+// and the named nested form passes.
 func TestNestedBreakPaneIsNotReadByTheGuard(t *testing.T) {
 	t.Parallel()
 
@@ -785,20 +786,28 @@ func TestNestedBreakPaneIsNotReadByTheGuard(t *testing.T) {
 		})
 	}
 
-	t.Run("direct without a name is refused", func(t *testing.T) {
-		t.Parallel()
-		runner := &versionQueueRunner{responses: []versionResponse{
-			{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}},
-		}}
-		server := versionedServerWithRunner(runner)
-		_, err := server.Cmd(context.Background(), "break-pane", "-d")
-		if !errors.Is(err, ErrVersionTooLow) {
-			t.Fatalf("Cmd(break-pane -d) error = %v, want ErrVersionTooLow", err)
-		}
-		for _, request := range runner.recordedRequests() {
-			if slices.Contains(request.Arguments, "break-pane") {
-				t.Fatalf("refused command reached tmux: %#v", request)
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{"direct without a name is refused", []string{"break-pane", "-d"}},
+		{"direct with a name is refused", []string{"break-pane", "-d", "-n", "x"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runner := &versionQueueRunner{responses: []versionResponse{
+				{result: tmuxcmd.Result{Stdout: []string{"tmux 3.7"}}},
+			}}
+			server := versionedServerWithRunner(runner)
+			_, err := server.Cmd(context.Background(), test.args...)
+			if !errors.Is(err, ErrVersionTooLow) {
+				t.Fatalf("Cmd(%q) error = %v, want ErrVersionTooLow", test.args, err)
 			}
-		}
-	})
+			for _, request := range runner.recordedRequests() {
+				if slices.Contains(request.Arguments, "break-pane") {
+					t.Fatalf("refused command reached tmux: %#v", request)
+				}
+			}
+		})
+	}
 }

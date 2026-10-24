@@ -78,23 +78,28 @@ native semantics and individual flag requirements.
 These checks cover library operations, plans, staging, and literal argv command
 items in flat batches, whether sent through `Server.Cmd`, `Connection.Call` or
 `ControlClient.Call`. tmux command strings nested inside another command, such
-as `if-shell` bodies, `run-shell -C` and brace blocks, are not checked, so do
-not nest a command this library would refuse. The commands at stake, and what
-tmux does with each:
+as `if-shell` bodies, `run-shell -C`, brace blocks and key bindings, are not
+checked, so do not nest a command this library would refuse. The commands at
+stake, and what tmux does with each:
 
 - `break-pane` without `-n` exits the server on exact 3.7; 3.7a survives. On
-  exact 3.7, name every `break-pane`, nested or not, or upgrade to 3.7a.
+  exact 3.7, name every nested or key-bound `break-pane`, or upgrade to 3.7a.
+  A direct raw `break-pane` is refused there even with a name; use
+  `Pane.BreakPane` with one.
 - `select-layout` with an invalid layout string exits the server on 3.3 and
   3.3a. 3.4 answers "invalid layout".
-- `refresh-client -l` exits the server below 3.6a when an attached client's
-  terminal does not answer.
+- `refresh-client -l` exits the server below 3.6a when a client is attached.
+  On 3.3a it exits when the client's terminal does not answer; on 3.4 to 3.6
+  it exits when the client leaves before answering.
 - `delete-buffer -b NAME` and `set-buffer -b NAME -n` on a name that does not
   exist act on the newest buffer instead, silently, below 3.4.
 - `split-window -p` on 3.4, and `:` or `.` in session and window names on exact
-  3.7, make tmux answer with an error and change nothing. Shell programs and configured
-alias contents retain native semantics. Control startup pins the qualified Unix
-socket in a private directory before `-C`; it fails if the filesystem cannot
-hard-link that socket. The carrier is removed once the client is registered.
+  3.7, make tmux answer with an error and change nothing.
+
+Shell programs and configured alias contents retain native semantics. Control
+startup pins the qualified Unix socket in a private directory before `-C`; it
+fails if the filesystem cannot hard-link that socket. The carrier is removed
+once the client is registered.
 
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
