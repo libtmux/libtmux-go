@@ -9,6 +9,15 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Documentation
+
+- Package READMEs no longer say CI runs on macOS. The root README support table
+  lists the clipboard query, floating panes, and JSON layouts, and the pane
+  wait example says it needs tmux 3.7.
+- The README names the commands that escape the guard when nested inside
+  another command, with the failure each causes, and `wait_for_text` states
+  that its polling path can miss rows. (#82)
+
 ## v0.0.1-alpha.12, workspace/v0.0.1-alpha.12, mcp/v0.0.1-alpha.15
 
 ### Development
