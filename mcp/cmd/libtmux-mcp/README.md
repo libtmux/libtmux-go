@@ -50,7 +50,7 @@ $ libtmux-mcp -version
 ```
 
 ```text
-libtmux-mcp v0.0.1-alpha.16
+libtmux-mcp v0.1.0
 ```
 
 ### [`libtmux-mcp -tools`][guide-inspect-the-selection]: what a client would see
