@@ -180,7 +180,8 @@ one.
 - **Linux, including WSL, and macOS.** CI runs the module's tests on Linux
   across the tmux matrix. macOS is supported on a best-effort basis, and CI
   coverage for it is highly limited.
-- **Alpha.** Releases carry an -alpha prerelease tag. Pin an exact version.
+- **Unsettled API.** Releases are numbered `0.1.N`, and any release may change
+  exported identifiers. Pin an exact version.
 
 ## See also
 

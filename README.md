@@ -36,8 +36,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
 
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
+Releases are numbered `0.1.N`, and each release increments `N`. The API is not
+settled: any release may change or remove exported identifiers, and the
+changelog marks each break. Pin an exact version to avoid one.
 
 It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
 older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]

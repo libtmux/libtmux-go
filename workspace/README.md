@@ -23,8 +23,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/workspace@latest
 ```
 
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
+Releases are numbered `0.1.N`, and each release increments `N`. The API is not
+settled: any release may change or remove exported identifiers, and the
+changelog marks each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) ·
 [A workspace file](#a-workspace-file) · [Using it](#using-it) ·
@@ -509,8 +510,8 @@ The program above, with a page of its own, ready to run from a clone.
   does not run there.
 - **A module of its own.** `go get` on the tmux library never pulls in its YAML
   parser.
-- **Alpha.** The API is not settled. Pin an exact version, tagged as
-  `workspace/vN`.
+- **Unsettled API.** Any release may change exported identifiers. Pin an exact
+  version, tagged as `workspace/v0.1.N`.
 
 ## See also
 

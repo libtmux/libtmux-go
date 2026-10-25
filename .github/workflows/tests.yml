@@ -132,7 +132,7 @@ jobs:
   # An exported identifier can change or vanish without anything saying so: the
   # changelog is written by hand, and nothing compares what a release exports
   # against what the last one did. This reports that difference into the run
-  # summary rather than failing on it, because an alpha module breaks its API
+  # summary rather than failing on it, because a `0.1.N` module breaks its API
   # on purpose and a gate that forbids it would be turned off.
   api-diff:
     runs-on: ubuntu-latest

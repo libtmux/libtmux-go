@@ -7,7 +7,7 @@ reporting](https://github.com/libtmux/libtmux-go/security/advisories/new) rather
 than in a public issue. Include what you ran, what happened, and the tmux and Go
 versions involved.
 
-This is an alpha library maintained by one person; expect an acknowledgement
+This is a pre-1.0 library maintained by one person; expect an acknowledgement
 rather than a service-level agreement.
 
 ## What this software does
@@ -47,5 +47,5 @@ tools built on them return it verbatim.
 
 ## Supported versions
 
-Alpha releases: only the most recent tag is supported. Go 1.26 or newer. The
+Only the most recent `0.1.N` release is supported. Go 1.26 or newer. The
 core, workspace, and MCP modules support tmux 3.3a through 3.8.

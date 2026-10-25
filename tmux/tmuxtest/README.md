@@ -23,8 +23,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest
 ```
 
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
+Releases are numbered `0.1.N`, and each release increments `N`. The API is not
+settled: any release may change or remove exported identifiers, and the
+changelog marks each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) · [The waits](#the-waits) ·
 [Testing without a tmux](#testing-without-a-tmux) ·
@@ -274,7 +275,8 @@ a suite a temporary directory of its own and points the test process's
   coverage for it is highly limited.
 - **Part of the tmux module.** It adds no dependency outside the standard
   library and the tmux package.
-- **Alpha.** Any release may change exported identifiers. Pin an exact version.
+- **Unsettled API.** Any release may change exported identifiers. Pin an exact
+  version.
 
 ## See also
 
