@@ -882,12 +882,13 @@ environment, cancellation, cleanup, and control-client teardown.
 
 ## Releasing
 
-This is alpha. Releases carry an `-alpha` prerelease tag, and the lowest clean
-one is `v0.0.1-alpha.1`: semver permits `v0.0.0-alpha.1`, but `v0.0.0-` is the
-namespace the go command generates pseudo-versions in, so a real tag there reads
-as one. Under semver a prerelease sorts below its own release, and `v0.x`
-already carries no compatibility promise, so the tag says what the version
-number alone would leave implied.
+Releases are numbered `0.1.N`: `v0.1.0`, then `v0.1.1`, `v0.1.2` and so on, and
+each release increments `N`. No release carries an `-alpha` or other prerelease
+tag unless the maintainer asks for one. The API is not settled, and any release
+may change or remove exported identifiers; the changelog marks each break.
+`v0.0.0-` is the namespace the go command generates pseudo-versions in, so no
+real tag uses it. Ordinary ranges such as `^0.1` accept every `0.1.N`, breaking
+releases included, which is why the advice is to pin an exact version.
 
 Each module is tagged in its own directory, which is how the go command finds a
 module that does not sit at the repository root:

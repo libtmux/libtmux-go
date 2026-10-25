@@ -1,13 +1,21 @@
 # Changelog
 
-Releases are tagged `-alpha`. The API is not settled, and any release may change
-or remove exported identifiers without a deprecation period — pin an exact
-version.
+Releases are numbered `0.1.N`, and each release increments `N`. The API is not
+settled: any release may change or remove exported identifiers, and the
+changelog marks each break. Pin an exact version to avoid one.
 
 Modules are tagged per directory, so each carries its own version: the core as
 `vX.Y.Z`, the consumers as `mcp/vX.Y.Z` and `workspace/vX.Y.Z`.
 
 ## Unreleased
+
+### Documentation
+
+- Releases are numbered `0.1.N` from the first final release, `0.1.0`, and no
+  release carries an `-alpha` or other prerelease tag unless the maintainer asks
+  for one. Each release increments `N`, and any release may still change or
+  remove exported identifiers, so pin an exact version. The README, package
+  READMEs, `tmux` package documentation, `SECURITY.md` and `DESIGN.md` say so.
 
 ## v0.0.1-alpha.13, workspace/v0.0.1-alpha.13, mcp/v0.0.1-alpha.16
 

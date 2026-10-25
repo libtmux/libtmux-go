@@ -24,8 +24,9 @@ Serve one tmux server to Model Context Protocol clients, built on the
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
+Releases are numbered `0.1.N`, and each release increments `N`. The API is not
+settled: any release may change or remove exported identifiers, and the
+changelog marks each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) ·
 [Connect another client](#connect-another-client) ·

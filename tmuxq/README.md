@@ -24,8 +24,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmuxq@latest
 ```
 
-Alpha software. Releases carry an -alpha prerelease tag and the API is not
-settled. Pin an exact version.
+Releases are numbered `0.1.N`, and each release increments `N`. The API is not
+settled: any release may change or remove exported identifiers, and the
+changelog marks each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) · [Filters](#filters) ·
 [Direct queries](#direct-queries) · [Which helper](#which-helper) ·
@@ -342,7 +343,8 @@ That also keeps this package from creating an import cycle with the library.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
   across tmux 3.3a through 3.8. macOS is supported on a best-effort basis, and
   CI coverage for it is highly limited.
-- **Alpha.** Any release may change exported identifiers. Pin an exact version.
+- **Unsettled API.** Any release may change exported identifiers. Pin an exact
+  version.
 
 ## See also
 

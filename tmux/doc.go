@@ -219,9 +219,10 @@
 // default. [ServerOptions.Unsupported] can omit the unsupported flag and report
 // a warning instead; see [UnsupportedPolicy].
 //
-// Releases are alpha until v1.0.0. Exported identifiers and documented behavior
-// may change without a deprecation period, so pin an exact version. Generated
-// exports follow the same policy as handwritten API.
+// Releases are numbered 0.1.N, and each release increments N. The API is not
+// settled: any release may change or remove exported identifiers or documented
+// behavior, and the changelog marks each break. Pin an exact version to avoid
+// one. Generated exports follow the same policy as handwritten API.
 package tmux
 
 // The repository root contains the Markdown generated from the sibling example
