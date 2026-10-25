@@ -423,6 +423,16 @@ fmt.Println("exited", result.Status)
 This prints `screen: stdout is a terminal`, then `exited 3`.
 <!-- docs:end -->
 
+[`Pane.WaitForText`][tmux-pane-waitfortext] waits for text on a pane's visible
+screen by polling, on every supported release; a pane or server that ends first
+returns a [`PaneEndedError`][tmux-paneendederror], and the `PaneTextWait` holds
+the text read so far.
+The wait is level-triggered, so text already on screen matches, and so does a
+shell's echo of a typed command: wait for what the command prints.
+[`PaneObservation.WaitFor`][tmux-paneobservation-waitfor] needs tmux 3.7 and
+reports only output after its baseline. See the
+[contract](docs/contracts.md#waiting-for-pane-text).
+
 ### [`tmuxq`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq): filters for any slice
 
 Helpers that find records in a slice or an `iter.Seq`. The package imports no
@@ -588,7 +598,10 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmux-package]: https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux
 [tmux-pane-capture]: https://libtmux.org/en/go/latest/reference/tmux-pane-capture/
 [tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
+[tmux-pane-waitfortext]: https://libtmux.org/en/go/latest/reference/tmux-pane-waitfortext/
 [tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
+[tmux-paneendederror]: https://libtmux.org/en/go/latest/reference/tmux-paneendederror/
+[tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
 [tmux-server-cmd]: https://libtmux.org/en/go/latest/reference/tmux-server-cmd/
 [tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
 [tmux-server]: https://libtmux.org/en/go/latest/reference/tmux-server/

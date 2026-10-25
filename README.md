@@ -23,7 +23,7 @@ Drive tmux from Go: [sessions][tmux-session], [windows][tmux-window], and
 
 [Run a command][tmux-session-run] in a real terminal and read what it printed,
 [find][tmux-server-sessions] and [filter][tmuxq-matching] what a tmux server
-holds, [type into a pane and wait][tmux-paneobservation-waitfor] for its
+holds, [type into a pane and wait][tmux-pane-waitfortext] for its
 answer, and [hear about changes][tmux-session-opennotifications] as tmux makes
 them.
 
@@ -309,12 +309,52 @@ the filters that run in Go and the helpers that apply them.
 
 ## Type into a pane and wait
 
+### [`Pane.WaitForText`][tmux-pane-waitfortext]: wait for text on every release
+
+`Pane.WaitForText` polls the pane's visible screen until it holds the text, on
+every tmux release from 3.3a, and never opens a control client. It returns the
+screen it last read with every error. A pane or server that ends first returns
+a [`PaneEndedError`][tmux-paneendederror], which matches `ErrPaneEnded` and,
+through the failed read, `ErrNotFound` or `ErrNoServer`. A deadline or cancel
+returns `ctx.Err()`.
+
+A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
+newline is the Enter key. Type, then wait for text the command prints:
+
+<!-- docs:pane-wait-text -->
+
+```go
+// Given: ctx context.Context; pane tmux.Pane
+// A pane is an io.Writer, and a newline is the Enter key.
+command := `echo "6 x 7 = $((6 * 7))"`
+if _, err := fmt.Fprintln(pane.Writer(ctx), command); err != nil {
+	return fmt.Errorf("type command: %w", err)
+}
+// The screen already holds the typed line, which says "$((6 * 7))"
+// and never "42", so the answer is what the wait names.
+if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{
+	Text: "6 x 7 = 42",
+}); err != nil {
+	return fmt.Errorf("wait for answer: %w", err)
+}
+fmt.Println("the pane answered 6 x 7 = 42")
+```
+
+<!-- docs:end -->
+
+The wait is level-triggered: text already on screen matches at once, with
+`MatchedAtEntry` set, and the shell's echo of a typed line matches too, so name
+the answer and not the command. It reads the visible screen only, so text that
+scrolled off is not seen, and a poll sees the final state of text a program
+overwrote. Each read runs the owner's `after-capture-pane` hook. See
+[`docs/contracts.md`](tmux/docs/contracts.md#waiting-for-pane-text).
+
 ### [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor]: wait for what a command prints
 
-Needs tmux 3.7. Below it the core library has no pane-text wait (tracked in
-[#80](https://github.com/libtmux/libtmux-go/issues/80)). [`tmux.Poll`][tmux-poll]
-re-reads [`Pane.Capture`][tmux-pane-capture] but is not made for pane text,
-since a re-read can match the shell's echo of the typed line.
+Needs tmux 3.7. It reports only output written after its baseline, where
+`Pane.WaitForText` matches what is already on screen.
+[`tmux.Poll`][tmux-poll] is for a state tmux does not announce, not for pane
+text.
 
 A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
 newline is the Enter key. Open an observation with
@@ -865,8 +905,10 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-pane-captureto]: https://libtmux.org/en/go/latest/reference/tmux-pane-captureto/
 [tmux-pane-kill]: https://libtmux.org/en/go/latest/reference/tmux-pane-kill/
 [tmux-pane-openobservation]: https://libtmux.org/en/go/latest/reference/tmux-pane-openobservation/
+[tmux-pane-waitfortext]: https://libtmux.org/en/go/latest/reference/tmux-pane-waitfortext/
 [tmux-pane-writer]: https://libtmux.org/en/go/latest/reference/tmux-pane-writer/
 [tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
+[tmux-paneendederror]: https://libtmux.org/en/go/latest/reference/tmux-paneendederror/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
 [tmux-paneobservation]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation/
 [tmux-plan-run]: https://libtmux.org/en/go/latest/reference/tmux-plan-run/

@@ -19,10 +19,10 @@ var ErrPollCondition = errors.New("tmux: poll condition is required")
 // ctx.Err when ctx ends first.
 //
 // Poll is for a state tmux does not announce. Waiting for a pane to print
-// something is not one: [PaneObservation.WaitFor] is woken by tmux as the
-// pane writes, where a poll re-reads the screen on a guess and can match a
-// shell's echo of what was typed. [Server.WaitFor] waits on tmux's separate
-// wait-for channel.
+// something is not one: [Pane.WaitForText] polls the visible screen with the
+// liveness and end-of-pane handling a bare condition lacks, and
+// [PaneObservation.WaitFor] is woken by tmux as the pane writes.
+// [Server.WaitFor] waits on tmux's separate wait-for channel.
 func Poll(
 	ctx context.Context,
 	interval time.Duration,
