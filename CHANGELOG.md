@@ -21,9 +21,13 @@ Modules are tagged per directory, so each carries its own version: the core as
   that its polling path can miss rows. (#82)
 - The README limits the advice to name `break-pane` to nested and key-bound
   text, since a direct raw `break-pane` is refused on tmux 3.7 even with a
-  name. It says the core library has no pane-text wait below tmux 3.7, and
-  `mcp/PARITY.md` no longer counts tools, and the `wait_for_text` description
-  no longer claims the polling path misses rows from the pane's history. (#83)
+  name. `mcp/PARITY.md` no longer counts tools, and the `wait_for_text`
+  description no longer claims the polling path misses rows from the pane's
+  history. (#83)
+- The README says tmux 3.3a ends the server on `refresh-client -l` at once
+  when the attached client's terminal has the `Ms` clipboard capability, as
+  `xterm-256color` and `tmux-256color` do. Before, it said 3.3a waits for the
+  terminal not to answer, which is what 3.4 to 3.6 do. (#85)
 
 ### tmux
 
