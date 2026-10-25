@@ -9,6 +9,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+## v0.1.0, workspace/v0.1.0, mcp/v0.1.0
+
 ### Documentation
 
 - Releases are numbered `0.1.N` from the first final release, `0.1.0`, and no
