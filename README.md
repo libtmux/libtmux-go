@@ -88,9 +88,10 @@ stake, and what tmux does with each:
   `Pane.BreakPane` with one.
 - `select-layout` with an invalid layout string exits the server on 3.3 and
   3.3a. 3.4 answers "invalid layout".
-- `refresh-client -l` exits the server below 3.6a when a client is attached.
-  On 3.3a it exits when the client's terminal does not answer; on 3.4 to 3.6
-  it exits when the client leaves before answering.
+- `refresh-client -l` exits the server below 3.6a when a client is attached. On
+  3.3a it exits at once when the client's terminal has the `Ms` clipboard
+  capability, such as `xterm-256color` or `tmux-256color`; on 3.4 to 3.6 it
+  exits when the client leaves before answering.
 - `delete-buffer -b NAME` and `set-buffer -b NAME -n` on a name that does not
   exist act on the newest buffer instead, silently, below 3.4.
 - `split-window -p` on 3.4, and `:` or `.` in session and window names on exact
