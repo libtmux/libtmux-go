@@ -17,6 +17,11 @@ Modules are tagged per directory, so each carries its own version: the core as
 - The README names the commands that escape the guard when nested inside
   another command, with the failure each causes, and `wait_for_text` states
   that its polling path can miss rows. (#82)
+- The README limits the advice to name `break-pane` to nested and key-bound
+  text, since a direct raw `break-pane` is refused on tmux 3.7 even with a
+  name. It says the core library has no pane-text wait below tmux 3.7, and
+  `mcp/PARITY.md` no longer counts tools, and the `wait_for_text` description
+  no longer claims the polling path misses rows from the pane's history. (#83)
 
 ## v0.0.1-alpha.12, workspace/v0.0.1-alpha.12, mcp/v0.0.1-alpha.15
 

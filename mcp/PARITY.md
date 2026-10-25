@@ -17,11 +17,8 @@ same raw client; invalid calls were sent rather than inferred from schemas.
 
 | Wire surface | Go | Python |
 | --- | ---: | ---: |
-| Tools | 45 | 54 |
 | Argument fields across tool schemas | 103 | 289 |
 | Arguments published with `enum` | 7 | 3 |
-| Tools carrying an output schema | 45 | 54 |
-| Tools carrying annotations | 45 | 54 |
 | Described argument fields | 103 | 287 |
 | Collections published as null-or-array | 0 | 0 |
 | Prompts | 0 | 4 |
@@ -33,15 +30,16 @@ also declares prompts, experimental data, and UI extensions. Both declare
 `listChanged` for tools. Go declares it for its one static resource; Python's
 resource capability reports neither subscriptions nor changing lists.
 
-The Go count is generated from one native manifest and grouped into the shared
-`inspect`, `manage`, `execute`, and `teardown` toolsets. Its unfiltered
-inventory is exactly 18, 14, 9, and 4 tools. A fresh authenticated product-owned
-server defaults to all 45; an existing or explicitly selected server defaults
-to the 41 non-teardown tools.
+The Go tool list is generated from one native manifest and grouped into the
+shared `inspect`, `manage`, `execute`, and `teardown` toolsets; [`TOOLS.md`](TOOLS.md)
+lists each toolset's tools. A fresh authenticated product-owned server
+defaults to every toolset; an existing or explicitly selected server defaults
+to all but `teardown`.
 
 ## The tools
 
-Thirty-nine tool names are common to both measured servers. Six are Go-only:
+Most tool names are common to both measured servers; [`TOOLS.md`](TOOLS.md)
+lists the Go tools. These are Go-only:
 
 - `clear_pane_scrollback`
 - `get_tmux_variables`
@@ -99,7 +97,7 @@ variables. Conservative annotations stay identical because an existing tmux
 server may have user-configured hooks and commands.
 
 Earlier Go alphas exposed more experimental routes. Their useful workflows now
-map to the fixed 45-tool surface:
+map to the fixed tool surface:
 
 | Earlier Go route | Current route | What remains available |
 | --- | --- | --- |
