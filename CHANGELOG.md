@@ -23,6 +23,12 @@ Modules are tagged per directory, so each carries its own version: the core as
   `mcp/PARITY.md` no longer counts tools, and the `wait_for_text` description
   no longer claims the polling path misses rows from the pane's history. (#83)
 
+### tmux
+
+- Wait: add `Pane.WaitForText`, a pane-text wait that polls `capture-pane` on
+  every supported tmux release and returns `PaneEndedError` when the pane or
+  server ends first, and the `PaneTextWait` holds the text read so far. (#84)
+
 ## v0.0.1-alpha.12, workspace/v0.0.1-alpha.12, mcp/v0.0.1-alpha.15
 
 ### Development
