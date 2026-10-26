@@ -15,6 +15,7 @@ Generic helpers for filtering tmux records. It imports no tmux types, so it
 works on any slice or `iter.Seq`.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmuxq.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq)
+[![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/)
 
 </div>
 

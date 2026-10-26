@@ -14,6 +14,7 @@
 The library. A typed, context-aware tmux API with no runtime dependencies.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
+[![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/)
 
 </div>
 
