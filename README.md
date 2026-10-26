@@ -16,11 +16,11 @@ Drive tmux from Go: [sessions][tmux-session], [windows][tmux-window], and
 [option and hook as a typed accessor][topic-options-and-hooks], and
 [errors classified][topic-errors] by what tmux actually refused.
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 [![tests](https://github.com/libtmux/libtmux-go/actions/workflows/tests.yml/badge.svg)](https://github.com/libtmux/libtmux-go/actions/workflows/tests.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 [![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/)
-[![Go Reference: workspace](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/workspace.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace)
-[![Go Reference: mcp](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
+[![workspace reference](https://img.shields.io/badge/workspace-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace)
+[![mcp reference](https://img.shields.io/badge/mcp-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
 
 </div>
 
