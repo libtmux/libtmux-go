@@ -47,64 +47,7 @@ It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
 older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
 and sends nothing.
 
-To fix it, upgrade tmux and restart its server, or pin the previous release.
-[The contract][contract-version] covers unrecognized versions and the calls
-that skip the check.
-
-Optional features have their own requirements:
-
-| Operation | Required tmux |
-| --- | --- |
-| Ordinary subprocess operations, polling, workspace builds, MCP startup | 3.3a |
-| Named buffer deletion or rename; `CaptureToFile`; MCP `paste_text` staging | 3.4 |
-| Foreground `RunShell` captured client output without `TargetPane` | 3.5 |
-| Native raw `refresh-client -l`, the clipboard query | 3.6a |
-| Owned control clients, connections, notifications, pane observations | 3.7 |
-| Floating panes through `Window.NewPane` and `Pane.NewPane` | 3.7 |
-| Native raw `break-pane` and unnamed typed `BreakPane` on exact 3.7 | 3.7a |
-| Window and session names holding `:` or `.` on exact 3.7 | 3.7a |
-| Native raw `select-layout` with an unparseable layout, or `-o`, on 3.3a | 3.4 |
-| `Window.SelectLayout` with a layout in the JSON shape of `window_layout` | 3.8-rc2 |
-
-[`capabilities.json`](capabilities.json) is the full list: each entry names the
-releases affected, the commands and APIs it covers, and whether the library
-refuses or repairs the call. This table follows it.
-
-On exact 3.7, typed `BreakPane` with an explicit name retains its naming repair.
-The restriction does not affect older supported versions. Raw percentage
-`split-window -p` is refused only on tmux 3.4, where its percentage behavior
-is defective; typed percentage requests retain their `-l N%` repair. Direct named
-`paste-buffer -d -b` retains tmux's exact lookup semantics on 3.3a. Raw `Cmd`
-returns native client output and does not promise capture of nested shell-job
-stdout. Background, pane-targeted, and `AsTmuxCommand` requests retain their
-native semantics and individual flag requirements.
-
-These checks cover library operations, plans, staging, and literal argv command
-items in flat batches, whether sent through `Server.Cmd`, `Connection.Call` or
-`ControlClient.Call`. tmux command strings nested inside another command, such
-as `if-shell` bodies, `run-shell -C`, brace blocks and key bindings, are not
-checked, so do not nest a command this library would refuse. The commands at
-stake, and what tmux does with each:
-
-- `break-pane` without `-n` exits the server on exact 3.7; 3.7a survives. On
-  exact 3.7, name every nested or key-bound `break-pane`, or upgrade to 3.7a.
-  A direct raw `break-pane` is refused there even with a name; use
-  `Pane.BreakPane` with one.
-- `select-layout` with an invalid layout string exits the server on 3.3 and
-  3.3a. 3.4 answers "invalid layout".
-- `refresh-client -l` exits the server below 3.6a when a client is attached. On
-  3.3a it exits at once when the client's terminal has the `Ms` clipboard
-  capability, such as `xterm-256color` or `tmux-256color`; on 3.4 to 3.6 it
-  exits when the client leaves before answering.
-- `delete-buffer -b NAME` and `set-buffer -b NAME -n` on a name that does not
-  exist act on the newest buffer instead, silently, below 3.4.
-- `split-window -p` on 3.4, and `:` or `.` in session and window names on exact
-  3.7, make tmux answer with an error and change nothing.
-
-Shell programs and configured alias contents retain native semantics. Control
-startup pins the qualified Unix socket in a private directory before `-C`; it
-fails if the filesystem cannot hard-link that socket. The carrier is removed
-once the client is registered.
+The detail is in [the library contracts][contract-requirements].
 
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
@@ -897,7 +840,7 @@ MIT. See [`LICENSE`](LICENSE).
 [libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [mcp-readme]: https://github.com/libtmux/libtmux-go/tree/master/mcp
 [mcp-tools]: https://github.com/libtmux/libtmux-go/blob/master/mcp/TOOLS.md
-[contract-version]: tmux/docs/contracts.md#the-tmux-version-check
+[contract-requirements]: tmux/docs/contracts.md#requirements-by-feature
 [guide-diagnose-startup]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#diagnose-startup
 [tmux-connectionoptions-lanes]: https://libtmux.org/en/go/latest/reference/tmux-connectionoptions-lanes/
 [tmux-errnoserver]: https://libtmux.org/en/go/latest/reference/tmux-errnoserver/
