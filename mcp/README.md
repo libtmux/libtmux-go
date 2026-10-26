@@ -17,6 +17,7 @@ Serve one tmux server to Model Context Protocol clients, built on the
 [tmux module] and the [Go MCP SDK].
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
+[![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/latest/mcp/)
 
 </div>
 

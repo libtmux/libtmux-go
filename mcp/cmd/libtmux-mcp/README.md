@@ -14,6 +14,9 @@
 The binary an MCP client launches. It serves **one** tmux server over stdin and
 stdout.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp)
+[![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/latest/mcp/)
+
 </div>
 
 **Contents** — [Quick start](#quick-start) ·
