@@ -243,7 +243,7 @@ func newWindow(
 			return selectedExistingWindow(ctx, server, sessionID, selectionName)
 		case exactTargetWindowID != "":
 			// tmux 3.8 extended -S to match an exact -t target, not only a
-			// window name (cmd-new-window.c, 3.7c to 3.8-rc: idx != -1 now
+			// window name (cmd-new-window.c, 3.7c to 3.8: idx != -1 now
 			// selects winlink_find_by_index(idx) before falling back to name
 			// matching). The receiver's own target always resolves to
 			// itself, so tmux selects the receiver and prints nothing.

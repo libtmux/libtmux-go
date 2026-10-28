@@ -21,8 +21,8 @@ A layout written out by hand, in the form tmux prints for `window_layout`, is
 checked before building: its checksum, its numeric fields, and that its tree is
 not empty. A tree may nest 256 levels deep.
 
-Layouts written as JSON first appear in tmux 3.8, its release candidates
-included, and tmux checks what they hold.
+Layouts written as JSON are accepted from tmux 3.8, and tmux checks what they
+hold. An older daemon is refused them with `ErrVersionTooLow`.
 
 ## Building a workspace
 

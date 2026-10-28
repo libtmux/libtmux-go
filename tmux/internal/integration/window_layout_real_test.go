@@ -302,11 +302,11 @@ func TestLayoutPreflightColdAndEmptyDaemon(t *testing.T) {
 	}
 }
 
-// The gates that open at 3.8 must open on the 3.8 candidates, which report the
-// same JSON layout and the same new format fields as the release.
+// The gates that open at 3.8 open there: tmux 3.8 reports the JSON layout and
+// the new format fields, and the library accepts the layout it reported.
 //
 //libtmux:real-tmux
-func TestThreeEightGatesOpenOnTheCandidates(t *testing.T) {
+func TestThreeEightGatesOpenAtThreeEight(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	server := tmuxtest.NewServer(ctx, t)
@@ -314,7 +314,7 @@ func TestThreeEightGatesOpenOnTheCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gate, err := tmux.ParseVersion("3.8-rc2")
+	gate, err := tmux.ParseVersion("3.8")
 	if err != nil {
 		t.Fatal(err)
 	}

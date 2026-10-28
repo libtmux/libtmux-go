@@ -9,6 +9,20 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### tmux
+
+- `Window.SelectLayout` and `Server.ValidateLayouts` accept a JSON layout from
+  tmux 3.8, the first release that reads one. An older daemon is refused with
+  `ErrVersionTooLow` before `select-layout` is sent; upgrade to tmux 3.8 to
+  apply a JSON layout. (#96)
+
+  On tmux 3.8, the pane format fields it added, such as `history_added` and
+  `pane_modal_flag`, are requested and read. On an older daemon they are not
+  requested, so their `FormatValues` accessors report no value.
+  `Pane.DisplayPopup` on tmux 3.8 returns an error when `TargetClient` names a
+  control-mode client, which tmux 3.8 would otherwise silently ignore; an
+  older daemon is sent the request unchanged.
+
 ## v0.1.0, workspace/v0.1.0, mcp/v0.1.0
 
 ### Documentation

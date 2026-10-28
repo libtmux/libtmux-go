@@ -185,8 +185,8 @@ func (v Version) Patch() int {
 //
 //	next-X.Y < X.Y-rc < X.Y-rcN < X.Y == X.Ya
 //
-// A feature gate therefore opens on a candidate only when it names that
-// candidate, so it names the earliest build measured to have the feature.
+// A gate that names release X.Y therefore refuses every build ranked below
+// X.Y.
 func (v Version) Compare(other Version) int {
 	left := v.rank()
 	right := other.rank()

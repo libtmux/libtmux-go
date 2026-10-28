@@ -142,13 +142,13 @@ func TestFeatureGatesRankCandidatesAndDevelopmentBuildsBelowTheirRelease(t *test
 		}
 	}
 	// A gate that names a candidate opens from it on, and not before.
-	candidate := mustParseVersion(t, "3.8-rc2")
+	candidate := mustParseVersion(t, "3.4-rc2")
 	for raw, want := range map[string]bool{
-		"3.7c": false, "next-3.8": false, "3.8-rc": false, "3.8-rc2": true,
-		"3.8-rc3": true, "3.8": true, "next-3.9": true,
+		"3.3a": false, "next-3.4": false, "3.4-rc": false, "3.4-rc2": true,
+		"3.4-rc3": true, "3.4": true, "next-3.5": true,
 	} {
 		if got := mustParseVersion(t, raw).AtLeast(candidate); got != want {
-			t.Errorf("%s.AtLeast(3.8-rc2) = %t, want %t", raw, got, want)
+			t.Errorf("%s.AtLeast(3.4-rc2) = %t, want %t", raw, got, want)
 		}
 	}
 }
