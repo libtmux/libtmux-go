@@ -121,7 +121,7 @@ var capabilityRegistry = []capabilityRecord{
 		ID:      "layout-json",
 		Name:    "JSON layouts",
 		Summary: "Select a layout given in the JSON shape tmux reports from window_layout.",
-		Since:   "3.8-rc2", Handling: handlingRefuse, Error: versionTooLowAPI,
+		Since:   "3.8", Handling: handlingRefuse, Error: versionTooLowAPI,
 		APIs:     []string{"tmux.Window.SelectLayout", "tmux.SelectLayoutRequest.Layout"},
 		Commands: []capabilityCommand{{Command: "select-layout"}},
 	},

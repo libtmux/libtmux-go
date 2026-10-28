@@ -408,7 +408,7 @@ func TestGenerateFormatsDropsTheMinimumOfAFieldEverySupportedTmuxHas(t *testing.
 		{Name: "pane_floor", Scope: "pane", Since: "3.3a", Kind: "bool"},
 		{Name: "pane_later", Scope: "pane", Since: "3.4", Kind: "int"},
 		{Name: "pane_dev", Scope: "pane", Since: "next-3.9", Kind: "bool"},
-		{Name: "pane_candidate", Scope: "pane", Since: "3.8-rc2", Kind: "bool"},
+		{Name: "pane_candidate", Scope: "pane", Since: "3.4-rc2", Kind: "bool"},
 	}}
 	generated, err := generateFormats(spec)
 	if err != nil {
@@ -429,7 +429,7 @@ func TestGenerateFormatsDropsTheMinimumOfAFieldEverySupportedTmuxHas(t *testing.
 	for name, minimum := range map[string]string{
 		"pane_later":     `Version{raw: "3.4", major: 3, minor: 4, patch: 0}`,
 		"pane_dev":       `Version{raw: "next-3.9", major: 3, minor: 9, patch: 0, development: -1}`,
-		"pane_candidate": `Version{raw: "3.8-rc2", major: 3, minor: 8, patch: 0, candidate: 3}`,
+		"pane_candidate": `Version{raw: "3.4-rc2", major: 3, minor: 4, patch: 0, candidate: 3}`,
 	} {
 		if !strings.Contains(text, `{name: "`+name+`", scope: formatScopePane, kind: `) ||
 			!strings.Contains(text, "minimum: "+minimum+"},") {

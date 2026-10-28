@@ -171,13 +171,13 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Version() error = %v", err)
 	}
 	// tmux 3.8 extended -S to match an exact -t target, not only a window
-	// name (cmd-new-window.c, 3.7c to 3.8-rc: "if idx != -1: select
+	// name (cmd-new-window.c, 3.7c to 3.8: "if idx != -1: select
 	// winlink_find_by_index(idx)" ahead of the name-matching fallback).
 	// existing.NewWindow's target is always exact and always already
 	// occupied by existing itself, so from that version on tmux selects
 	// existing instead of creating a duplicate; before it, the exact-target
 	// form never matched -S at all and always created one.
-	minimum38, err := tmux.ParseVersion("3.8-rc2")
+	minimum38, err := tmux.ParseVersion("3.8")
 	if err != nil {
 		t.Fatal(err)
 	}

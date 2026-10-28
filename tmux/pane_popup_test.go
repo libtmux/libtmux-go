@@ -423,3 +423,19 @@ func TestDisplayPopupReturnsCompletedStderrAsCommandError(t *testing.T) {
 		t.Fatalf("DisplayPopup() error = %#v, want display-popup CommandError", err)
 	}
 }
+
+// The popup guard opens at 3.8: 3.7c is below it, and 3.8 is at it. 3.8a is
+// only an ordering sample, not a release.
+func TestPopupGuardOpensAtThreeEight(t *testing.T) {
+	t.Parallel()
+
+	if got := panePopupVersion38.String(); got != "3.8" {
+		t.Errorf("popup guard floor = %s, want 3.8", got)
+	}
+	for raw, want := range map[string]bool{"3.7c": false, "3.8": true, "3.8a": true} {
+		version := mustParseVersion(t, raw)
+		if got := version.AtLeast(panePopupVersion38); got != want {
+			t.Errorf("%s reaches the popup guard = %t, want %t", raw, got, want)
+		}
+	}
+}

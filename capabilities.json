@@ -134,7 +134,7 @@
       "handling": "refuse",
       "id": "layout-json",
       "name": "JSON layouts",
-      "since": "3.8-rc2",
+      "since": "3.8",
       "summary": "Select a layout given in the JSON shape tmux reports from window_layout."
     },
     {

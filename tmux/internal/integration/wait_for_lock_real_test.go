@@ -50,7 +50,7 @@ func TestAnAbandonedLockWaitLeavesTheChannelUsable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	freesAbandoned, err := tmux.ParseVersion("3.8-rc2")
+	freesAbandoned, err := tmux.ParseVersion("3.8")
 	if err != nil {
 		t.Fatal(err)
 	}

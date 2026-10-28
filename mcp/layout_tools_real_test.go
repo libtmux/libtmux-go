@@ -41,7 +41,7 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	minimum, err := tmux.ParseVersion("3.8-rc2")
+	minimum, err := tmux.ParseVersion("3.8")
 	if err != nil {
 		t.Fatal(err)
 	}

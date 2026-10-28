@@ -279,8 +279,8 @@ func TestSelectLayoutGatesJSONShapedLayoutByVersion(t *testing.T) {
 		if !errors.As(err, &tooLow) {
 			t.Fatalf("SelectLayout() error = %v, want *VersionTooLowError", err)
 		}
-		if tooLow.Minimum.String() != "3.8-rc2" {
-			t.Errorf("Minimum = %s, want 3.8-rc2", tooLow.Minimum)
+		if tooLow.Minimum.String() != "3.8" {
+			t.Errorf("Minimum = %s, want 3.8", tooLow.Minimum)
 		}
 		if calls := runner.callCount(); calls != 1 {
 			t.Fatalf("runner calls = %d, want 1 (version probe only, no select-layout sent)", calls)
@@ -494,14 +494,16 @@ func TestLayoutPreflightPlanRefusesEveryLayoutBeforeDispatch(t *testing.T) {
 	}
 }
 
-// Every build that reports the JSON layout takes the JSON gate, from 3.8-rc2,
-// the earliest measured, on; 3.7c, which reports the classic grammar, refuses
-// it. A candidate ranks below its release, so the gate names the candidate.
-func TestJSONLayoutGateOpensAtTheEarliestMeasuredCandidate(t *testing.T) {
+// The JSON layout gate opens at 3.8, the first release that reports the shape;
+// 3.7c, which reports the classic grammar, refuses it. 3.8a and next-3.9 are
+// version-ordering samples above the floor.
+func TestJSONLayoutGateOpensAtThreeEight(t *testing.T) {
+	if got := layoutJSONVersion.String(); got != "3.8" {
+		t.Fatalf("JSON layout floor = %s, want 3.8", got)
+	}
 	const jsonLayout = `{"V":2,"cells":[]}`
 	for raw, wantAccepted := range map[string]bool{
-		"3.7c": false, "3.8-rc": false, "3.8-rc2": true, "3.8-rc3": true,
-		"3.8": true, "next-3.9": true,
+		"3.7c": false, "3.8": true, "3.8a": true, "next-3.9": true,
 	} {
 		_, err := validateLayout(jsonLayout, mustParseVersion(t, raw))
 		if accepted := err == nil; accepted != wantAccepted {

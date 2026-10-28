@@ -87,7 +87,7 @@ Optional features have their own requirements:
 | Native raw `break-pane` and unnamed typed `BreakPane` on exact 3.7 | 3.7a |
 | Window and session names holding `:` or `.` on exact 3.7 | 3.7a |
 | Native raw `select-layout` with an unparseable layout, or `-o`, on 3.3a | 3.4 |
-| `Window.SelectLayout` with a layout in the JSON shape of `window_layout` | 3.8-rc2 |
+| `Window.SelectLayout` with a layout in the JSON shape of `window_layout` | 3.8 |
 
 [`capabilities.json`](../../capabilities.json) is the full list: each entry names the
 releases affected, the commands and APIs it covers, and whether the library

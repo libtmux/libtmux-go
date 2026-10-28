@@ -488,7 +488,7 @@ func TestNewWindowSelectExistingResolvesNoOutputInExactSession(t *testing.T) {
 }
 
 // tmux 3.8 extended -S to match an exact -t target as well as a window name
-// (cmd-new-window.c, 3.7c to 3.8-rc). Window.NewWindow's target is always
+// (cmd-new-window.c, 3.7c to 3.8). Window.NewWindow's target is always
 // exact and always already occupied by the receiver, so from that version on
 // tmux selects the receiver and prints nothing. Unlike the indexed and
 // session-target forms above, no probe is needed: the identity tmux selected

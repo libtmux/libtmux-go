@@ -735,3 +735,23 @@ func mustParseTestVersion(t *testing.T, raw string) Version {
 	}
 	return version
 }
+
+// Every generated format field that tmux 3.8 added opens at the 3.8 release
+// itself, so a field cannot keep an older 3.8 boundary unnoticed.
+func TestEveryThreeEightFormatFieldOpensAtTheRelease(t *testing.T) {
+	t.Parallel()
+
+	found := 0
+	for _, field := range generatedFormatFields {
+		if field.minimum.major != 3 || field.minimum.minor != 8 {
+			continue
+		}
+		found++
+		if got := field.minimum.String(); got != "3.8" {
+			t.Errorf("%s floor = %s, want 3.8", field.name, got)
+		}
+	}
+	if found == 0 {
+		t.Fatal("generated format fields name no 3.8 field")
+	}
+}
