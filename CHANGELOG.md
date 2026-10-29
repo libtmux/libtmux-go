@@ -9,6 +9,16 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+### Documentation
+
+- The quickstart owns a unique temporary socket path and cleans it up. Other
+  fixed-name examples state that their socket name must be unused.
+- Control-based examples state their tmux 3.7 requirement. Version-refusal
+  guidance distinguishes a withheld operation from its read-only probe, and
+  MCP startup guidance describes the tmux sessions that outlive a client.
+- Snapshot examples describe sequential collection rather than an atomic
+  single-command read. Queries over the captured records still run locally.
+
 ## v0.1.1, workspace/v0.1.1, mcp/v0.1.1
 
 ### tmux
