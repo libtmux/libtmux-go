@@ -66,8 +66,8 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-layout",
 		ConfigFile: os.DevNull,
@@ -136,8 +136,8 @@ pane 1: 39 columns
 <!-- docs:private-server -->
 
 ```go
-// A private server: a socket and an empty config of its own, so this
-// neither touches nor is changed by a tmux you already use.
+// Choose an unused socket name: cleanup kills the server selected here.
+// The empty config keeps personal settings out of a new server.
 server, err := tmux.NewServer(tmux.ServerOptions{
 	SocketName: "libtmux-layout",
 	ConfigFile: os.DevNull,
@@ -157,7 +157,8 @@ if err != nil {
 - With no [`ConfigFile`][tmux-serveroptions-configfile], tmux reads your
   configuration.
 
-A program that should behave the same everywhere names both, as this one does.
+A program that should avoid personal configuration names both, as this one does.
+Choose an unused socket name: naming an existing server does not make it yours.
 
 ## Records
 
@@ -563,7 +564,8 @@ $ libtmux-mcp -doctor
 
 - **No runtime dependencies.** The module imports only the standard library.
 - **Go 1.26+ and tmux 3.3a or newer.** An older tmux gets
-  [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] and nothing is sent. CI runs
+  [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] before the requested
+  operation; a read-only version probe may run first. CI runs
   tmux 3.3a through 3.8, and [the contract][contract-version] has the details.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
   across tmux 3.3a through 3.8. macOS is supported on a best-effort

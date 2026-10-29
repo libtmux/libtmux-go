@@ -60,8 +60,8 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-queries",
 		ConfigFile: os.DevNull,
@@ -222,9 +222,9 @@ func where(panes []tmux.Pane) string {
 
 ## What to look at
 
-**One read, then no more commands.** `server.Snapshot` asks tmux once for
-every session, window, and pane. Each query filters the slice it returns in
-Go, so the tenth question costs tmux nothing.
+**Collect once, then query locally.** `server.Snapshot` gathers the server's
+lists sequentially. Each query filters the captured slice in Go, so the tenth
+question sends no further tmux command.
 
 **A filter is a value.** `tmux.PaneFilter` fields combine with AND; `AnyOf` and
 `Not` build the rest, and `Window` and `Session` reach through to the pane's

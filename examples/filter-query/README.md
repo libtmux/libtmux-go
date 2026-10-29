@@ -45,9 +45,9 @@ fmt.Println("live matches:", len(sessions))
 
 <!-- docs:end -->
 
-**Or read once and filter in Go.** A snapshot is one read of the whole server.
-Filtering it costs nothing extra, so this wins as soon as you want several
-answers from the same moment:
+**Or reuse a snapshot in Go.** A snapshot collects the server's lists once;
+filtering the captured records sends no further commands. Collection is
+sequential, so it does not promise one atomic view:
 
 <!-- docs:query-in-go -->
 

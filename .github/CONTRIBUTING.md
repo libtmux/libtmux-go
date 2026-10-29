@@ -14,15 +14,9 @@ client, which the Go tests do not provide.
 You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else — the
 core module has no runtime dependencies.
 
-Give tmux a socket directory of its own before running anything, and drop the
-inherited pane. Sibling checkouts run their suites on the same machine, and a
-shared socket directory is one suite ending servers another is still using —
-which surfaces as a version-specific failure that has nothing to do with the
-version:
-
-```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-test && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
-```
+The test harness gives each suite a temporary directory of its own and removes
+inherited pane selectors from the tmux processes it starts. `tmuxtest.Main`
+owns that setup and cleanup, including when sibling checkouts run together.
 
 ## The gates
 
@@ -269,8 +263,9 @@ The index of tools in `mcp/README.md` is generated too, by
 advertises.
 
 An example program takes one of two shapes. One a README quotes whole builds
-its own server, with a private `SocketName` and `ConfigFile: os.DevNull`, and
-is tested with `exampletest.Program`. One that shows a fragment takes its
+its own server with `ConfigFile: os.DevNull`, using a socket in a new temporary
+directory or an unused socket name, and is tested with `exampletest.Program`.
+One that shows a fragment takes its
 server as `run(ctx, server)` and is tested with `exampletest.Server`. Both
 compare standard output with `output.txt` exactly, so an example prints only
 what every machine prints alike. An example that types into a pane also runs

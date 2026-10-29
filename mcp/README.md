@@ -50,7 +50,8 @@ command above puts [`libtmux-mcp`][libtmux-mcp-command] in `GOBIN` when that is
 set, and in `$(go env GOPATH)/bin` otherwise.
 
 An MCP client launches it as a subprocess and speaks to it over stdin and
-stdout, so nothing stays running. If your shell cannot find `libtmux-mcp`, add
+stdout. Closing the client ends the MCP process and its owned connections;
+tmux sessions remain running. If your shell cannot find `libtmux-mcp`, add
 that directory to `PATH`.
 
 The Python server installs a command of the same name. Run
@@ -133,8 +134,9 @@ afterwards. [Settings](#settings) lists the other flags, and
 ### [`-socket-name`][guide-choose-a-server]: pick a socket by name
 
 With no flag, the server drives a tmux server of its own, on a socket named
-`libtmux-mcp`, started with a minimal configuration the package ships. An agent
-given that cannot touch the sessions you already have.
+`libtmux-mcp`, started with the package's minimal configuration. An existing
+server on that socket remains in scope. Tools target the selected socket and
+still run with your user's authority; tool selection is not confinement.
 
 Once it has made a session, watch it work from another terminal:
 

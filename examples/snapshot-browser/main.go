@@ -23,8 +23,8 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-snapshot-browser",
 		ConfigFile: os.DevNull,
