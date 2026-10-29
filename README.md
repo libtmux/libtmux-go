@@ -45,7 +45,7 @@ changelog marks each break. Pin an exact version to avoid one.
 
 It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
 older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
-and sends nothing.
+and withholds the requested operation. A read-only version probe may run first.
 
 tmux release candidates are not supported: a feature can require one only until
 its release ships, and a candidate such as `X.Y-rcN` ranks below `X.Y`. See
@@ -167,8 +167,8 @@ A nonzero exit status arrives in the result.
 [`examples/run-to-completion`](examples/run-to-completion) shows one, on a tmux
 server of its own.
 
-Every Go block on this page comes from a program or test that runs on every
-supported release, against a real tmux wherever the block uses one, and each
+Every Go block on this page comes from a program or test that runs on the
+releases its features support, against a real tmux wherever it uses one. Each
 output shown is what that run printed.
 
 ## Find sessions, windows, and panes
@@ -215,9 +215,10 @@ and "nobody to ask" stay different answers.
 
 ### [`tmuxq.Matching`][tmuxq-matching]: several answers from one read
 
-Read the server once with [`Server.Snapshot`][tmux-server-snapshot] and filter
-that read in Go. [`Matching`][tmuxq-matching] takes any filter the `tmux`
-package declares:
+Collect a snapshot with [`Server.Snapshot`][tmux-server-snapshot], then filter
+the captured records in Go. Collection uses sequential listings and identity
+probes; it is not an atomic view of one instant.
+[`Matching`][tmuxq-matching] takes any filter the `tmux` package declares:
 
 <!-- docs:query-in-go -->
 

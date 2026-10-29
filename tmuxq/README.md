@@ -108,8 +108,8 @@ A query is one call. It takes a slice of records, each one what tmux reported
 about a pane, a window, or a session, and a filter that says which of them
 you want.
 
-[`Server.Snapshot`][tmux-server-snapshot] reads every record in one go, and
-only the filter changes from one question to the next.
+[`Server.Snapshot`][tmux-server-snapshot] collects records through sequential
+listings. Queries reuse that captured data; only the filter changes.
 
 A block that starts with `// Given:` is the body of a function that returns
 an error, with the values that line names already in hand.

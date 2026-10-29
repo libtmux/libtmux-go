@@ -4,8 +4,8 @@ This document defines the architecture of the Go module.
 
 ## Compatibility contract
 
-- The module path is `github.com/libtmux/libtmux-go`; its root package
-  name is `tmux`.
+- The module path is `github.com/libtmux/libtmux-go`; the library package is
+  `github.com/libtmux/libtmux-go/tmux`.
 - The language baseline is Go 1.26, and tracks upstream's support window rather
   than a version chosen once: Go supports a release until two newer ones exist,
   so the floor is the oldest release still receiving fixes. Raising it is
@@ -889,8 +889,8 @@ each release increments `N`. No release carries an `-alpha` or other prerelease
 tag unless the maintainer asks for one. The API is not settled, and any release
 may change or remove exported identifiers; the changelog marks each break.
 `v0.0.0-` is the namespace the go command generates pseudo-versions in, so no
-real tag uses it. Ordinary ranges such as `^0.1` accept every `0.1.N`, breaking
-releases included, which is why the advice is to pin an exact version.
+real tag uses it. Any `0.1.N` release may break the API, so record the explicit
+version you tested in your `go.mod`.
 
 Each module is tagged in its own directory, which is how the go command finds a
 module that does not sit at the repository root:
@@ -907,25 +907,22 @@ The shape rather than the numbers: a table naming the current tags is a copy of
 
 A consumer module's `require` on the core has to name a version the proxy can
 resolve, so the core is tagged before the modules that depend on it. The local
-`replace` directives are what make the tree build before any of that exists;
+`go.work` bindings are what make the tree build before any of that exists;
 they are not a substitute for the requirement.
 
 ## One tmux server, chosen once
 
-The MCP server addresses the socket it was started with and nothing in a call
-can retarget it: `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET_PATH`, or
-`LIBTMUX_SOCKET`, resolved at launch, with `-doctor` naming which was taken.
-When none is given the server passes tmux no socket, and tmux picks the server.
-The shared cross-port contract uses the same one-socket process boundary.
+The MCP server's backend addresses the socket selected at startup. No tool
+argument selects another backend socket: `-socket-name`, `-socket-path`,
+`LIBTMUX_SOCKET_PATH`, or `LIBTMUX_SOCKET`, resolved at launch, with `-doctor`
+naming which was taken. When none is given the server passes tmux no socket,
+and tmux picks the server. The shared cross-port contract uses the same
+one-socket process boundary.
 
-This is a decision rather than an omission, and the reasoning is not
-ergonomics. An MCP server runs with the operator's authority and is driven by a
-model reading text it did not write. A per-call socket makes "which tmux" part
-of that text, so a model that is talked into a socket path reaches a tmux the
-operator never granted — every other server on the machine, including one
-holding a session someone is working in. Fixing the target at launch makes that
-unreachable by construction rather than by a check that has to be right every
-time.
+Fixing the backend at launch keeps socket selection in the operator's
+configuration rather than in each tool call. It does not confine programs a
+tool starts: pane input and commands run with the operator's authority, and
+those programs can reach other sockets. Tool selection is not a sandbox.
 
 Two alternatives were weighed. Taking a socket per call and validating it
 against an operator-declared allowlist keeps the reach and adds a list to get
@@ -933,7 +930,7 @@ wrong, and the failure is silent: an allowlist with one entry too many is
 indistinguishable from a correct one until it matters. Running one server per
 tmux socket is what this design already supports and costs a process. Discovery
 is deliberately outside MCP: an operator points a second instance at another
-socket, while nothing a model says can reach it from the first one.
+socket; that instance advertises operations for the other selected backend.
 
 The cost is real and is not hidden: a client that wants two tmux servers runs
 two of these. That is the trade, taken deliberately.

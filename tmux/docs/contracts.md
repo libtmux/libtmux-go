@@ -9,8 +9,10 @@ github.com/libtmux/libtmux-go/tmux`, is the reference for every call.
 
 The library needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host.
 Before an operation reaches a daemon older than 3.3a, including unpatched 3.3,
-it returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] and sends nothing;
-a plan leaves its operations skipped.
+it returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] without sending the
+requested operation; a plan leaves its operations skipped. A read-only version
+probe may run first, unless the handle already carries a qualified daemon
+version.
 
 tmux release candidates are not supported: a feature can require one only until
 its release ships, and a candidate such as `X.Y-rcN` ranks below `X.Y`, so the
@@ -34,7 +36,7 @@ redefines one defeats it.
 
 Some operations need more than the 3.3a floor, or meet a defect in one release.
 Each is refused with [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] before
-anything is sent, and only on the releases that need it:
+the requested operation is sent, and only on the releases that need it:
 
 - Named buffer deletion or rename needs 3.4.
 - Raw `split-window -p` is refused on 3.4 alone.

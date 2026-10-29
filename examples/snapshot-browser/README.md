@@ -1,9 +1,9 @@
 # snapshot-browser
 
-One read of the whole server, walked down all three levels.
+Collect the whole server, then walk all three levels.
 
-A snapshot is every session, window, and pane as they were at one instant. It is
-one tmux command, and everything you ask of it afterwards is free.
+A snapshot collects the server's lists in sequence. Once collected, its
+accessors read the captured records without another tmux command.
 
 ## Running it
 
@@ -54,8 +54,8 @@ func start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-snapshot-browser",
 		ConfigFile: os.DevNull,
@@ -105,13 +105,12 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 
 ## What to look at
 
-**One read, not three.** Listing sessions, then windows per session, then panes
-per window is one command plus one per session plus one per window. This is one
-command total.
+**One collection pass.** The server's sessions, windows, panes, and clients are
+listed by kind, rather than queried separately for each parent.
 
-**It is consistent with itself.** Everything in a snapshot came from the same
-moment. Walking it cannot show you a window whose session has since been killed,
-which a sequence of separate reads can.
+**Collection is not atomic.** Identity probes detect a daemon replacement,
+but topology can change between listings. A snapshot is an observational view,
+not a transaction.
 
 **It never refreshes.** The snapshot is what tmux said when it was taken.
 Nothing in it changes underneath you, which is what makes it safe to walk twice
