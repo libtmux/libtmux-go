@@ -12,6 +12,11 @@ Before an operation reaches a daemon older than 3.3a, including unpatched 3.3,
 it returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] and sends nothing;
 a plan leaves its operations skipped.
 
+tmux release candidates are not supported: a feature can require one only until
+its release ships, and a candidate such as `X.Y-rcN` ranks below `X.Y`, so the
+3.3a floor refuses a candidate of 3.3a. See
+[Release candidates](https://libtmux.org/en/tmux/guides/tmux-support/#release-candidates).
+
 A tmux that names no release, such as OpenBSD's base tmux or a bare `master`
 build, is refused too, and its error says the version is unrecognized rather
 than too low. A tmux older than 3.2 cannot answer the check and is refused the
