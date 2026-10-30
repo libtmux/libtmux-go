@@ -31,6 +31,135 @@ func (name ClientName) String() string { return string(name) }
 // Session is one materialized tmux session record. It is normally returned by
 // [Server.Snapshot], [Server.Session], or [Session.Refresh]. A zero Session is
 // not a usable tmux target.
+//
+// # What is on here
+//
+// A Session is a record read at one moment,
+// and the methods that act on tmux address the session by its stable
+// [SessionID].
+// They fall into the groups below.
+//
+// # Identity and refreshing
+//
+// A record does not update: [Session.Refresh] looks the session up again by its
+// stable [SessionID] and returns a new record, leaving the receiver as it was.
+// [SessionFromEnv] finds the session that holds the environment's pane.
+// Equality compares the stable ID and the tmux server that produced the record.
+//
+//   - Reach: [SessionFromEnv], [Session.Refresh]
+//   - Identity: [Session.ID], [Session.Server], [Session.Ref], [Session.Equal],
+//     [Session.String], [Session.MarshalJSON]
+//
+// # Fields on the record
+//
+// The typed accessors read tmux's session formats from the record in hand and
+// never query tmux.
+// Each returns false as its second result when the value is absent, empty, or
+// malformed, and some formats need tmux 3.6 or later.
+// The raw expansions come back as a [FormatValues],
+// where [FormatValues.Raw] tells an absent field from a present empty one.
+//
+//   - Name and time: [Session.Name], [Session.Path], [Session.Created],
+//     [Session.Activity], [Session.LastAttached]
+//   - Attached clients: [Session.Attached], [Session.AttachedList],
+//     [Session.ManyAttached]
+//   - Group: [Session.Group], [Session.Grouped], [Session.GroupSize],
+//     [Session.GroupAttached], [Session.GroupAttachedList],
+//     [Session.GroupList], [Session.GroupManyAttached]
+//   - Windows: [Session.WindowCount], [Session.ActiveWindowIndex],
+//     [Session.LastWindowIndex]
+//   - Alerts: [Session.Alert], [Session.Alerts], [Session.ActivityFlag],
+//     [Session.BellFlag], [Session.SilenceFlag]
+//   - Other: [Session.Active], [Session.Marked], [Session.Stack],
+//     [Session.Format]
+//   - Raw: [Session.Formats]
+//
+// # Windows and panes
+//
+// A record from a snapshot holds its windows and panes, and reading them
+// queries nothing;
+// a record from a lookup, a refresh, or [Server.NewSession] carries no
+// relations and reports false.
+// The resolvers read live state and the search methods ask tmux,
+// and a search takes a [TmuxFilter], where nil omits tmux's -f expression.
+// A window made or selected here comes back freshly materialized,
+// and selecting one is session-scoped:
+// it makes no promise about clients attached to other sessions.
+//
+//   - Held by the record: [Session.Windows], [Session.Panes],
+//     [Session.ActiveWindow], [Session.ActivePane]
+//   - Read live: [Session.ResolveActiveWindow], [Session.ResolveActivePane]
+//   - Search: [Session.SearchWindows], [Session.SearchPanes]
+//   - Create: [Session.NewWindow]
+//   - Select: [Session.SelectWindow], [Session.NextWindow],
+//     [Session.PreviousWindow], [Session.LastWindow]
+//
+// # Running a command
+//
+// Run starts a command in a new window with a terminal, waits for it,
+// and returns its exit status and the screen it left;
+// a nonzero status is a result, not an error.
+// Start returns once the command is under way,
+// and if the [Running] it returns is never waited on,
+// the window it created is never removed.
+// Cmd instead sends a raw tmux subcommand targeted at the session.
+//
+// [Session.Run], [Session.Start], and [Session.Cmd]
+//
+// # Renaming and ending
+//
+// Rename returns a new record,
+// and it rejects an invalid name before running tmux
+// with an error matching [ErrInvalidRequest].
+// Killing the session removes its winlinks and detaches ordinary attached
+// clients, destroying any window left with no links;
+// a window kill removes one window from every session it is linked into.
+// KillWith can instead destroy every other session or only clear alerts.
+// A completed kill is a [CommandError] only when it wrote to stderr,
+// so a nonzero exit without stderr is ignored.
+//
+// [Session.Rename], [Session.Kill], [Session.KillWith], and
+// [Session.KillWindow]
+//
+// # Options, hooks, and environment
+//
+// Typed reads include inherited values,
+// and a failed read is returned rather than answered with zero values.
+// A write by name reaches an option the typed setters do not cover,
+// and each known option has a typed setter that [SessionOptionValues] pairs
+// with its accessor.
+// The environment is the session's own, apart from the server's global one:
+// reading one variable reports false for a missing or hidden entry,
+// and unsetting deletes an entry where removing marks it for removal from the
+// environment of new processes.
+//
+//   - Read options: [Session.Options], [Session.RawOption]
+//   - Write options: [Session.SetOption], [Session.AppendOption],
+//     [Session.UnsetOption]
+//   - Typed setters, for example: [Session.SetMouse], [Session.SetStatus],
+//     [Session.SetHistoryLimit]
+//   - Read hooks: [Session.Hooks], [Session.RawHook]
+//   - Write hooks: [Session.SetHook], [Session.SetHooks], [Session.AppendHook],
+//     [Session.UnsetHook], [Session.RunHook]
+//   - Environment: [Session.ShowEnvironment], [Session.GetEnvironment],
+//     [Session.SetEnvironment], [Session.UnsetEnvironment],
+//     [Session.RemoveEnvironment]
+//
+// # Clients and connections
+//
+// Attach hands the caller's terminal to the session and blocks until detach or
+// context cancellation.
+// The other client methods act on every client attached to the session,
+// except one that switches tmux's current client to it.
+// Opening control mode needs tmux 3.7 and returns a [Connection] that the
+// caller must close;
+// a session already bound to a connection can open neither another nor a
+// notification stream.
+//
+//   - Terminal: [Session.Attach]
+//   - Every attached client: [Session.DetachClients], [Session.Lock]
+//   - Current client: [Session.SwitchClient]
+//   - Control mode: [Session.OpenControl], [Session.OpenNotifications]
 type Session struct {
 	formats   formatValues
 	server    Server
