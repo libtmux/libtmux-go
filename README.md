@@ -47,6 +47,10 @@ It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
 older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
 and sends nothing.
 
+tmux release candidates are not supported: a feature can require one only until
+its release ships, and a candidate such as `X.Y-rcN` ranks below `X.Y`. See
+[Release candidates](https://libtmux.org/en/tmux/guides/tmux-support/#release-candidates).
+
 The detail is in [the library contracts][contract-requirements].
 
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
