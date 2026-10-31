@@ -1,0 +1,34 @@
+# What CI runs. scripts/ci-plan.sh turns this into the tests workflow's
+# matrices; scripts/matrix.sh and the documentation tests read it too.
+#
+# One entry per line: a kind, then a value. Releases run oldest first.
+#
+#   supported    a released tmux in the support table. A push or pull request
+#                runs the first and the last.
+#   refused      a release below the floor, started to prove it is refused
+#   development  unreleased tmux. It runs with the whole table and may fail.
+#   control      the first release with the control client the older-daemon
+#                tests start
+#   go           a Go toolchain the module jobs run
+
+supported 3.3a
+supported 3.4
+supported 3.5
+supported 3.6
+supported 3.7
+supported 3.7a
+supported 3.7b
+supported 3.7c
+supported 3.8
+
+refused 3.0a
+refused 3.1c
+refused 3.2a
+refused 3.3
+
+development master
+
+control 3.7
+
+go 1.26
+go 1.27

@@ -13,7 +13,8 @@
 # checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
 # <version>/bin/tmux, or let it look where the matrix is usually built. Narrow
 # what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS. Set
-# LIBTMUX_MATRIX_REQUIRED=1 when absence must fail rather than skip.
+# LIBTMUX_MATRIX_REQUIRED=1 when absence must fail rather than skip. The
+# versions it covers are the supported ones in .github/ci-matrix.txt.
 
 set -uo pipefail
 
@@ -88,7 +89,18 @@ for module in "${modules[@]}"; do
     fi
 done
 
-supported_versions=(3.3a 3.4 3.5 3.6 3.7 3.7a 3.7b 3.7c 3.8)
+# The releases CI supports are written down once, in the CI manifest.
+manifest="$repository_root/.github/ci-matrix.txt"
+supported_versions=()
+while read -r kind value _; do
+    if [[ $kind == supported ]]; then
+        supported_versions+=("$value")
+    fi
+done < <(sed 's/#.*//' "$manifest")
+if (( ${#supported_versions[@]} == 0 )); then
+    echo "matrix: $manifest lists no supported release" >&2
+    exit 1
+fi
 versions=()
 if [[ -n ${LIBTMUX_MATRIX_VERSIONS:-} ]]; then
     read -r -a versions <<< "$LIBTMUX_MATRIX_VERSIONS"

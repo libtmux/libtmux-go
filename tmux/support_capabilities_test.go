@@ -79,19 +79,17 @@ func TestTheCommittedManifestIsTheRegistry(t *testing.T) {
 	}
 }
 
-var tmuxMatrixPattern = regexp.MustCompile(`tmux-version: \[([^\]]*)\]`)
-
 // supportedStableReleases lists the tagged tmux releases the repository
-// names, in release order: the lanes of the tmux matrix in the test workflow
-// and every release the registry itself cites. The manifest schema has no
+// names, in release order: the supported releases in the CI manifest and every
+// release the registry itself cites. The manifest schema has no
 // field for FixedIn, so the docs read a workaround's Releases; this list is
 // how FixedIn stays tied to them. A release that is in neither place is not
-// known to it, so a new tmux release enters by getting a matrix lane.
+// known to it, so a new tmux release enters by joining the CI manifest.
 func supportedStableReleases(t *testing.T) []string {
 	t.Helper()
-	workflow, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "tests.yml"))
+	manifest, err := os.ReadFile(filepath.Join("..", ".github", "ci-matrix.txt"))
 	if err != nil {
-		t.Fatalf("read the test workflow: %v", err)
+		t.Fatalf("read the CI manifest: %v", err)
 	}
 	found := map[string]bool{}
 	add := func(raw string) {
@@ -100,12 +98,18 @@ func supportedStableReleases(t *testing.T) []string {
 			found[raw] = true
 		}
 	}
-	match := tmuxMatrixPattern.FindSubmatch(workflow)
-	if match == nil {
-		t.Fatal("the test workflow has no tmux-version matrix")
+	listed := false
+	for line := range strings.Lines(string(manifest)) {
+		if before, _, found := strings.Cut(line, "#"); found {
+			line = before
+		}
+		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == "supported" {
+			add(fields[1])
+			listed = true
+		}
 	}
-	for lane := range strings.SplitSeq(string(match[1]), ",") {
-		add(lane)
+	if !listed {
+		t.Fatal("the CI manifest lists no supported tmux release")
 	}
 	for _, record := range capabilityRegistry {
 		add(record.Since)

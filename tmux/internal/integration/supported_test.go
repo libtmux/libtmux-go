@@ -1,21 +1,23 @@
 package integration
 
 import (
+	"cmp"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// workflowTmuxVersions matches the tmux releases the tests workflow builds and
-// runs compatible module coverage against. It is a YAML flow sequence of
-// quoted versions.
-var workflowTmuxVersions = regexp.MustCompile(`(?m)^\s+tmux-version:\s*\[([^\]]+)\]`)
+// ciManifestPath is the one place the tmux releases and Go toolchains CI runs
+// are written down. The plan script, the matrix script and these tests read it,
+// and the tests workflow reads the plan.
+const ciManifestPath = ".github/ci-matrix.txt"
 
 // documentedRange matches a supported range stated to a reader. Whitespace
 // rather than a space: prose wraps, and a range split across two lines is the
@@ -39,26 +41,24 @@ var documentedNamedFloor = regexp.MustCompile(
 // measurements.
 var benchmarkSection = regexp.MustCompile(`(?m)^## tmux (\d+\.\d+[a-z]?(?:-rc\d*)?)\s*$`)
 
-func workflowVersionNames(t *testing.T, root string) []string {
+// ciManifestEntries lists the values of one kind in the CI manifest, in file
+// order.
+func ciManifestEntries(t *testing.T, root, kind string) []string {
 	t.Helper()
-	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "tests.yml"))
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(ciManifestPath)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	matrix := workflowTmuxVersions.FindSubmatch(workflow)
-	if matrix == nil {
-		t.Fatal("the tests workflow builds no tmux matrix")
-	}
-	var versions []string
-	for entry := range strings.SplitSeq(string(matrix[1]), ",") {
-		name := strings.Trim(strings.TrimSpace(entry), `"'`)
-		// The master lane tracks upstream and is advisory; it is not a
-		// supported release, so no document promises it.
-		if name != "master" {
-			versions = append(versions, name)
+	var values []string
+	for line := range strings.Lines(string(content)) {
+		if before, _, found := strings.Cut(line, "#"); found {
+			line = before
+		}
+		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == kind {
+			values = append(values, fields[1])
 		}
 	}
-	return versions
+	return values
 }
 
 func TestDocumentedTmuxRangesAreTested(t *testing.T) {
@@ -66,10 +66,14 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 
 	root := repositoryRoot(t)
 	tested := make([]tmux.Version, 0, 8)
-	for _, raw := range workflowVersionNames(t, root) {
+	supported := ciManifestEntries(t, root, "supported")
+	if len(supported) == 0 {
+		t.Fatalf("%s lists no supported tmux release", ciManifestPath)
+	}
+	for _, raw := range supported {
 		version, err := tmux.ParseVersion(raw)
 		if err != nil {
-			t.Fatalf("the workflow matrix names %q, which is not a tmux version: %v", raw, err)
+			t.Fatalf("%s names %q, which is not a tmux version: %v", ciManifestPath, raw, err)
 		}
 		tested = append(tested, version)
 	}
@@ -79,7 +83,7 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 	if !slices.ContainsFunc(tested, func(version tmux.Version) bool {
 		return version.String() == connectionFloor
 	}) {
-		t.Fatalf("the workflow matrix omits the connection floor %s", connectionFloor)
+		t.Fatalf("%s omits the connection floor %s", ciManifestPath, connectionFloor)
 	}
 	allowedRanges := map[[2]string]bool{
 		{oldest, newest}:          true,
@@ -125,8 +129,8 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 	}
 	for _, version := range tested {
 		if !slices.Contains(measured, version.String()) {
-			t.Errorf("the workflow runs tmux %s and BENCHMARKS.md records no "+
-				"table for it", version)
+			t.Errorf("%s supports tmux %s and BENCHMARKS.md records no "+
+				"table for it", ciManifestPath, version)
 		}
 	}
 	for _, version := range measured {
@@ -136,8 +140,8 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 		if !slices.ContainsFunc(tested, func(run tmux.Version) bool {
 			return run.String() == version
 		}) {
-			t.Errorf("BENCHMARKS.md records tmux %s and the workflow runs no "+
-				"such release", version)
+			t.Errorf("BENCHMARKS.md records tmux %s and %s supports no "+
+				"such release", version, ciManifestPath)
 		}
 	}
 }
@@ -216,7 +220,7 @@ func TestMatrixCanRequireItsDirectory(t *testing.T) {
 }
 
 func TestRequiredMatrixRejectsEachMissingSupportedVersion(t *testing.T) {
-	supported := workflowVersionNames(t, repositoryRoot(t))
+	supported := ciManifestEntries(t, repositoryRoot(t), "supported")
 	for _, missing := range supported {
 		t.Run(missing, func(t *testing.T) {
 			matrix := t.TempDir()
@@ -303,5 +307,76 @@ func writeMatrixExecutable(t *testing.T, path, contents string) {
 	}
 	if err := os.WriteFile(path, []byte(contents), 0o700); err != nil {
 		t.Fatal(err)
+	}
+}
+
+var releaseName = regexp.MustCompile(`^(\d+)\.(\d+)([a-z]?)$`)
+
+// compareReleases orders two tmux release names. A lettered point release
+// follows the release it patches, so 3.3 comes before 3.3a, which is the
+// opposite of how a version library ranks a suffix.
+func compareReleases(t *testing.T, left, right string) int {
+	t.Helper()
+	key := func(name string) (int, int, string) {
+		match := releaseName.FindStringSubmatch(name)
+		if match == nil {
+			t.Fatalf("%s names %q, which is not a tmux release", ciManifestPath, name)
+		}
+		major, _ := strconv.Atoi(match[1])
+		minor, _ := strconv.Atoi(match[2])
+		return major, minor, match[3]
+	}
+	leftMajor, leftMinor, leftLetter := key(left)
+	rightMajor, rightMinor, rightLetter := key(right)
+	return cmp.Or(
+		cmp.Compare(leftMajor, rightMajor),
+		cmp.Compare(leftMinor, rightMinor),
+		cmp.Compare(leftLetter, rightLetter),
+	)
+}
+
+// ciManifestKinds is every kind the plan understands, so a kind added to the
+// manifest without a rule here fails rather than being ignored by the tests.
+var ciManifestKinds = []string{"supported", "refused", "development", "control", "go"}
+
+func TestCIManifestIsOrderedAndAgreesWithTheLibrary(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(ciManifestPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.Lines(string(content)) {
+		if before, _, found := strings.Cut(line, "#"); found {
+			line = before
+		}
+		if fields := strings.Fields(line); len(fields) > 0 && !slices.Contains(ciManifestKinds, fields[0]) {
+			t.Errorf("%s has an entry of kind %q the tests do not check", ciManifestPath, fields[0])
+		}
+	}
+
+	supported := ciManifestEntries(t, root, "supported")
+	for i := 1; i < len(supported); i++ {
+		if compareReleases(t, supported[i-1], supported[i]) >= 0 {
+			t.Errorf("%s lists %s before %s; releases run oldest first, "+
+				"and the first and last are the edges", ciManifestPath, supported[i-1], supported[i])
+		}
+	}
+	if supported[0] != tmux.MinimumSupportedVersion {
+		t.Errorf("the oldest supported release is %s and the library's floor is %s",
+			supported[0], tmux.MinimumSupportedVersion)
+	}
+	if newest := supported[len(supported)-1]; newest != tmux.MaximumTestedVersion {
+		t.Errorf("the newest supported release is %s and the library's newest tested is %s",
+			newest, tmux.MaximumTestedVersion)
+	}
+	for _, refused := range ciManifestEntries(t, root, "refused") {
+		if compareReleases(t, refused, tmux.MinimumSupportedVersion) >= 0 {
+			t.Errorf("%s refuses %s, which the library supports", ciManifestPath, refused)
+		}
+	}
+	if control := ciManifestEntries(t, root, "control"); !slices.Equal(control, []string{tmux.MinimumConnectionVersion}) {
+		t.Errorf("control = %v, want the library's connection floor %s", control, tmux.MinimumConnectionVersion)
 	}
 }

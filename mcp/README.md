@@ -600,10 +600,11 @@ It serves one tmux server over stdin and stdout. Reference:
 ## Support and status
 
 - **Go 1.26+ and tmux 3.3a or newer.** The server refuses an older tmux before
-  the MCP transport starts. CI runs tmux 3.3a through 3.8.
+  the MCP transport starts. CI runs tmux 3.3a and 3.8 on each push, and tmux
+  3.3a through 3.8 for each release.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  across tmux 3.3a through 3.8. macOS is supported on a best-effort basis, and
-  CI coverage for it is highly limited.
+  against the same releases. macOS is supported on a best-effort basis, and CI
+  coverage for it is highly limited.
 - **A module of its own.** `go get` on the tmux library never pulls in the MCP
   SDK.
 - **Tagged as `mcp/vN`.** Pin an exact version in your own `go.mod`; the

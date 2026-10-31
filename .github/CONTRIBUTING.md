@@ -87,13 +87,13 @@ $ LIBTMUX_EMIT_CAPABILITIES=1 go test ./tmux -run TestTheCommittedManifestIsTheR
 ```
 
 The test that ties each workaround's fixed release to its releases reads the
-tmux releases from the lanes of the `tmux-matrix` job in
-`.github/workflows/tests.yml` and from the registry. A new tmux release is
-known to it once it has a lane there.
+tmux releases from the supported entries of `.github/ci-matrix.txt` and from
+the registry. A new tmux release is known to it once it is listed there.
 
-The lanes for 3.3a and 3.7 also name the tests that need exactly that release
-and fail if one of them does not run and pass, so a test that only skips there
-cannot go unnoticed.
+The lanes for 3.3a through 3.7 also name the tests that need exactly that
+release and fail if one of them does not run and pass, so a test that only
+skips there cannot go unnoticed. The 3.3a lane runs on every push; the others
+run with the whole table.
 
 The install gates run the documented version-suffixed commands, so they test
 the latest published MCP server and workspace CLI rather than compiling current
@@ -303,9 +303,43 @@ at a time with `go fix -<analyzer>` does not.
 
 ## What CI covers
 
-CI runs Linux, including WSL, across the supported tmux releases, and compiles
-and tests executable lookup on Windows. It does not run macOS. macOS is
-supported on a best-effort basis, and CI coverage for it is highly limited.
+CI runs Linux, including WSL, and compiles and tests executable lookup on
+Windows. It does not run macOS. macOS is supported on a best-effort basis, and
+CI coverage for it is highly limited.
+
+A push or pull request tests the oldest and the newest supported tmux. The
+whole table, tmux master and the refused releases run for a `v*` tag and for a
+dispatch with `scope=full`. `.github/ci-matrix.txt` lists the releases and Go
+toolchains, and `scripts/ci-plan.sh` turns it into the matrices. The
+`required` job is the one check that passes only when every planned job did.
+
+Before tagging a release, run the whole table on the release commit and wait
+for it to pass:
+
+```console
+$ gh workflow run tests.yml \
+    --ref master \
+    -f scope=full
+```
+
+### Running CI against any tmux
+
+Dispatch the `tests` workflow on any branch to run it against tmux versions,
+tags, branches or commits of github.com/tmux/tmux, and against other Go
+versions:
+
+```console
+$ gh workflow run tests.yml \
+    --ref my-branch \
+    -f scope=custom \
+    -f tmux-ref=a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 \
+    -f go-version=1.26 \
+    -f tmate=on-failure
+```
+
+`tmux-ref` takes a comma-separated list. `tmate` opens a session on the one
+lane that runs, so it needs a single `tmux-ref` and at most one `go-version`,
+and it connects only the account that started the run.
 
 ## Where a test goes
 
