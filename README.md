@@ -786,8 +786,9 @@ period, so pin an exact version. Not recommended for production.
   tmux **3.3a through 3.8** across the core, workspace, and MCP modules,
   tested on releases spanning that range.
 - **Linux, including WSL, is the primary platform.** CI runs every module's
-  tests on Linux across tmux 3.3a through 3.8. macOS is supported on a
-  best-effort basis, and CI coverage for it is highly limited.
+  tests on Linux against tmux 3.3a and 3.8 on each push, and across tmux 3.3a
+  through 3.8 for each release. macOS is supported on a best-effort basis, and
+  CI coverage for it is highly limited.
 - **Other hosts.** The BSDs, illumos, and Plan 9 build. A Windows build
   compiles, and CI tests executable lookup there; no tmux runs there.
 - **Tagged per directory.** Each module carries its own version: the tags are

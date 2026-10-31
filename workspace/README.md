@@ -503,8 +503,8 @@ The program above, with a page of its own, ready to run from a clone.
 
 ## Support and status
 
-- **Go 1.26+ and tmux 3.3a or newer.** CI runs tmux 3.3a through 3.8 against
-  this module.
+- **Go 1.26+ and tmux 3.3a or newer.** CI runs tmux 3.3a and 3.8 against this
+  module on each push, and tmux 3.3a through 3.8 for each release.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
   across the tmux matrix. macOS is supported on a best-effort basis, and CI
   coverage for it is highly limited. On Windows, CI vets the module, and tmux
