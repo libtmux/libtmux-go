@@ -188,6 +188,20 @@ func TestSandboxCanaryFailsWhereTheSuiteIsAbsent(t *testing.T) {
 	}
 }
 
+// The variable that lets the canary's control run without the suite must not
+// let anything else: a child that keeps it and runs a second test is inside the
+// suite, so the canary passes there.
+func TestTheCanaryBypassCoversOnlyTheCanary(t *testing.T) {
+	command := exec.Command(os.Args[0],
+		"-test.run=^(TestSuiteEnvironmentIsSandboxed|TestAssertSandboxedNamesVariablesAndNeverValues)$",
+		"-test.count=1")
+	command.Env = append(os.Environ(), withoutSuiteVariable+"=1")
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("a child holding the bypass variable ran outside the suite:\n%s", output)
+	}
+}
+
 func TestSandboxFindingsNameEachWayOutOfTheSuite(t *testing.T) {
 	t.Parallel()
 
