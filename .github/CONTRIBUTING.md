@@ -24,6 +24,23 @@ version:
 $ export TMUX_TMPDIR=/tmp/libtmux-go-test && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
 ```
 
+The tests need none of that, because `tmuxtest.Main` gives each suite a
+sandbox of its own. A command run from the tree is another matter:
+`tmux-workspace` and `libtmux-mcp` pass tmux no socket unless a flag,
+`LIBTMUX_SOCKET_PATH`, or `LIBTMUX_SOCKET` names one, so tmux picks the server,
+which is the one you are working in. Keep the name of a socket of your own in a
+`.env` at the root of the tree, which git ignores:
+
+```console
+$ printf 'LIBTMUX_SOCKET=libtmux-go-dev\n' > .env
+```
+
+Load it before running a command from the tree:
+
+```console
+$ set -a && . ./.env && set +a
+```
+
 ## The gates
 
 `go test ./...` stops at a module boundary, so every module is named one at a

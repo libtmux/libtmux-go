@@ -17,6 +17,11 @@ coverage.html
 # on one machine and mean nothing anywhere else.
 go.work.sum
 
+# A local file naming a tmux socket of your own, so a command run from this
+# tree never reaches the server you work in. CONTRIBUTING.md shows how to load
+# it.
+.env
+
 # Editor and OS noise.
 *.swp
 *~
