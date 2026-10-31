@@ -32,131 +32,157 @@ import (
 //
 // # Connecting
 //
-// [NewServer] validates one [ServerOptions] without starting tmux, and
-// [NewServerFromEnv] reads the server this process is already inside from TMUX.
-// [Server.IsAlive] answers whether anything is listening, and only an absent
-// server reports false; [Server.CheckAlive] makes an absent server an error.
-// [Server.Start] starts the daemon without a session, so with tmux's
-// exit-empty default it can exit before the next command.
-// [Server.Version] and [Server.RefreshVersion] report the configured tmux
-// binary, and [Server.RequireVersion] fails with [ErrVersionTooLow] when it is
-// older than a minimum.
+// Build a handle from a [ServerOptions] or from the TMUX variable;
+// neither starts tmux.
+// Of the two liveness checks, one answers false for an absent server and the
+// other makes an absent server an error.
+// A version minimum fails with [ErrVersionTooLow], and a control-mode client,
+// or a session created together with its [Connection], needs tmux 3.7.
 //
-// [Server.OpenControl] attaches a control-mode client to a session,
-// [Server.OpenNotifications] opens an observation-only [NotificationStream] on
-// one, and [Server.NewSessionConnection] creates a session together with a
-// [Connection].
-// [Server.ConnectionBound] reports whether a handle belongs to one.
-//
-// [Server.SocketPath], [Server.SocketSelection], [Server.ConfigFile],
-// [Server.Executable], and [Server.ProcessEnvironment] report what the handle
-// was built from.
-// [Server.WithSocketPath] and [Server.WithProcessEnvironmentValue] return a
-// copy that differs in that one setting.
-// [Server.Equal] compares two handles by socket, and [Server.String] names the
-// selector.
+//   - Build: [NewServer], [NewServerFromEnv]
+//   - Liveness: [Server.IsAlive], [Server.CheckAlive]
+//   - Version: [Server.Version], [Server.RefreshVersion],
+//     [Server.RequireVersion]
+//   - Control mode: [Server.OpenControl], [Server.OpenNotifications],
+//     [Server.NewSessionConnection], [Server.ConnectionBound]
+//   - Built from: [Server.SocketPath], [Server.SocketSelection],
+//     [Server.ConfigFile], [Server.Executable], [Server.ProcessEnvironment]
+//   - Copies: [Server.WithSocketPath], [Server.WithProcessEnvironmentValue]
+//   - Identity: [Server.Equal], [Server.String]
 //
 // # Finding one thing
 //
-// [Server.Session] and [Server.SessionByName] return one session,
-// [Server.Window] and [Server.Pane] take tmux IDs,
-// and [Server.Client] takes a client name.
 // A lookup that finds nothing returns an error matching [ErrNotFound],
 // or [ErrNoServer] when no server is running.
-// [Server.HasSession] returns a bool instead,
+// The existence check returns a bool instead,
 // and a missing server counts as no session.
+//
+//   - By ID: [Server.Session], [Server.Window], [Server.Pane]
+//   - By name: [Server.SessionByName], [Server.Client]
+//   - Exists: [Server.HasSession]
 //
 // # Listing everything
 //
-// [Server.Sessions], [Server.Windows], [Server.Panes], and [Server.Clients]
-// list one kind of record each; [Server.Windows] returns one per window link.
+// Each listing returns one kind of record,
+// and the window and pane listings cover every window link.
 // Failures, including [ErrNoServer], stay errors,
 // so an outage does not read as an empty server.
-// [Server.Snapshot] reads them together into a [Snapshot].
-// [Server.ListClients] returns tmux's own client lines instead of records.
+// A [Snapshot] reads the sessions, windows, panes, and clients together,
+// as sequential commands rather than one atomic transaction.
+//
+//   - Records: [Server.Sessions], [Server.Windows], [Server.Panes],
+//     [Server.Clients]
+//   - Together: [Server.Snapshot]
+//   - Raw lines: [Server.ListClients]
 //
 // # Querying things and getting around
 //
-// [Server.SearchSessions], [Server.SearchWindows], [Server.SearchPanes], and
-// [Server.SearchClients] pass a [TmuxFilter] to tmux,
+// The search methods pass a [TmuxFilter] to tmux,
 // which drops the rows that do not match before any record exists.
-// [Session.SearchWindows], [Session.SearchPanes], and [Window.SearchPanes]
-// search below one record the same way.
 // To filter in Go instead, apply a [SessionFilter], [WindowFilter],
-// [PaneFilter], or [ClientFilter] to a slice with tmuxq.Matching.
-// tmuxq.Where, tmuxq.First, and tmuxq.ExactlyOne take a predicate function,
-// and tmuxq.ExactlyOne fails unless exactly one value matches.
+// [PaneFilter], or [ClientFilter] to a slice with tmuxq.Matching,
+// or pass a predicate to tmuxq.Where, tmuxq.First, or tmuxq.ExactlyOne,
+// which fails unless exactly one value matches.
+// Records from a snapshot, and from the listings above, know their neighbors
+// without querying tmux,
+// but a record from a search, a lookup, or [Server.NewSession] carries no
+// relations and reports false;
+// the Resolve methods read live state for any record.
 //
-// A [Snapshot] answers further questions without another command:
-// [Snapshot.SessionByID], [Snapshot.WindowByID], [Snapshot.PaneByID], and
-// [Snapshot.ClientByName].
-//
-// Records from a snapshot, and from the listings above, know their neighbors.
-// Go down with [Session.Windows], [Session.Panes], and [Window.Panes],
-// up with [Pane.Window], [Pane.Session], and [Window.Session],
-// and across to the focused child with [Session.ActiveWindow],
-// [Session.ActivePane], and [Window.ActivePane].
-// [Client.AttachedSession] reaches the session a client shows.
-// None of them queries tmux, and each reports false on a record from a search,
-// a lookup, or [Server.NewSession], which carries no relations.
-//
-// [Pane.ResolveWindow], [Pane.ResolveSession], [Window.ResolveSession],
-// [Session.ResolveActiveWindow], [Session.ResolveActivePane], and
-// [Window.ResolveActivePane] answer the same questions from live state,
-// for any record.
+//   - Search from the server: [Server.SearchSessions], [Server.SearchWindows],
+//     [Server.SearchPanes], [Server.SearchClients]
+//   - Search below one record: [Session.SearchWindows], [Session.SearchPanes],
+//     [Window.SearchPanes]
+//   - Look up in a snapshot: [Snapshot.SessionByID], [Snapshot.WindowByID],
+//     [Snapshot.PaneByID], [Snapshot.ClientByName]
+//   - Down: [Session.Windows], [Session.Panes], [Window.Panes]
+//   - Up: [Pane.Window], [Pane.Session], [Window.Session]
+//   - Across: [Session.ActiveWindow], [Session.ActivePane],
+//     [Window.ActivePane], [Client.AttachedSession]
+//   - Live: [Pane.ResolveWindow], [Pane.ResolveSession],
+//     [Window.ResolveSession], [Session.ResolveActiveWindow],
+//     [Session.ResolveActivePane], [Window.ResolveActivePane]
 //
 // # Changing things
 //
-// [Server.NewSession] creates a detached session and returns its record.
-// [Server.Kill] stops the daemon with everything in it,
-// and [Server.KillSession] ends the session a tmux target selects.
+// A new session is detached and never changes client focus;
+// the first one starts the daemon.
+// A kill takes everything inside with it:
+// one stops the daemon with all its sessions, windows, panes, and clients,
+// and the other ends the session a tmux target selects,
+// leaving pattern and prefix matching to tmux.
+// Start starts the daemon without a session,
+// so with tmux's exit-empty default it can exit before the next command.
+//
+// [Server.NewSession], [Server.Kill], [Server.KillSession], and [Server.Start]
 //
 // # Options and hooks
 //
-// [Server.Options] reads the server's options as a [ServerOptionValues].
-// [Server.RawOption], [Server.SetOption], [Server.AppendOption], and
-// [Server.UnsetOption] work by name, which reaches an option the typed setters
-// do not cover.
-// Known options also have typed setters, such as [Server.SetEscapeTime] and
-// [Server.SetExitEmpty].
+// Options read back as a typed [ServerOptionValues], or one raw value by name,
+// and a write by name reaches an option the typed setters do not cover.
+// Each known option has a typed setter that [ServerOptionValues] pairs with its
+// accessor, and an array option such as command-alias is replaced whole by a
+// setter whose result reports the writes confirmed.
+// The defaults that sessions and windows inherit, and the global hooks,
+// sit on two scope handles rather than on Server itself.
 //
-// [Server.GlobalSessionScope] and [Server.GlobalWindowScope] reach the defaults
-// that sessions and windows inherit, and the global hooks,
-// which are not methods of Server itself:
-// [GlobalSessionScope.Hooks], [GlobalSessionScope.SetHook],
-// [GlobalSessionScope.AppendHook], [GlobalSessionScope.UnsetHook], and
-// [GlobalSessionScope.RunHook], with the same on [GlobalWindowScope].
+//   - Read: [Server.Options], [Server.RawOption]
+//   - Write by name: [Server.SetOption], [Server.AppendOption],
+//     [Server.UnsetOption]
+//   - Typed setters, for example: [Server.SetEscapeTime],
+//     [Server.SetExitEmpty], [Server.SetBufferLimit]
+//   - Array setters, for example: [Server.SetCommandAlias],
+//     [Server.SetTerminalFeatures]
+//   - Scopes: [Server.GlobalSessionScope], [Server.GlobalWindowScope]
+//   - Session-scope hooks: [GlobalSessionScope.Hooks],
+//     [GlobalSessionScope.SetHook], [GlobalSessionScope.AppendHook],
+//     [GlobalSessionScope.UnsetHook], [GlobalSessionScope.RunHook]
+//   - Window-scope hooks: [GlobalWindowScope.Hooks],
+//     [GlobalWindowScope.SetHook], [GlobalWindowScope.AppendHook],
+//     [GlobalWindowScope.UnsetHook], [GlobalWindowScope.RunHook]
 //
 // # Everything else tmux keeps
 //
-// Paste buffers ([Server.ListBuffers], [Server.ShowBuffer],
-// [Server.ShowBufferBytes], [Server.SetBuffer], [Server.LoadBuffer],
-// [Server.LoadBufferFrom], [Server.SaveBuffer], [Server.SaveBufferTo],
-// [Server.DeleteBuffer]),
-// key bindings ([Server.BindKey], [Server.UnbindKey], [Server.ListKeys]),
-// the global environment ([Server.ShowEnvironment], [Server.GetEnvironment],
-// [Server.SetEnvironment], [Server.UnsetEnvironment],
-// [Server.RemoveEnvironment]),
-// configuration ([Server.SourceFile]),
-// shell commands ([Server.RunShell], [Server.IfShell]),
-// wait-for channels, to wait, signal, lock, or unlock ([Server.WaitFor]),
-// the message log ([Server.ShowMessages]),
-// format expansion ([Server.DisplayMessage]),
-// prompt history ([Server.ShowPromptHistory], [Server.ClearPromptHistory]),
-// the commands tmux has ([Server.ListCommands]),
-// access control ([Server.ServerAccess]),
-// and layout checks ([Server.ValidateLayouts]).
+// Paste buffers read as lines or as exact bytes and load from a string, a file,
+// or a stream;
+// the stream forms return [ErrConnectionRequiresProcess] on a handle bound to a
+// [Connection], which loads and saves by path instead.
+// A shell command's captured output needs tmux 3.5,
+// and before tmux 3.8 abandoning a wait-for lock costs its channel one unlock.
+// Layout validation checks each layout and its pane count before any mutation.
+//
+//   - Buffers: [Server.ListBuffers], [Server.ShowBuffer],
+//     [Server.ShowBufferBytes], [Server.SetBuffer], [Server.LoadBuffer],
+//     [Server.LoadBufferFrom], [Server.SaveBuffer], [Server.SaveBufferTo],
+//     [Server.DeleteBuffer]
+//   - Keys: [Server.BindKey], [Server.UnbindKey], [Server.ListKeys]
+//   - Environment: [Server.ShowEnvironment], [Server.GetEnvironment],
+//     [Server.SetEnvironment], [Server.UnsetEnvironment],
+//     [Server.RemoveEnvironment]
+//   - Configuration and layouts: [Server.SourceFile], [Server.ValidateLayouts]
+//   - Shell: [Server.RunShell], [Server.IfShell]
+//   - Channels: [Server.WaitFor]
+//   - Messages and formats: [Server.ShowMessages], [Server.DisplayMessage]
+//   - Prompt history: [Server.ShowPromptHistory], [Server.ClearPromptHistory]
+//   - Commands and access: [Server.ListCommands], [Server.ServerAccess]
 //
 // # Things that need a terminal
 //
-// [Server.DisplayMenu], [Server.CommandPrompt], and [Server.ConfirmBefore] draw
-// on an attached client, and tmux refuses them without one.
-// [Server.AttachSession] attaches the caller's own terminal and blocks until it
+// Menus, prompts, and confirmations draw on an attached client,
+// and tmux refuses them without one.
+// Attaching hands the caller's own terminal to a session and blocks until it
 // detaches.
-// [Server.SwitchClient], [Server.DetachClient], [Server.DetachAllClients],
-// [Server.LockClient], [Server.SuspendClient], and [Server.RefreshClient] act
-// on a client and fail without one;
-// [Server.LockServer] locks every attached client.
+// Switching, detaching, locking, suspending, and refreshing a client act on a
+// client, named or tmux's current one, and fail without one.
+// Locking the server instead locks every attached client.
+//
+//   - Draw: [Server.DisplayMenu], [Server.CommandPrompt],
+//     [Server.ConfirmBefore]
+//   - Attach: [Server.AttachSession]
+//   - Act on a client: [Server.SwitchClient], [Server.DetachClient],
+//     [Server.DetachAllClients], [Server.LockClient], [Server.SuspendClient],
+//     [Server.RefreshClient]
+//   - Every client: [Server.LockServer]
 //
 // Anything tmux can do that is not here is reachable through [Server.Cmd],
 // which runs raw tmux arguments and returns a [CommandResult];
