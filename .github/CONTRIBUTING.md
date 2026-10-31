@@ -355,6 +355,13 @@ a preference:
   it is a structural gate on the package rather than a test of tmux.
 - Starts a tmux server — goes to `internal/integration`.
 
+Wherever a package can start tmux, its `TestMain` returns
+`tmuxtest.Main(m)`. Without it the test process keeps the `TMUX`, `TMUX_PANE`,
+and `LIBTMUX_SOCKET*` of whoever ran it, and a command that names no socket
+reaches that person's own server.
+`TestEveryPackageThatStartsTmuxEntersTheSandbox` fails on a package that
+imports the tmux client, or runs an executable named `tmux`, without one.
+
 An `Example` must end in an output comment. Without one Go compiles it and never
 runs it, so it renders on the package page exactly like a working example while
 being free to be wrong. `TestEveryExampleRuns` fails on any that does not, and

@@ -6,7 +6,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 func write(t *testing.T, root, relative, content string) string {
 	t.Helper()
