@@ -31,7 +31,8 @@
 // # Setup and lifecycle
 //
 // Call [Main] exactly once from TestMain before creating servers. It redirects
-// temporary and tmux socket roots, then cleans registered servers.
+// temporary and tmux socket roots, clears the variables that point a tmux
+// client at a server outside them, then cleans registered servers.
 //
 //	func TestMain(m *testing.M) {
 //		os.Exit(tmuxtest.Main(m))
@@ -238,6 +239,11 @@ var failureGuidance = struct {
 // These variables keep derived paths short and named sockets inside the suite root.
 var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
 
+// socketSelectorPrefix starts every variable a libtmux port may read to pick a
+// socket. The suite clears them with TMUX and TMUX_PANE, which tmux follows
+// to the server a command was typed inside and to the pane it targets.
+const socketSelectorPrefix = "LIBTMUX_SOCKET"
+
 // SuiteRootTagVariable names the environment variable that tags a suite's
 // temporary root. go test runs packages in parallel and every suite among them
 // creates a root beside the others, so a test spawning a child suite sets this
@@ -252,9 +258,11 @@ func suiteRootPrefix() string {
 }
 
 // Main runs the one-call package lifecycle for tmuxtest. It prepares short
-// temporary paths, redirects [suiteEnvironment] into them, runs m, cleans
-// registered servers, restores the environment, and returns the final status.
-// TestMain should return its result through [os.Exit].
+// temporary paths, redirects [suiteEnvironment] into them, clears the
+// variables that select a server outside them, runs m, cleans registered
+// servers, restores the environment, and returns the final status. It returns
+// 2 without running m when the environment would still reach a server outside
+// the suite. TestMain should return its result through [os.Exit].
 func Main(m *testing.M) int {
 	if !platformSupported() {
 		fmt.Fprintf(os.Stderr, "tmuxtest: real tmux tests are unsupported on %s\n", runtime.GOOS)
@@ -272,6 +280,12 @@ func runSuite(run func() int) int {
 	restoreEnvironment, err := replaceSuiteEnvironment(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, harnessFailure("redirect the suite environment", err))
+		_ = os.RemoveAll(root)
+		return 2
+	}
+	if err := assertSandboxed(root); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		_ = restoreEnvironment()
 		_ = os.RemoveAll(root)
 		return 2
 	}
@@ -800,10 +814,11 @@ func scrubTmuxEnvironment(environment []string) []string {
 	return cleaned
 }
 
-// replaceSuiteEnvironment points every variable in [suiteEnvironment] at root
-// and returns one call that restores all of them. A variable that cannot be set
-// undoes the ones already replaced, so a failure leaves the environment as it
-// was found rather than half redirected.
+// replaceSuiteEnvironment points every variable in [suiteEnvironment] at root,
+// clears the variables [ambientTmuxNames] finds, and returns one call that
+// restores all of them. A variable that cannot be set undoes the ones already
+// replaced, so a failure leaves the environment as it was found rather than
+// half redirected.
 func replaceSuiteEnvironment(root string) (func() error, error) {
 	restores := make([]func() error, 0, len(suiteEnvironment))
 	restore := func() error {
@@ -823,7 +838,81 @@ func replaceSuiteEnvironment(root string) (func() error, error) {
 		}
 		restores = append(restores, undo)
 	}
+	for _, key := range ambientTmuxNames(os.Environ()) {
+		undo, err := unsetEnvironment(key)
+		if err != nil {
+			_ = restore()
+			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		restores = append(restores, undo)
+	}
 	return restore, nil
+}
+
+// ambientTmuxNames returns the names in environment through which a command
+// that names no socket still reaches a server the suite did not start: TMUX,
+// TMUX_PANE, and every variable starting with [socketSelectorPrefix].
+func ambientTmuxNames(environment []string) []string {
+	var names []string
+	for _, entry := range environment {
+		key, _, _ := strings.Cut(entry, "=")
+		if key == "TMUX" || key == "TMUX_PANE" || strings.HasPrefix(key, socketSelectorPrefix) {
+			if !slices.Contains(names, key) {
+				names = append(names, key)
+			}
+		}
+	}
+	return names
+}
+
+// sandboxFindings lists, by variable name and never by value, each way
+// environment lets a tmux command that names no socket leave root: an
+// ambient selector still set, or a default socket outside root.
+func sandboxFindings(environment []string, root string) []string {
+	var findings []string
+	for _, name := range ambientTmuxNames(environment) {
+		findings = append(findings, name+" is set")
+	}
+	directory := ""
+	for _, entry := range environment {
+		if value, ok := strings.CutPrefix(entry, "TMUX_TMPDIR="); ok {
+			directory = value
+		}
+	}
+	if directory == "" || !filepath.IsAbs(directory) {
+		return append(findings, "TMUX_TMPDIR is not an absolute path")
+	}
+	// The spelling of root is compared as written, never resolved: it is
+	// the one TMUX_TMPDIR was given.
+	socket := filepath.Join(directory, "tmux-"+strconv.Itoa(os.Getuid()), "default")
+	relative, err := filepath.Rel(root, socket)
+	if root == "" || err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		findings = append(findings, "the default socket is outside the suite root")
+	}
+	return findings
+}
+
+// assertSandboxed fails unless the process environment holds no selector of a
+// server outside root and its default socket lies inside root.
+func assertSandboxed(root string) error {
+	findings := sandboxFindings(os.Environ(), root)
+	if len(findings) == 0 {
+		return nil
+	}
+	return fmt.Errorf("tmuxtest: refusing to run unsandboxed: %s", strings.Join(findings, "; "))
+}
+
+func unsetEnvironment(key string) (func() error, error) {
+	previous, existed := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		return nil, err
+	}
+	return func() error {
+		if existed {
+			return os.Setenv(key, previous)
+		}
+		return os.Unsetenv(key)
+	}, nil
 }
 
 func replaceEnvironment(key, value string) (func() error, error) {

@@ -22,7 +22,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if isPTYHelperProcess(os.Args[1:]) {
+	// The second condition is withoutSuiteVariable: the canary's negative
+	// control runs a child that keeps a decoy TMUX, which Main would clear.
+	if isPTYHelperProcess(os.Args[1:]) || os.Getenv("LIBTMUX_CANARY_WITHOUT_SUITE") != "" {
 		os.Exit(m.Run())
 	}
 	os.Exit(tmuxtest.Main(m))

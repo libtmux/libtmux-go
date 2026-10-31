@@ -23,6 +23,16 @@ Modules are tagged per directory, so each carries its own version: the core as
   control-mode client, which tmux 3.8 would otherwise silently ignore; an
   older daemon is sent the request unchanged.
 
+### tmux/tmuxtest
+
+- `tmuxtest.Main` clears `TMUX`, `TMUX_PANE` and every `LIBTMUX_SOCKET*`
+  variable from the test process for the length of the suite. Before, only
+  `TMUX_TMPDIR` was redirected, so a suite started from inside tmux sent a
+  command that named no socket to the server around it, because tmux follows
+  `TMUX` over `TMUX_TMPDIR`. `Main` now exits 2 without running a test when any
+  of them is still set, or when the default socket would land outside the
+  suite's directory.
+
 ## v0.1.0, workspace/v0.1.0, mcp/v0.1.0
 
 ### Documentation
