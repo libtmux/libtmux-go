@@ -42,9 +42,10 @@ permissions:
 # nothing reads the result once a newer commit exists on the same pull request.
 # Cancelling is scoped to pull requests so a master push is never interrupted,
 # and the SHA in the group key keeps consecutive master pushes in groups of
-# their own rather than queued behind one another.
+# their own rather than queued behind one another. A dispatch is a request for
+# that run, so its run id keeps one from cancelling or queueing behind another.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'workflow_dispatch' && github.run_id || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Every job below names its modules one at a time. `go test ./...` stops at a
