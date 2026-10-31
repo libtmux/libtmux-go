@@ -250,7 +250,7 @@ server you already hold, and remove it when the test ends.
 ## Keeping your suite to itself
 
 There is nothing to set up. [`tmuxtest.Main`][tmuxtest-main] gives each run of
-a suite a temporary directory of its own and points the test process's
+a suite a private temporary directory of its own and points the test process's
 `TMPDIR`, `GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends. It also
 clears `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable.
 
@@ -263,6 +263,13 @@ clears `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable.
   `Main` exits 2 without running a test.
 - The directory's path is kept short, because a socket path may hold only about
   a hundred bytes.
+- A test that leaves a server running fails the run, even when every test
+  passed. When `m.Run` returns, `Main` scans the whole directory for sockets,
+  not only the one tmux names for itself, and stops each server answering on
+  one with `tmux -S <socket> kill-server`. It reports how many it found, split
+  between the default socket in `TMUX_TMPDIR` and any other, and never a path
+  or a value. It keeps the directory while a server still answers in it, or
+  when part of it could not be scanned, so the server can be found.
 
 ## What it leaves out
 

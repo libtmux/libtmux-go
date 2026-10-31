@@ -23,7 +23,7 @@ const withoutSuiteVariable = "LIBTMUX_CANARY_WITHOUT_SUITE"
 // the names of the variables that select a tmux server. It reports a version
 // and then that no server is running, which is all cleanup needs to finish.
 // The one value it records is TMUX_TMPDIR, which is a directory and not a
-// secret. A child process writes it, for the reason ScriptedTmux does.
+// secret.
 func recordingTmux(t testing.TB, trace string) string {
 	t.Helper()
 
@@ -41,12 +41,21 @@ func recordingTmux(t testing.TB, trace string) string {
 	body.WriteString("case \" $* \" in *\" -V \"*) echo 'tmux 3.8'; exit 0;; esac\n")
 	body.WriteString("echo 'no server running on the recorder' >&2\n")
 	body.WriteString("exit 1\n")
+	return writeExecutable(t, body.String())
+}
+
+// writeExecutable writes script as a file named tmux in a directory of its own
+// and returns its path. A child process writes it, because a fork anywhere in
+// this process holds every open descriptor until it execs, and executing a
+// file some process holds open for writing fails with "text file busy".
+func writeExecutable(t testing.TB, script string) string {
+	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "tmux")
 	write := exec.Command("/bin/sh", "-c", `umask 077 && cat >"$1" && chmod 700 "$1"`, "sh", path)
-	write.Stdin = strings.NewReader(body.String())
+	write.Stdin = strings.NewReader(script)
 	if output, err := write.CombinedOutput(); err != nil {
-		t.Fatalf("write recording tmux: %v: %s", err, output)
+		t.Fatalf("write fake tmux: %v: %s", err, output)
 	}
 	return path
 }
@@ -252,6 +261,15 @@ func TestSandboxFindingsNameEachWayOutOfTheSuite(t *testing.T) {
 		})
 	}
 
+	t.Run("a default socket path too long to use", func(t *testing.T) {
+		t.Parallel()
+		long := "/tmp/ltg-" + strings.Repeat("x", maxDefaultSocketBytes)
+		got := sandboxFindings([]string{"TMUX_TMPDIR=" + long}, long)
+		if want := []string{"the default socket path is too long"}; !slices.Equal(got, want) {
+			t.Errorf("sandboxFindings() = %q, want %q", got, want)
+		}
+	})
+
 	t.Run("no root", func(t *testing.T) {
 		t.Parallel()
 		got := sandboxFindings(clean, "")
@@ -259,6 +277,63 @@ func TestSandboxFindingsNameEachWayOutOfTheSuite(t *testing.T) {
 			t.Errorf("sandboxFindings() = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestPrivateRootFindings(t *testing.T) {
+	t.Parallel()
+
+	directory := func(mode os.FileMode) string {
+		path := filepath.Join(t.TempDir(), "root")
+		if err := os.Mkdir(path, mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(directory(0o700), link); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name string
+		root string
+		want []string
+	}{
+		{"a private directory", directory(0o700), nil},
+		{"a directory others read", directory(0o755), []string{"the suite root is not private"}},
+		{"a directory the group writes", directory(0o770), []string{"the suite root is not private"}},
+		{"a file", file, []string{"the suite root is not a directory"}},
+		{"a missing path", filepath.Join(t.TempDir(), "missing"), []string{"the suite root is not a directory"}},
+		{"a symbolic link to a directory", link, []string{"the suite root is not a directory"}},
+	} {
+		if got := privateRootFindings(test.root); !slices.Equal(got, test.want) {
+			t.Errorf("%s: privateRootFindings() = %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
+func TestAssertSandboxedRefusesARootOthersCanUse(t *testing.T) {
+	root := filepath.Join(shortDirectory(t), "open")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_TMPDIR", root)
+
+	err := assertSandboxed(root)
+
+	if err == nil || !strings.Contains(err.Error(), "the suite root is not private") {
+		t.Fatalf("assertSandboxed() = %v, want a refusal naming the root as not private", err)
+	}
 }
 
 func TestAssertSandboxedNamesVariablesAndNeverValues(t *testing.T) {
