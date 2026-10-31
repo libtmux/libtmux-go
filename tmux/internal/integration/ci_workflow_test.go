@@ -99,6 +99,23 @@ func jobSection(t *testing.T, workflow, job string) string {
 	return ""
 }
 
+// GitHub reads a bare `off` as false. A default that is not one of the options
+// refuses every dispatch that sets nothing, before a run starts.
+func TestTheTmateInputQuotesOffInTheOptionsAndTheDefault(t *testing.T) {
+	t.Parallel()
+
+	content, err := os.ReadFile(filepath.Join(repositoryRoot(t), ".github", "workflows", "tests.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, want := range []string{"options: ['off', before-tests, on-failure]", "default: 'off'"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the tmate input must contain %q", want)
+		}
+	}
+}
+
 func TestTmateIsPinnedLimitedAndConfinedToTheTmuxMatrix(t *testing.T) {
 	t.Parallel()
 
