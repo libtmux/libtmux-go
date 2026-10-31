@@ -123,8 +123,8 @@ The table in the README lists where they differ.
 ## The commands
 
 The command lands in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when
-`GOBIN` is unset. The examples use a tmux socket named `project`, which keeps
-them off the tmux server you have open.
+`GOBIN` is unset. The examples use the tmux socket name `project`.
+Choose an unused name; cleanup kills every session on the selected socket.
 
 [`tmux-workspace load`][cli-load] prints `Loaded project` and the new
 session's id, and `tmux -L project attach` joins the session. Without `-d`,

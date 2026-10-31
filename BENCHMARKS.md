@@ -1,8 +1,8 @@
 # What each execution path costs
 
 Building one six-pane window through every path compatible with the running
-tmux. Every supported release has process, one-lane connection, four-lane
-connection, chained, and chained connection rows. Regenerate with:
+tmux. Subprocess and chained rows run on every supported release; owned
+connection rows require tmux 3.7. Regenerate with:
 
 ```console
 $ go -C benchmarks run .

@@ -71,13 +71,17 @@ dependencies:
 
 ## Which tmux they reach
 
-Each program starts a tmux server of its own, on a private socket with an
-empty config, and that server is gone when the program finishes. They print
-the same thing on every machine and never touch a tmux you have open.
+The programs use empty configs and remove their servers on exit. `quickstart`
+owns a new temporary socket directory. Other programs use dedicated socket
+names: choose an unused name before running one, since an existing server on
+that socket can be modified or killed.
 `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
 server the test harness owns.
 
-Every example but `any-slice` needs tmux 3.3a or newer on `PATH`.
+The subprocess examples need tmux 3.3a or newer on `PATH`. `byte-streams`,
+`control-mode-subscribe`, `fast-path`, `pane-io`, and `run-to-completion` need
+tmux 3.7 for their control connections or observations. `any-slice` needs no
+tmux.
 
 ## Testing them
 

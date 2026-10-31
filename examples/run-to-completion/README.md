@@ -9,6 +9,8 @@ is the screen tmux rendered rather than the bytes the program wrote.
 
 ## Running it
 
+This example needs tmux 3.7 or newer for streaming command output.
+
 ```console
 $ go -C examples run ./run-to-completion
 ```

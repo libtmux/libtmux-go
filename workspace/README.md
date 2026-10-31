@@ -89,8 +89,8 @@ func run(ctx context.Context) (err error) {
 		return fmt.Errorf("parse workspace: %w", err)
 	}
 
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-build-workspace",
 		ConfigFile: os.DevNull,
@@ -150,9 +150,9 @@ window logs: 3 panes
 
 <!-- docs:end -->
 
-The program builds on a tmux server of its own and stops that server before
-it exits, so it leaves nothing behind and does not touch a tmux you already
-use. [`workspace.Parse`][workspace-parse] reads the document and
+The program uses the socket name `libtmux-build-workspace` and stops that server
+before it exits. Choose an unused name: an existing server on that socket can be
+modified or killed. [`workspace.Parse`][workspace-parse] reads the document and
 [`workspace.Build`][workspace-build] builds it.
 
 ## A workspace file
@@ -393,8 +393,8 @@ $ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
 ```
 
 The command lands in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` when
-`GOBIN` is unset. The examples below use a tmux socket named `project`, which
-keeps them off the tmux server you have open.
+`GOBIN` is unset. The examples below use the tmux socket name `project`.
+Choose an unused name; the cleanup command kills every session on that socket.
 
 ### [`tmux-workspace load`][cli-load]: build a workspace
 

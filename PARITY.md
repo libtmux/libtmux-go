@@ -69,9 +69,9 @@ indistinguishable from a result.
   Snapshot-only fields remain direct values or nonblocking accessors.
 - Python iterables and query-list operators become fresh slices and explicit
   `iter.Seq` helpers.
-- Python control-mode fixture behavior remains a context-first, blocking
-  `tmuxtest` helper with retryable contextual teardown. A future public protocol
-  transport is outside the parity claim.
+- Python control-mode fixture behavior maps to a context-first, blocking
+  `tmuxtest` helper with retryable contextual teardown. Public owned control
+  connections are a separate Go API, not this fixture translation.
 - Python exceptions become concrete errors supporting `errors.Is` or
   `errors.As`. Raw command nonzero exits remain result data.
 - Python warnings become concrete values delivered to an optional warning
