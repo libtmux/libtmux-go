@@ -23,6 +23,17 @@ Modules are tagged per directory, so each carries its own version: the core as
   control-mode client, which tmux 3.8 would otherwise silently ignore; an
   older daemon is sent the request unchanged.
 
+- `tmux.NewServer` now uses the socket in `LIBTMUX_SOCKET_PATH`, else the name
+  in `LIBTMUX_SOCKET`, when `ServerOptions` names no socket. A process that sets
+  either variable now reaches that socket, with `LIBTMUX_SOCKET_PATH` winning
+  when both are set. A variable that is empty or only whitespace counts as
+  unset, each one alone. With neither set, tmux still gets no `-L` or `-S` and
+  picks the server itself, so a program that sets neither behaves as before.
+  `ServerOptions.ProcessEnvironment` supplies the variables when it is set.
+- Add `SocketSelection.Source`, which reports what chose the socket as
+  `tmux.SocketSourceExplicit`, `tmux.SocketSourceEnvironmentPath`,
+  `tmux.SocketSourceEnvironmentName`, or `tmux.SocketSourceTmux`.
+
 ### tmux/tmuxtest
 
 - `tmuxtest.NewServerWithOptions` and `tmuxtest.NewControlMode` now remove

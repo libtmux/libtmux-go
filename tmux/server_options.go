@@ -30,6 +30,13 @@ type ServerOptions struct {
 	// SocketName selects tmux's named socket. SocketPath takes precedence.
 	SocketName string
 	// SocketPath selects an explicit tmux socket path.
+	//
+	// With neither SocketName nor SocketPath, the effective environment
+	// chooses: LIBTMUX_SOCKET_PATH is the socket path, else LIBTMUX_SOCKET is
+	// the socket name. A variable that is empty or only whitespace counts as
+	// unset, and any other value is used as written. With neither usable,
+	// tmux gets no socket and picks the server itself: the one TMUX names,
+	// otherwise its default socket. A named socket makes the variables unread.
 	SocketPath string
 	// ConfigFile selects an exact tmux configuration file. Empty lets tmux read
 	// its default configuration, so a program inherits whatever the user
@@ -65,6 +72,7 @@ type serverConfig struct {
 	directory                    string
 	socketName                   string
 	socketPath                   string
+	socketSource                 SocketSource
 	configFile                   string
 	colors                       ColorMode
 	processEnvironment           []string
@@ -92,8 +100,8 @@ func defaultServerDependencies() serverDependencies {
 }
 
 // NewServer validates and snapshots one tmux configuration without starting
-// tmux. Empty socket selectors use the endpoint selected by the frozen
-// environment.
+// tmux. Empty socket selectors use the endpoint the frozen environment
+// selects, as [ServerOptions] describes.
 func NewServer(options ServerOptions) (Server, error) {
 	return newServer(options, defaultServerDependencies())
 }
@@ -117,7 +125,12 @@ func (s Server) WithSocketPath(path string) (Server, error) {
 	config := state.config
 	config.socketName = ""
 	config.socketPath = path
+	config.socketSource = SocketSourceTmux
+	if path != "" {
+		config.socketSource = SocketSourceExplicit
+	}
 	config.socketSelection.Path = selectedSocketPath(config, config.socketSelection.NamedDirectory)
+	config.socketSelection.Source = config.socketSource
 	freezeNamedSocketEnvironment(&config)
 	return Server{state: &serverState{
 		config:   config,
@@ -210,6 +223,13 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 	if !filepath.IsAbs(cwd) {
 		return Server{}, errors.New("snapshot working directory: path is not absolute")
 	}
+	socketSource := SocketSourceExplicit
+	if options.SocketPath == "" && options.SocketName == "" {
+		options.SocketName, options.SocketPath, socketSource = environmentSocket(environment)
+		if err := validateConnectionArguments(options); err != nil {
+			return Server{}, invalidServerOptions(err)
+		}
+	}
 	binary := options.Binary
 	if binary == "" {
 		binary = "tmux"
@@ -227,6 +247,7 @@ func newServer(options ServerOptions, dependencies serverDependencies) (Server, 
 		directory:          filepath.Clean(cwd),
 		socketName:         options.SocketName,
 		socketPath:         options.SocketPath,
+		socketSource:       socketSource,
 		configFile:         options.ConfigFile,
 		colors:             options.Colors,
 		processEnvironment: environment,
