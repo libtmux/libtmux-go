@@ -51,12 +51,41 @@ MESSAGE
     exit 0
 fi
 
-# A tmux namespace of this repository's own. Sibling checkouts sweep their own
-# matrices on the same machine, and a shared socket directory is one sweep
-# ending servers another is still using.
-export TMUX_TMPDIR=${TMUX_TMPDIR:-/tmp/libtmux-go-matrix}
-mkdir -p "$TMUX_TMPDIR"
+# A tmux namespace of this sweep's own, made fresh each run. Sibling checkouts
+# sweep their own matrices on the same machine, and a shared socket directory is
+# one sweep ending servers another is still using. The caller's TMUX_TMPDIR is
+# not reused for the same reason: it is the directory of the tmux they use.
+# Whatever variables point a tmux client at another server are dropped, and the
+# directory sits in TMPDIR only while the default socket in it stays short.
+socket_base=${TMPDIR:-/tmp}
+if [[ $socket_base != /* ]] || (( ${#socket_base} + 32 > 100 )); then
+    socket_base=/tmp
+fi
+if ! TMUX_TMPDIR=$(mktemp -d "${socket_base%/}/lmx.XXXXXX"); then
+    echo "matrix: could not make a directory for tmux sockets" >&2
+    exit 1
+fi
+export TMUX_TMPDIR
 unset TMUX TMUX_PANE
+while read -r selector; do
+    unset "$selector"
+done < <(compgen -v LIBTMUX_SOCKET)
+
+log=
+finish() {
+    local status=$?
+    [[ -n $log ]] && rm -f "$log"
+    # A socket left in the directory may belong to a server that still
+    # answers, which deleting the directory would orphan.
+    if [[ -n $(find "$TMUX_TMPDIR" -type s -print -quit 2>/dev/null) ]]; then
+        echo "matrix: a socket remains in TMUX_TMPDIR, so the directory was kept" >&2
+        (( status == 0 )) && status=1
+    else
+        rm -rf "${TMUX_TMPDIR:?}"
+    fi
+    exit "$status"
+}
+trap finish EXIT
 
 # The workspace stays on. This sweep asks what each tmux release does to the
 # code in this tree, and mcp carries no replace directive, so GOWORK=off would
@@ -137,7 +166,6 @@ for version in "${versions[@]}"; do
 done
 
 log=$(mktemp)
-trap 'rm -f "$log"' EXIT
 
 failed=()
 selected_cells=$(( ${#versions[@]} * ${#modules[@]} ))
