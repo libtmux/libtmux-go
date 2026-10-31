@@ -4,10 +4,12 @@ package tmuxtest
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -162,6 +164,120 @@ func TestHarnessServersKeepTMUXTMPDIRAndDropSelectors(t *testing.T) {
 	}
 	if !slices.Contains(environment, "TMUX_TMPDIR="+root) {
 		t.Error("the control client lost TMUX_TMPDIR")
+	}
+}
+
+// defaultSocketTail is what tmux appends to TMUX_TMPDIR to name its default
+// socket.
+func defaultSocketTail() string {
+	return "/tmux-" + strconv.Itoa(os.Getuid()) + "/default"
+}
+
+// requireTmux returns the tmux on PATH, or skips the test.
+func requireTmux(t *testing.T) string {
+	t.Helper()
+
+	path, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux is not on PATH")
+	}
+	return path
+}
+
+// stopServerAt stops whatever server listens on socket, by naming the socket,
+// and fails the test if it keeps answering.
+func stopServerAt(t *testing.T, tmuxPath, socket string) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+	defer cancel()
+	_ = exec.CommandContext(ctx, tmuxPath, "-S", socket, "kill-server").Run()
+	if !socketQuiet(socket, cleanupTimeout) {
+		t.Errorf("a canary server still answers after kill-server")
+	}
+}
+
+// bareClientServesAt runs a real tmux client that names no socket, with
+// environment as its environment, and reports whether the server it started
+// listens at want. Whatever it started is stopped, by socket, when the test
+// ends. The caller has already checked that environment cannot send the client
+// outside the suite.
+func bareClientServesAt(t *testing.T, tmuxPath string, environment []string, want string) error {
+	t.Helper()
+
+	var directory string
+	for _, entry := range environment {
+		if value, ok := strings.CutPrefix(entry, "TMUX_TMPDIR="); ok {
+			directory = value
+		}
+	}
+	t.Cleanup(func() { stopServerAt(t, tmuxPath, directory+defaultSocketTail()) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, tmuxPath, "-f", os.DevNull, "new-session", "-d", "-s", "canary")
+	command.Env = environment
+	if err := command.Run(); err != nil {
+		t.Fatalf("the bare tmux client did not start a server: %v", err)
+	}
+
+	if socketQuiet(want, 0) {
+		return errors.New("no server listens at the default socket in TMUX_TMPDIR")
+	}
+	// Something answers there; it has to be the server the client started.
+	list := exec.CommandContext(ctx, tmuxPath, "-S", want, "list-sessions", "-F", "#{session_name}")
+	if out, err := list.Output(); err != nil || strings.TrimSpace(string(out)) != "canary" {
+		return errors.New("the server at the default socket in TMUX_TMPDIR is not the one the client started")
+	}
+	return nil
+}
+
+// A recording tmux says what a client was handed; only a real one says where
+// it lands. This runs the client every careless test runs, with no -L and no
+// -S, and requires its server in the suite's default socket.
+func TestARealBareTmuxClientLandsInTheSuite(t *testing.T) {
+	tmuxPath := requireTmux(t)
+	root, err := activeSuiteRoot()
+	if err != nil {
+		t.Fatal("unsandboxed: no suite is active")
+	}
+	// Starting a server is only safe once the environment is known to point
+	// inside the suite.
+	if findings := sandboxFindings(os.Environ(), root); len(findings) != 0 {
+		t.Fatalf("unsandboxed: %s; no tmux was run", strings.Join(findings, "; "))
+	}
+
+	want := os.Getenv("TMUX_TMPDIR") + defaultSocketTail()
+	if err := bareClientServesAt(t, tmuxPath, os.Environ(), want); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The canary above has to be able to fail: a client handed another
+// TMUX_TMPDIR starts its server there, and nothing listens where the suite
+// expects one.
+func TestTheRealClientCanaryFailsForAnotherTmuxTmpdir(t *testing.T) {
+	tmuxPath := requireTmux(t)
+	root, err := activeSuiteRoot()
+	if err != nil {
+		t.Fatal("unsandboxed: no suite is active")
+	}
+	elsewhere := shortDirectory(t)
+	environment := append(slices.DeleteFunc(slices.Clone(os.Environ()), func(entry string) bool {
+		return strings.HasPrefix(entry, "TMUX_TMPDIR=")
+	}), "TMUX_TMPDIR="+elsewhere)
+	// The other directory is still inside the suite, so the control cannot
+	// reach a server of the user's.
+	if findings := sandboxFindings(environment, root); len(findings) != 0 {
+		t.Fatalf("the control is not itself sandboxed: %s; no tmux was run", strings.Join(findings, "; "))
+	}
+
+	want := os.Getenv("TMUX_TMPDIR") + defaultSocketTail()
+	if err := bareClientServesAt(t, tmuxPath, environment, want); err == nil {
+		t.Error("the canary found a server at the suite's default socket for a client handed another TMUX_TMPDIR")
+	}
+	if socketQuiet(elsewhere+defaultSocketTail(), 0) {
+		t.Error("the control's client did not start a server in the directory it was handed")
 	}
 }
 
