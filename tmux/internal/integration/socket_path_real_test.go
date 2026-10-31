@@ -181,6 +181,11 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
 		_ = server.Kill(cleanupCtx)
+		// The frozen path is in the user's own socket directory, outside the
+		// suite, and tmux leaves the file of a server that has exited.
+		if err := os.Remove(selection.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("remove the socket file the server left: %v", errors.Unwrap(err))
+		}
 	})
 	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
