@@ -155,9 +155,10 @@ $ go mod init demo && \
 ```
 
 The program creates a socket path in a new temporary directory, then kills its
-server and removes that directory on the way out. With
-[`ServerOptions`][tmux-serveroptions] at its zero value, it drives the same
-server your `tmux` command does.
+server and removes that directory on the way out. With no socket in
+[`ServerOptions`][tmux-serveroptions], it uses the socket in
+`LIBTMUX_SOCKET_PATH`, else the name in `LIBTMUX_SOCKET`; with neither set it
+reaches the server your own `tmux` command does.
 
 [`Session.Run`][tmux-session-run] is `os/exec` for a program that needs a
 terminal. The command runs in a window of its own with a tty, and you get back

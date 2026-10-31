@@ -14,16 +14,14 @@ client, which the Go tests do not provide.
 You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else — the
 core module has no runtime dependencies.
 
-The test harness gives each suite a temporary directory of its own and removes
-inherited pane selectors from the tmux processes it starts. `tmuxtest.Main`
-owns that setup and cleanup, including when sibling checkouts run together.
-
-The tests need none of that, because `tmuxtest.Main` gives each suite a
-sandbox of its own. A command run from the tree is another matter:
-`tmux-workspace` and `libtmux-mcp` pass tmux no socket unless a flag,
-`LIBTMUX_SOCKET_PATH`, or `LIBTMUX_SOCKET` names one, so tmux picks the server,
-which is the one you are working in. Keep the name of a socket of your own in a
-`.env` at the root of the tree, which git ignores:
+The test harness gives each suite a temporary directory of its own and clears
+`TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable from the test process.
+`tmuxtest.Main` owns that setup and cleanup, including when sibling checkouts
+run together, so the tests need no setup of your own. A command run from the
+tree is another matter: `tmux-workspace` and `libtmux-mcp` pass tmux no socket
+unless a flag, `LIBTMUX_SOCKET_PATH`, or `LIBTMUX_SOCKET` names one, so tmux
+picks the server, which is the one you are working in. Keep the name of a socket
+of your own in a `.env` at the root of the tree, which git ignores:
 
 ```console
 $ printf 'LIBTMUX_SOCKET=libtmux-go-dev\n' > .env
