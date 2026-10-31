@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -86,43 +88,68 @@ func TestFirstSentenceStopsAtTheFirstSentence(t *testing.T) {
 	}
 }
 
-func TestResolveTargetPinsOneSocketAndConfiguration(t *testing.T) {
-	clearTargetEnvironment(t)
-	name, path, config, origin, minimal, err := resolveTarget("", "")
-	if err != nil || name != "libtmux-mcp" || path != "" || config != "" ||
-		origin != "default dedicated socket" || !minimal {
-		t.Fatalf("default target = (%q, %q, %q, %q, %t, %v)", name, path, config, origin, minimal, err)
+// targetFor builds the server the flags and environment select, without
+// starting tmux.
+func targetFor(t *testing.T, flagName, flagPath string) (tmux.Server, string, error) {
+	t.Helper()
+	name, path, config, err := resolveTarget(flagName, flagPath)
+	if err != nil {
+		return tmux.Server{}, "", err
 	}
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: name, SocketPath: path, ConfigFile: config})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server, config, nil
+}
 
-	t.Run("explicit named socket", func(t *testing.T) {
-		clearTargetEnvironment(t)
-		t.Setenv("LIBTMUX_SOCKET", "named")
-		name, path, config, origin, minimal, err := resolveTarget("", "")
-		if err != nil || name != "named" || path != "" || config != "" ||
-			origin != "LIBTMUX_SOCKET" || minimal {
-			t.Fatalf("target = (%q, %q, %q, %q, %t, %v)", name, path, config, origin, minimal, err)
-		}
-	})
-
-	t.Run("explicit path and config", func(t *testing.T) {
-		clearTargetEnvironment(t)
-		t.Setenv("LIBTMUX_SOCKET_PATH", "/env/socket")
-		t.Setenv("LIBTMUX_TMUX_CONFIG", "/env/tmux.conf")
-		name, path, config, origin, minimal, err := resolveTarget("", "")
-		if err != nil || name != "" || path != "/env/socket" ||
-			config != "/env/tmux.conf" || origin != "LIBTMUX_SOCKET_PATH" || minimal {
-			t.Fatalf("target = (%q, %q, %q, %q, %t, %v)", name, path, config, origin, minimal, err)
-		}
-	})
-
+func TestResolveTargetSelectsTheSocketByFlagThenVariableThenTmux(t *testing.T) {
 	for _, test := range []struct {
-		name, flagName, flagPath, environmentName, environmentPath, config string
+		name               string
+		flagName, flagPath string
+		environmentName    string
+		environmentPath    string
+		wantString         string
+		wantSource         tmux.SocketSource
+		wantAbsolutePath   bool
 	}{
-		{name: "both flags", flagName: "named", flagPath: "/socket"},
-		{name: "both environment selectors", environmentName: "named", environmentPath: "/socket"},
-		{name: "relative path", environmentPath: "relative"},
-		{name: "relative config", config: "relative"},
-		{name: "empty named selector", environmentName: " "},
+		{
+			name:       "nothing selects tmux's own choice, with no dedicated socket",
+			wantString: "Server(default)", wantSource: tmux.SocketSourceTmux,
+		},
+		{
+			name: "the name variable", environmentName: "named",
+			wantString: "Server(socket_name=named)", wantSource: tmux.SocketSourceEnvironmentName,
+		},
+		{
+			name: "the path variable", environmentPath: "/env/socket",
+			wantString: "Server(socket_path=/env/socket)", wantSource: tmux.SocketSourceEnvironmentPath,
+		},
+		{
+			name: "both variables, so the path wins without an error", environmentName: "named", environmentPath: "/env/socket",
+			wantString: "Server(socket_path=/env/socket)", wantSource: tmux.SocketSourceEnvironmentPath,
+		},
+		{
+			name: "an empty path variable leaves the name variable in force", environmentName: "named", environmentPath: " ",
+			wantString: "Server(socket_name=named)", wantSource: tmux.SocketSourceEnvironmentName,
+		},
+		{
+			name: "a blank name variable selects nothing", environmentName: " ",
+			wantString: "Server(default)", wantSource: tmux.SocketSourceTmux,
+		},
+		{
+			name: "a relative path variable is left to tmux", environmentPath: "relative/socket",
+			wantString: "Server(socket_path=relative/socket)", wantSource: tmux.SocketSourceEnvironmentPath,
+			wantAbsolutePath: true,
+		},
+		{
+			name: "the name flag beats both variables", flagName: "flagged", environmentName: "named", environmentPath: "/env/socket",
+			wantString: "Server(socket_name=flagged)", wantSource: tmux.SocketSourceExplicit,
+		},
+		{
+			name: "the path flag beats both variables", flagPath: "/flag/socket", environmentName: "named", environmentPath: "/env/socket",
+			wantString: "Server(socket_path=/flag/socket)", wantSource: tmux.SocketSourceExplicit,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			clearTargetEnvironment(t)
@@ -132,10 +159,49 @@ func TestResolveTargetPinsOneSocketAndConfiguration(t *testing.T) {
 			if test.environmentPath != "" {
 				t.Setenv("LIBTMUX_SOCKET_PATH", test.environmentPath)
 			}
+			server, _, err := targetFor(t, test.flagName, test.flagPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := server.String(); got != test.wantString {
+				t.Errorf("target = %s, want %s", got, test.wantString)
+			}
+			selection, err := server.SocketSelection()
+			if err != nil || selection.Source != test.wantSource {
+				t.Errorf("SocketSelection() = (%#v, %v), want source %q", selection, err, test.wantSource)
+			}
+			if test.wantAbsolutePath && !filepath.IsAbs(selection.Path) {
+				t.Errorf("selected path %q is not absolute", selection.Path)
+			}
+		})
+	}
+}
+
+func TestResolveTargetPinsTheConfiguration(t *testing.T) {
+	clearTargetEnvironment(t)
+	t.Setenv("LIBTMUX_TMUX_CONFIG", "/env/tmux.conf")
+	_, config, err := targetFor(t, "", "")
+	if err != nil || config != "/env/tmux.conf" {
+		t.Fatalf("config = (%q, %v), want the variable's path", config, err)
+	}
+}
+
+func TestResolveTargetRefusesWhatCannotBePinned(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		flagName, flagPath string
+		config             string
+	}{
+		{name: "both flags", flagName: "named", flagPath: "/socket"},
+		{name: "relative path flag", flagPath: "relative"},
+		{name: "relative config", config: "relative"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			clearTargetEnvironment(t)
 			if test.config != "" {
 				t.Setenv("LIBTMUX_TMUX_CONFIG", test.config)
 			}
-			if _, _, _, _, _, err := resolveTarget(test.flagName, test.flagPath); err == nil {
+			if _, _, _, err := resolveTarget(test.flagName, test.flagPath); err == nil {
 				t.Fatal("invalid target was accepted")
 			}
 		})
@@ -145,7 +211,7 @@ func TestResolveTargetPinsOneSocketAndConfiguration(t *testing.T) {
 func TestResolveTargetRejectsEmptyConfig(t *testing.T) {
 	clearTargetEnvironment(t)
 	t.Setenv("LIBTMUX_TMUX_CONFIG", "")
-	if _, _, _, _, _, err := resolveTarget("", ""); err == nil {
+	if _, _, _, err := resolveTarget("", ""); err == nil {
 		t.Fatal("empty config path was accepted")
 	}
 }

@@ -104,11 +104,11 @@ func TestGetServerInfoReportsSocketPathBeforeAnyServerStarts(t *testing.T) {
 	}
 }
 
-// TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon checks the same at the tool
-// surface: a server that is alive but holds no sessions - exactly the state
-// the zero-config default-dedicated MCP leaves a freshly pinned daemon in -
-// must answer get_server_info and let create_session bootstrap the first
-// session, not fail every call with tmux's "no current target".
+// TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon checks the same at the
+// tool surface: a server that is alive but holds no sessions - the state a
+// daemon with exit-empty off keeps after its last session ends - must answer
+// get_server_info and let create_session bootstrap the first session, not fail
+// every call with tmux's "no current target".
 //
 //libtmux:real-tmux
 func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {

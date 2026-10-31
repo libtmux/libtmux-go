@@ -152,8 +152,9 @@ if err != nil {
 [`NewServer`][tmux-newserver] checks its configuration and starts nothing.
 
 - With no [`SocketName`][tmux-serveroptions-socketname] or
-  [`SocketPath`][tmux-serveroptions-socketpath], it reaches the server your own
-  `tmux` command does.
+  [`SocketPath`][tmux-serveroptions-socketpath], it uses the socket in
+  `LIBTMUX_SOCKET_PATH`, else the name in `LIBTMUX_SOCKET`. With neither set it
+  reaches the server your own `tmux` command does.
 - With no [`ConfigFile`][tmux-serveroptions-configfile], tmux reads your
   configuration.
 

@@ -23,6 +23,56 @@ Modules are tagged per directory, so each carries its own version: the core as
   control-mode client, which tmux 3.8 would otherwise silently ignore; an
   older daemon is sent the request unchanged.
 
+- `tmux.NewServer` now uses the socket in `LIBTMUX_SOCKET_PATH`, else the name
+  in `LIBTMUX_SOCKET`, when `ServerOptions` names no socket. A process that sets
+  either variable now reaches that socket, with `LIBTMUX_SOCKET_PATH` winning
+  when both are set. A variable that is empty or only whitespace counts as
+  unset, each one alone. With neither set, tmux still gets no `-L` or `-S` and
+  picks the server itself, so a program that sets neither behaves as before.
+  `ServerOptions.ProcessEnvironment` supplies the variables when it is set.
+- Add `SocketSelection.Source`, which reports what chose the socket as
+  `tmux.SocketSourceExplicit`, `tmux.SocketSourceEnvironmentPath`,
+  `tmux.SocketSourceEnvironmentName`, or `tmux.SocketSourceTmux`.
+
+### workspace
+
+- `tmux-workspace` no longer passes the socket `TMUX` names as `-S` when neither
+  `-S` nor `-L` is given, except for `--append`, which asks for the current
+  session. Otherwise it uses `LIBTMUX_SOCKET_PATH`, else `LIBTMUX_SOCKET`, and
+  with neither set it passes tmux no socket, so tmux picks the server, which
+  inside tmux is still the one `TMUX` names. Outside `--append`, a socket path
+  holding a comma follows tmux's reading of `TMUX`, which stops at the first
+  comma.
+- `tmux-workspace shell` and loads that run Python pass tmuxp `-S` for a socket
+  chosen by `LIBTMUX_SOCKET_PATH` or `LIBTMUX_SOCKET`, which tmuxp does not
+  read.
+
+### mcp
+
+- `libtmux-mcp` no longer starts a server of its own on the socket `libtmux-mcp`
+  when no socket is selected. It passes tmux no socket, so tmux picks the
+  server: the one `TMUX` names inside tmux, otherwise its default socket. A
+  launch that relied on the old default now reaches your own sessions; name a
+  socket with `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or
+  `LIBTMUX_SOCKET_PATH` to keep an agent apart from them.
+- `libtmux-mcp` no longer refuses to start when `LIBTMUX_SOCKET` and
+  `LIBTMUX_SOCKET_PATH` are both set: the path wins. A variable that is empty or
+  only whitespace now counts as unset instead of failing startup, and a
+  relative `LIBTMUX_SOCKET_PATH` is accepted and resolved against the working
+  directory. `-socket-path` still requires an absolute path.
+- `libtmux-mcp` no longer trims the spaces around `LIBTMUX_SOCKET` and
+  `LIBTMUX_SOCKET_PATH`. A padded value is used as written, and only an empty
+  or all-whitespace value counts as unset.
+- `tmux://capabilities` now reports `socketProvenance` as `explicit`,
+  `env-socket-path`, `env-socket`, or `tmux-choice`, replacing
+  `default-dedicated` and `operator-current`. `libtmux-mcp -doctor` prints the
+  same term.
+- `teardown` is no longer in the default toolsets for any launch. Select it
+  with `LIBTMUX_TOOLSETS`.
+- Remove `RunDefaultMinimal` and `MaterializeMinimalConfig`, and the third
+  parameter of `AdvertisedToolsFor`, with the default server they served. Use
+  `Run` and `AdvertisedToolsFor(ctx, target)`.
+
 ### tmux/tmuxtest
 
 - `tmuxtest.NewServerWithOptions` and `tmuxtest.NewControlMode` now remove

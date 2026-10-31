@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -171,12 +172,9 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(missingRoot, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "frozen-root"}); err != nil {
-		t.Fatal(err)
-	}
+	// Registered before the session exists: a NewSession that fails after tmux
+	// started the daemon would otherwise leave it running, outside the suite
+	// root where no end-of-run scan looks.
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
@@ -187,6 +185,12 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 			t.Errorf("remove the socket file the server left: %v", errors.Unwrap(err))
 		}
 	})
+	if err := os.Mkdir(missingRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "frozen-root"}); err != nil {
+		t.Fatal(err)
+	}
 	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
 		t.Fatalf("display-message = %#v, %v", result, err)
@@ -236,4 +240,140 @@ func secondTempDirCallBasename(t *testing.T) string {
 	t.Helper()
 	_ = t.TempDir()
 	return filepath.Base(t.TempDir())
+}
+
+// A server given no socket passes tmux neither -L nor -S, so the daemon it
+// starts is the one a bare tmux command reaches. The suite's sandbox puts that
+// command's socket inside the suite root, and a bare client in the test's
+// environment must find the session there.
+//
+//libtmux:real-tmux
+func TestAServerWithNoSocketReachesWhatABareTmuxReaches(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	server, err := tmux.NewServer(tmux.ServerOptions{ConfigFile: os.DevNull})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killServer(t, server) })
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "bare"}); err != nil {
+		t.Fatal(err)
+	}
+
+	selection, err := server.SocketSelection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := defaultSandboxSocket(t); selection.Path != want || selection.Source != tmux.SocketSourceTmux {
+		t.Fatalf("selection = (%q, %q), want the sandbox default socket with source %q",
+			selection.Path, selection.Source, tmux.SocketSourceTmux)
+	}
+	if got := bareTmuxSessions(ctx, t); !slices.Equal(got, []string{"bare"}) {
+		t.Fatalf("a bare tmux lists %q, want the session the library made", got)
+	}
+}
+
+// LIBTMUX_SOCKET and LIBTMUX_SOCKET_PATH steer a server that names no socket,
+// and the default socket stays empty.
+//
+//libtmux:real-tmux
+func TestEnvironmentSocketVariablesSteerAServerThatNamesNoSocket(t *testing.T) {
+	root := defaultSandboxSocketDirectory(t)
+	pathSocket := filepath.Join(os.Getenv("TMUX_TMPDIR"), "viapath")
+	for _, test := range []struct {
+		name        string
+		variables   []string
+		wantSocket  string
+		clientFlags []string
+	}{
+		{
+			name:        "a name",
+			variables:   []string{"LIBTMUX_SOCKET=viaenv"},
+			wantSocket:  filepath.Join(root, "viaenv"),
+			clientFlags: []string{"-L", "viaenv"},
+		},
+		{
+			name:        "a path, which wins over a name",
+			variables:   []string{"LIBTMUX_SOCKET=ignored", "LIBTMUX_SOCKET_PATH=" + pathSocket},
+			wantSocket:  pathSocket,
+			clientFlags: []string{"-S", pathSocket},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			server, err := tmux.NewServer(tmux.ServerOptions{
+				ConfigFile:         os.DevNull,
+				ProcessEnvironment: append(os.Environ(), test.variables...),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { killServer(t, server) })
+			if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "viaenv"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(test.wantSocket); err != nil {
+				t.Fatalf("the variable did not put the server on its socket: %v", err)
+			}
+			named := exec.CommandContext(ctx, "tmux", append(test.clientFlags, "list-sessions", "-F", "#{session_name}")...)
+			output, err := named.Output()
+			if err != nil || strings.TrimSpace(string(output)) != "viaenv" {
+				t.Fatalf("a client naming the socket lists %q (%v), want the session", output, err)
+			}
+			if got := bareTmuxSessions(ctx, t); len(got) != 0 {
+				t.Fatalf("a bare tmux lists %q, want the default socket left alone", got)
+			}
+		})
+	}
+}
+
+func defaultSandboxSocketDirectory(t *testing.T) string {
+	t.Helper()
+
+	root := os.Getenv("TMUX_TMPDIR")
+	if root == "" {
+		t.Fatal("TMUX_TMPDIR is empty, so tmuxtest.Main did not sandbox this run")
+	}
+	// The server resolves symbolic links in TMUX_TMPDIR, as tmux does, so
+	// where /tmp is a link, as on macOS, the comparison has to follow it too.
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(resolved, "tmux-"+strconv.Itoa(os.Getuid()))
+}
+
+func defaultSandboxSocket(t *testing.T) string {
+	t.Helper()
+
+	return filepath.Join(defaultSandboxSocketDirectory(t), "default")
+}
+
+// bareTmuxSessions lists the sessions of the server a tmux client that names no
+// socket reaches, in the environment this test runs in. A missing server lists
+// none.
+func bareTmuxSessions(ctx context.Context, t *testing.T) []string {
+	t.Helper()
+
+	output, err := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		if _, exited := errors.AsType[*exec.ExitError](err); exited {
+			return nil
+		}
+		t.Fatal(err)
+	}
+	return strings.Fields(string(output))
+}
+
+func killServer(t *testing.T, server tmux.Server) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Kill(ctx); err != nil {
+		t.Errorf("stop the server: %v", errors.Unwrap(err))
+	}
 }

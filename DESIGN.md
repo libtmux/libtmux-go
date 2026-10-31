@@ -913,9 +913,10 @@ they are not a substitute for the requirement.
 ## One tmux server, chosen once
 
 The MCP server addresses the socket it was started with and nothing in a call
-can retarget it: `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or
-`LIBTMUX_SOCKET_PATH`, resolved at launch, with `-doctor` naming which was
-taken. The shared cross-port contract uses the same one-socket process boundary.
+can retarget it: `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET_PATH`, or
+`LIBTMUX_SOCKET`, resolved at launch, with `-doctor` naming which was taken.
+When none is given the server passes tmux no socket, and tmux picks the server.
+The shared cross-port contract uses the same one-socket process boundary.
 
 This is a decision rather than an omission, and the reasoning is not
 ergonomics. An MCP server runs with the operator's authority and is driven by a

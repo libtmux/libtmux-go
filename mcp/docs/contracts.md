@@ -13,16 +13,22 @@ by a client, so a client reaches only the socket the operator selected. The
 choice is made once, when the server starts, and a client cannot change it
 afterwards.
 
-Without a selector, it uses the dedicated socket `libtmux-mcp` and the shipped
-minimal configuration. A random launch marker proves which process created the
-daemon before default teardown tools are exposed, then disappears from tmux's
-environment.
+A flag names the socket: `-socket-path` first, else `-socket-name`. With
+neither flag, [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] names
+the socket path, else [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] names
+the socket name, and the path wins when both are set. A variable that is empty
+or only whitespace counts as unset, each one alone, and any other value is used
+as written. A relative path reaches what `tmux -S` reaches from the directory
+the server started in. A flag makes the variables unread.
 
-Otherwise set exactly one of [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable]
-and the absolute [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable].
+With no flag and neither variable, the server passes tmux no socket and starts
+no server of its own, so tmux picks the server: the one `TMUX` names, otherwise
+its default socket. [`tmux://capabilities`][tmux-capabilities] reports what
+chose the socket as `socketProvenance`, one of `explicit`, `env-socket-path`,
+`env-socket`, or `tmux-choice`, and `-doctor` prints the same term.
+
 [`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable], when present, must
-be a nonempty absolute path. Explicit or existing targets never gain teardown
-by default.
+be a nonempty absolute path. No launch gains teardown by default.
 
 The tmux executable is resolved once, from the environment and directory the
 server started in. A bad path fails at startup, and nothing later can point
@@ -48,8 +54,7 @@ server's, so an operator running both writes one thing.
 
 Other flags answer a question and exit, which is what a config entry that will
 not start needs. `-version` needs no tmux. `-tools` asks the socket it would
-serve whether a tmux server runs there, because that decides whether `teardown`
-is in the default, so it needs the tmux executable.
+serve whether a tmux server runs there, so it needs the tmux executable.
 
 `-tools` and `-doctor` drive the server through its own protocol in memory, so
 they report what a client sees rather than what the code intends.
@@ -60,10 +65,8 @@ they report what a client sees rather than what the code intends.
 toolsets to grant, separated by commas, in any order. Without it the server
 grants `inspect`, `manage`, and `execute`.
 
-`teardown` joins that default in one case only: no socket was chosen, and
-this process is the one that started the tmux server on the `libtmux-mcp`
-socket. There is then nothing of yours for a kill to reach. Everywhere else,
-ask for it by name.
+`teardown` is never in that default, whichever server the socket reaches.
+Ask for it by name.
 
 A value that is set and empty grants no toolset. There is no `none` keyword.
 

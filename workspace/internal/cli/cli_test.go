@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/libtmux/libtmux-go/tmux"
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
@@ -853,5 +855,108 @@ func TestTextLoadAgainstARefusedTmuxSaysTheRefusalOnce(t *testing.T) {
 	}
 	if got := strings.Count(out+diagnostic, "upgrade tmux and restart its server"); got != 1 {
 		t.Fatalf("the refusal appears %d times, want once: %s%s", got, out, diagnostic)
+	}
+}
+
+// serverFor passes tmux the socket a flag names, else the one a variable names,
+// and otherwise no socket at all, so tmux picks the server. The TMUX socket is
+// not passed as -S: tmux follows TMUX itself when it is given no socket.
+func TestServerForSelectsTheSocketByFlagThenVariableThenTmux(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		flags          options
+		environment    map[string]string
+		wantServer     string
+		wantSource     tmux.SocketSource
+		wantBridge     []string
+		wantPathIsTMUX bool
+		// wantBridgeResolved expects -S with the path the selection resolved to.
+		wantBridgeResolved bool
+	}{
+		{
+			name:       "nothing selects tmux's own choice",
+			wantServer: "Server(default)",
+			wantSource: tmux.SocketSourceTmux,
+		},
+		{
+			name:           "inside tmux the choice is left to tmux, which follows TMUX",
+			environment:    map[string]string{"TMUX": "/run/current.sock,123,0"},
+			wantServer:     "Server(default)",
+			wantSource:     tmux.SocketSourceTmux,
+			wantPathIsTMUX: true,
+		},
+		{
+			name:               "the name variable",
+			environment:        map[string]string{"LIBTMUX_SOCKET": "named"},
+			wantServer:         "Server(socket_name=named)",
+			wantSource:         tmux.SocketSourceEnvironmentName,
+			wantBridgeResolved: true,
+		},
+		{
+			name:        "the path variable beats TMUX",
+			environment: map[string]string{"LIBTMUX_SOCKET_PATH": "/run/env.sock", "TMUX": "/run/current.sock,123,0"},
+			wantServer:  "Server(socket_path=/run/env.sock)",
+			wantSource:  tmux.SocketSourceEnvironmentPath,
+			wantBridge:  []string{"-S", "/run/env.sock"},
+		},
+		{
+			name:        "both variables, so the path wins",
+			environment: map[string]string{"LIBTMUX_SOCKET": "named", "LIBTMUX_SOCKET_PATH": "/run/env.sock"},
+			wantServer:  "Server(socket_path=/run/env.sock)",
+			wantSource:  tmux.SocketSourceEnvironmentPath,
+			wantBridge:  []string{"-S", "/run/env.sock"},
+		},
+		{
+			name:        "--append names the TMUX socket, split from the right, whatever the variables say",
+			flags:       options{append: true},
+			environment: map[string]string{"LIBTMUX_SOCKET": "named", "TMUX": "/run/with,comma.sock,123,0"},
+			wantServer:  "Server(socket_path=/run/with,comma.sock)",
+			wantSource:  tmux.SocketSourceExplicit,
+		},
+		{
+			name:        "-L beats the variables",
+			flags:       options{socketName: "flagged"},
+			environment: map[string]string{"LIBTMUX_SOCKET": "named", "LIBTMUX_SOCKET_PATH": "/run/env.sock"},
+			wantServer:  "Server(socket_name=flagged)",
+			wantSource:  tmux.SocketSourceExplicit,
+			wantBridge:  []string{"-L", "flagged"},
+		},
+		{
+			name:        "-S beats the variables",
+			flags:       options{socketPath: "/run/flag.sock"},
+			environment: map[string]string{"LIBTMUX_SOCKET": "named", "LIBTMUX_SOCKET_PATH": "/run/env.sock"},
+			wantServer:  "Server(socket_path=/run/flag.sock)",
+			wantSource:  tmux.SocketSourceExplicit,
+			wantBridge:  []string{"-S", "/run/flag.sock"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, name := range []string{"TMUX", "LIBTMUX_SOCKET", "LIBTMUX_SOCKET_PATH"} {
+				t.Setenv(name, test.environment[name])
+			}
+			server, err := serverFor(&test.flags)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := server.String(); got != test.wantServer {
+				t.Errorf("server = %s, want %s", got, test.wantServer)
+			}
+			selection, err := server.SocketSelection()
+			if err != nil || selection.Source != test.wantSource {
+				t.Fatalf("SocketSelection() = (%#v, %v), want source %q", selection, err, test.wantSource)
+			}
+			if test.wantPathIsTMUX && selection.Path != "/run/current.sock" {
+				t.Errorf("selected path = %q, want the socket TMUX names", selection.Path)
+			}
+			want := test.wantBridge
+			if test.wantBridgeResolved {
+				// tmuxp reads neither variable, so a socket chosen by name
+				// reaches it as the path tmux resolves that name to.
+				want = []string{"-S", selection.Path}
+			}
+			if got := bridgeSocketArguments(server, &test.flags); !slices.Equal(got, want) {
+				t.Errorf("bridge socket arguments = %q, want %q", got, want)
+			}
+		})
 	}
 }

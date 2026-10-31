@@ -66,6 +66,11 @@ func writeExecutable(t testing.TB, script string) string {
 // is handed. It is the check that fails when a pane's TMUX, TMUX_PANE or a
 // socket selector survives into a test.
 func TestSuiteEnvironmentIsSandboxed(t *testing.T) {
+	// The CI plan exports these to its tmux steps. They select no server, so a
+	// client handed them is still inside the suite.
+	t.Setenv("TMUX_PREFIX", "/opt/tmux")
+	t.Setenv("TMUX_EXPECT", "3.8")
+
 	root, err := activeSuiteRoot()
 	if err != nil {
 		t.Error("unsandboxed: no suite is active")
@@ -102,7 +107,7 @@ func checkRecordedClient(t *testing.T, trace, root, who string) {
 		switch {
 		case strings.HasPrefix(line, "argv "):
 			if slices.ContainsFunc(strings.Fields(line), func(field string) bool { return field == "-S" || field == "-L" }) {
-				t.Errorf("%s was given a socket: %s", who, line)
+				t.Errorf("%s was given a socket flag", who)
 			}
 		case strings.HasPrefix(line, "tmpdir "):
 			directory := strings.TrimPrefix(line, "tmpdir ")

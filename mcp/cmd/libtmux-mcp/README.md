@@ -63,9 +63,8 @@ $ libtmux-mcp -tools
 ```
 
 It lists every tool the server exposes, as a client would see them. It needs
-the tmux executable: it asks the socket whether a tmux server runs there,
-because that decides whether `teardown` is in the default
-[toolsets][topic-tool-selection].
+the tmux executable: it asks the socket whether a tmux server runs there.
+The default [toolsets][topic-tool-selection] never include `teardown`.
 
 ### [`libtmux-mcp -doctor`][guide-diagnose-startup]: whether it reaches your tmux
 
@@ -102,14 +101,15 @@ lists what the resource reports.
 
 - **The operator chooses.** Flags pick the socket at startup, and a client
   cannot change it, so a client reaches only the socket you selected.
-- **A dedicated default.** With no selector it uses the socket `libtmux-mcp`
-  and the shipped minimal configuration.
-- **Exactly one selector.** Otherwise set one of
-  [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] and the absolute
-  [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable].
+- **tmux's own choice.** With no selector it passes tmux no socket, so tmux
+  picks the server: the one `TMUX` names, otherwise its default socket.
+- **A variable.** With no flag, set
+  [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] or
+  [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable]. The path wins when both
+  are set.
 - **A config path.** [`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable],
   when present, is a nonempty absolute path.
-- **Teardown stays off.** Explicit or existing targets never gain it by default.
+- **Teardown stays off.** No launch gains it by default.
 
 [The contract][contract-which-tmux] has the full text.
 

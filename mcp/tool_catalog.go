@@ -14,44 +14,32 @@ import (
 // tools. It performs an in-memory MCP handshake without opening tmux or
 // allocating runtime-owned audit resources.
 //
-// It describes a server that creates the default dedicated tmux server, the
-// widest default surface. [AdvertisedToolsFor] answers for a specific target.
+// It describes a server that leaves the choice of tmux server to tmux.
+// [AdvertisedToolsFor] answers for a specific target.
 func AdvertisedTools(ctx context.Context) ([]*sdk.Tool, error) {
 	return advertisedToolsFor(ctx, socketProfile{
-		Selector:                "name:libtmux-mcp",
-		SelectionProvenance:     "default-dedicated",
-		ServerState:             "absent",
-		ConfigurationProvenance: "minimal",
+		Selector:                "default",
+		SelectionProvenance:     string(tmux.SocketSourceTmux),
+		ServerState:             "unknown",
+		ConfigurationProvenance: "unknown",
 		NamespaceBoundary:       "tmux-objects-only",
-		AttachCommand:           "tmux -N -L 'libtmux-mcp' attach",
-		defaultTeardown:         true,
+		AttachCommand:           "tmux -N attach",
 	})
 }
 
 // AdvertisedToolsFor returns the tools a server started now against target
-// would advertise. defaultMinimal selects [RunDefaultMinimal]'s rule, which
-// grants teardown tools only when that server creates the tmux server, so
-// only when none is answering yet; [Run] never grants them by default. It
-// asks whether a tmux server is answering and starts nothing.
-func AdvertisedToolsFor(
-	ctx context.Context,
-	target tmux.Server,
-	defaultMinimal bool,
-) ([]*sdk.Tool, error) {
+// would advertise. It asks whether a tmux server is answering and starts
+// nothing.
+func AdvertisedToolsFor(ctx context.Context, target tmux.Server) ([]*sdk.Tool, error) {
 	alive, err := target.IsAlive(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("inspect selected tmux socket: %w", explainVersionRefusal(err))
 	}
-	var profile socketProfile
-	if defaultMinimal {
-		profile, err = defaultMinimalProfile(target, !alive)
-	} else {
-		state := "absent"
-		if alive {
-			state = "existing"
-		}
-		profile, err = profileForTarget(target, state)
+	state := "absent"
+	if alive {
+		state = "existing"
 	}
+	profile, err := profileForTarget(target, state)
 	if err != nil {
 		return nil, err
 	}

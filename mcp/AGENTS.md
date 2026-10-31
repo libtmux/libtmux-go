@@ -23,8 +23,8 @@ is the part worth knowing before reading it.
 
 The socket is chosen once, at launch, rather than per call as the Python server
 allows. Precedence is `-socket-path`, `-socket-name`, `LIBTMUX_SOCKET_PATH`,
-`LIBTMUX_SOCKET`, then a socket of the server's own, named `libtmux-mcp`;
-`-doctor` names which source was taken. `-binary` similarly precedes
+`LIBTMUX_SOCKET`, then none, which leaves tmux to pick the server; `-doctor`
+names which source was taken. `-binary` similarly precedes
 `LIBTMUX_TMUX_BIN` and `PATH`.
 
 ### The MCP Inspector

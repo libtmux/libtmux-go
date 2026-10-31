@@ -16,9 +16,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// serverFor selects the socket the flags name. --append asks for the current
+// session, so with neither flag it names the socket TMUX does, split from the
+// right so a path holding commas survives. Otherwise the core reads
+// LIBTMUX_SOCKET_PATH and then LIBTMUX_SOCKET, and with neither set tmux picks
+// the server, which is the one TMUX names when run inside tmux.
 func serverFor(o *options) (tmux.Server, error) {
 	socketPath := o.socketPath
-	if socketPath == "" && o.socketName == "" && os.Getenv("TMUX") != "" {
+	if socketPath == "" && o.socketName == "" && o.append && os.Getenv("TMUX") != "" {
 		var err error
 		socketPath, _, err = inheritedEndpoint()
 		if err != nil {
@@ -359,7 +364,8 @@ func (r *invocation) load(cmd *cobra.Command, o *options, args []string) error {
 		}
 		r.log = newDiagnosticLog(file, r.diagnosticLevel())
 	}
-	if !askable {
+	// Choosing to append at the prompt changes which socket serverFor names.
+	if !askable || o.append {
 		server, err = serverFor(o)
 		if err != nil {
 			return err
@@ -652,11 +658,7 @@ func (r *invocation) bridgeLoad(server tmux.Server, borrowed tmux.Session, o *op
 	if o.yes {
 		args = append(args, "--yes")
 	}
-	if o.socketPath != "" {
-		args = append(args, "-S", o.socketPath)
-	} else if o.socketName != "" {
-		args = append(args, "-L", o.socketName)
-	}
+	args = append(args, bridgeSocketArguments(server, o)...)
 	if o.tmuxConfig != "" {
 		args = append(args, "-f", o.tmuxConfig)
 	}

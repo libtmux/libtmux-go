@@ -11,9 +11,10 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// --tools reported the teardown tools for any socket, while serving grants
-// them only when it creates the tmux server itself.
-func TestAdvertisedToolsForGrantsTeardownOnlyWhenServingWouldCreateTmux(t *testing.T) {
+// No launch grants teardown by default, whether or not a server answers on the
+// socket: a server this process did not start is never this process's to kill,
+// and the default launch no longer starts one.
+func TestAdvertisedToolsForWithholdsTeardownByDefault(t *testing.T) {
 	// TestMain selects every toolset; the default surface is what is under test.
 	t.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "")
 	if err := os.Unsetenv(tmuxmcp.ToolsetsEnvironmentVariable); err != nil {
@@ -24,26 +25,19 @@ func TestAdvertisedToolsForGrantsTeardownOnlyWhenServingWouldCreateTmux(t *testi
 	absent := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
 
 	for _, test := range []struct {
-		name           string
-		target         tmux.Server
-		defaultMinimal bool
-		wantTeardown   bool
+		name   string
+		target tmux.Server
 	}{
-		{name: "default socket already served", target: running, defaultMinimal: true},
-		{name: "default socket nothing serves", target: absent, defaultMinimal: true, wantTeardown: true},
-		{name: "operator socket nothing serves", target: absent},
-		{name: "operator socket already served", target: running},
+		{name: "socket already served", target: running},
+		{name: "socket nothing serves", target: absent},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			tools, err := tmuxmcp.AdvertisedToolsFor(ctx, test.target, test.defaultMinimal)
+			tools, err := tmuxmcp.AdvertisedToolsFor(ctx, test.target)
 			if err != nil {
 				t.Fatal(err)
 			}
-			teardown := slices.ContainsFunc(tools, func(tool *sdk.Tool) bool {
-				return tool.Name == "kill_session"
-			})
-			if teardown != test.wantTeardown {
-				t.Fatalf("kill_session advertised = %v, want %v", teardown, test.wantTeardown)
+			if slices.ContainsFunc(tools, func(tool *sdk.Tool) bool { return tool.Name == "kill_session" }) {
+				t.Fatal("kill_session is advertised by default")
 			}
 		})
 	}

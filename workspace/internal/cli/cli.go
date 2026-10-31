@@ -535,8 +535,8 @@ func maximum(value int) string {
 }
 
 func sockets(cmd *cobra.Command, o *options) {
-	cmd.Flags().StringVarP(&o.socketName, "socket-name", "L", "", "tmux socket name (default empty: environment/default)")
-	cmd.Flags().StringVarP(&o.socketPath, "socket-path", "S", "", "tmux socket path; takes precedence over -L (default empty: named socket)")
+	cmd.Flags().StringVarP(&o.socketName, "socket-name", "L", "", "tmux socket name; with neither -L nor -S, LIBTMUX_SOCKET_PATH then LIBTMUX_SOCKET select the socket, else tmux picks the server")
+	cmd.Flags().StringVarP(&o.socketPath, "socket-path", "S", "", "tmux socket path, which takes precedence over -L; empty applies the default described for -L")
 }
 
 func writeFlags(cmd *cobra.Command, o *options, freeze bool) {

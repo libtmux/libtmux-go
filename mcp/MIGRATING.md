@@ -7,7 +7,7 @@ mapping when updating an existing client entry:
 | --- | --- |
 | `LIBTMUX_SAFETY=readonly` | `LIBTMUX_TOOLSETS=inspect` |
 | `LIBTMUX_SAFETY=mutating` | `LIBTMUX_TOOLSETS=inspect,manage,execute` |
-| `LIBTMUX_SAFETY=destructive` | all four toolsets on a process-created minimal daemon |
+| `LIBTMUX_SAFETY=destructive` | `LIBTMUX_TOOLSETS=inspect,manage,execute,teardown` |
 | `LIBTMUX_MCP_CAPABILITIES=` | Start with `LIBTMUX_TOOLSETS=inspect`, then exclude content and configuration readers to retain the earlier metadata-only default |
 | `LIBTMUX_MCP_CAPABILITIES=inspect` | `LIBTMUX_TOOLSETS=inspect` |
 | `LIBTMUX_MCP_CAPABILITIES=operate` | `LIBTMUX_TOOLSETS=inspect,manage,execute` |
@@ -20,9 +20,12 @@ mapping when updating an existing client entry:
 | `LIBTMUX_MCP_CAPABILITIES=tmux-destroy` | `teardown`; server-wide teardown has no replacement |
 | `LIBTMUX_MCP_TOOLS=a,b` | `LIBTMUX_TOOLS=a,b`, with exclusions available separately |
 | `LIBTMUX_MCP_PROMPTS_AS_TOOLS=1` | removed; use the [typed workflow mapping](TOOLS.md#retired-prompt-workflow-mapping) |
-| implicit ordinary tmux socket | explicit `LIBTMUX_SOCKET=default` or another chosen name |
+| implicit ordinary tmux socket | no socket: with no flag and neither variable set, tmux picks the server |
 
-An unchanged launch now opens the dedicated `libtmux-mcp` world, so it may look
-empty until the agent creates a session. The startup line prints the exact
-attach command. Retired tool names and their workflow replacements are listed
-in the [generated tool reference](TOOLS.md#retired-mcp-surface).
+An unchanged launch drives the tmux server tmux picks: the one `TMUX` names when
+started inside tmux, otherwise its default socket. Earlier releases started a
+server of their own on the socket `libtmux-mcp`; a launch that relied on it now
+reaches your own sessions. Name a socket with `-socket-name`, `-socket-path`,
+`LIBTMUX_SOCKET`, or `LIBTMUX_SOCKET_PATH` to keep an agent apart from them.
+Retired tool names and their workflow replacements are listed in the
+[generated tool reference](TOOLS.md#retired-mcp-surface).
