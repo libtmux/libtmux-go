@@ -5,7 +5,8 @@ process for each command, and through a connection, one tmux client that
 carries them all. The example then shows which exact-capture operations each
 path supports.
 
-Both paths support tmux 3.3a through 3.8.
+The connection path requires tmux 3.7 or newer. Ordinary subprocess operations
+retain the 3.3a floor.
 
 ## Running it
 

@@ -16,6 +16,8 @@ and no temporary file to clean up.
 
 ## Running it
 
+This example needs tmux 3.7 or newer for its pane observation.
+
 ```console
 $ go -C examples run ./byte-streams
 ```

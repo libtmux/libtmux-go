@@ -6,8 +6,8 @@ A control-mode connection is a tmux client that stays open. tmux pushes what
 happens down it, so a change is heard once, when it happens, instead of being
 discovered by a poll that has to guess how often to ask.
 
-The notification stream supports the same tmux 3.3a through 3.8 range as the
-ordinary process API.
+Owned notification streams require tmux 3.7 or newer; ordinary subprocess
+operations retain the 3.3a floor.
 
 ## Running it
 
@@ -36,9 +36,7 @@ to report the session's window count and opens a window.
 
 `Session.OpenNotifications` and `Server.OpenNotifications` return owned
 streams. Zero options keep tmux's changes and leave pane output out; set
-`IncludePaneOutput` when watching what a pane prints. Before tmux 3.6,
-destroying the attached session follows its `detach-on-destroy` policy and may
-end the stream.
+`IncludePaneOutput` when watching what a pane prints.
 
 <!-- docs:watching -->
 

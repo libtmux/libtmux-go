@@ -45,7 +45,7 @@ changelog marks each break. Pin an exact version to avoid one.
 
 It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
 older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
-and sends nothing.
+and withholds the requested operation. A read-only version probe may run first.
 
 tmux release candidates are not supported: a feature can require one only until
 its release ships, and a candidate such as `X.Y-rcN` ranks below `X.Y`. See
@@ -82,6 +82,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/libtmux/libtmux-go/tmux"
 )
@@ -93,23 +94,30 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	directory, err := os.MkdirTemp("", "libtmux-quickstart-")
+	if err != nil {
+		return fmt.Errorf("create socket directory: %w", err)
+	}
+	defer func() { err = errors.Join(err, os.RemoveAll(directory)) }()
+
 	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-quickstart",
+		SocketPath: filepath.Join(directory, "tmux.sock"),
 		ConfigFile: os.DevNull,
 	})
 	if err != nil {
 		return fmt.Errorf("configure tmux: %w", err)
 	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		if cleanup := server.Kill(context.WithoutCancel(ctx)); !errors.Is(cleanup, tmux.ErrNoServer) {
+			err = errors.Join(err, cleanup)
+		}
+	}()
+
 	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "demo"})
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
-	// Cleanup runs even when ctx is the reason the program is leaving.
-	defer func() {
-		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
-	}()
 
 	// The command runs in a window of its own, with a terminal.
 	result, err := session.Run(ctx, "echo hello from tmux", tmux.RunOptions{})
@@ -146,10 +154,11 @@ $ go mod init demo && \
     go run .
 ```
 
-The program starts a tmux server on a socket and config of its own and kills
-it on the way out, so it never touches a tmux you have open. With
-[`ServerOptions`][tmux-serveroptions] at its zero value, it drives the same
-server your `tmux` command does.
+The program creates a socket path in a new temporary directory, then kills its
+server and removes that directory on the way out. With no socket in
+[`ServerOptions`][tmux-serveroptions], it uses the socket in
+`LIBTMUX_SOCKET_PATH`, else the name in `LIBTMUX_SOCKET`; with neither set it
+reaches the server your own `tmux` command does.
 
 [`Session.Run`][tmux-session-run] is `os/exec` for a program that needs a
 terminal. The command runs in a window of its own with a tty, and you get back
@@ -159,8 +168,8 @@ A nonzero exit status arrives in the result.
 [`examples/run-to-completion`](examples/run-to-completion) shows one, on a tmux
 server of its own.
 
-Every Go block on this page comes from a program or test that runs on every
-supported release, against a real tmux wherever the block uses one, and each
+Every Go block on this page comes from a program or test that runs on the
+releases its features support, against a real tmux wherever it uses one. Each
 output shown is what that run printed.
 
 ## Find sessions, windows, and panes
@@ -207,9 +216,10 @@ and "nobody to ask" stay different answers.
 
 ### [`tmuxq.Matching`][tmuxq-matching]: several answers from one read
 
-Read the server once with [`Server.Snapshot`][tmux-server-snapshot] and filter
-that read in Go. [`Matching`][tmuxq-matching] takes any filter the `tmux`
-package declares:
+Collect a snapshot with [`Server.Snapshot`][tmux-server-snapshot], then filter
+the captured records in Go. Collection uses sequential listings and identity
+probes; it is not an atomic view of one instant.
+[`Matching`][tmuxq-matching] takes any filter the `tmux` package declares:
 
 <!-- docs:query-in-go -->
 

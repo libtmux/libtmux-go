@@ -49,8 +49,8 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
-	// A private server: a socket and an empty config of its own, so this
-	// neither touches nor is changed by a tmux you already use.
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
 	server, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-object-model",
 		ConfigFile: os.DevNull,

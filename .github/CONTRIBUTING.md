@@ -14,22 +14,14 @@ client, which the Go tests do not provide.
 You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else — the
 core module has no runtime dependencies.
 
-Give tmux a socket directory of its own before running anything, and drop the
-inherited pane. Sibling checkouts run their suites on the same machine, and a
-shared socket directory is one suite ending servers another is still using —
-which surfaces as a version-specific failure that has nothing to do with the
-version:
-
-```console
-$ export TMUX_TMPDIR=/tmp/libtmux-go-test && mkdir -p "$TMUX_TMPDIR" && unset TMUX TMUX_PANE
-```
-
-The tests need none of that, because `tmuxtest.Main` gives each suite a
-sandbox of its own. A command run from the tree is another matter:
-`tmux-workspace` and `libtmux-mcp` pass tmux no socket unless a flag,
-`LIBTMUX_SOCKET_PATH`, or `LIBTMUX_SOCKET` names one, so tmux picks the server,
-which is the one you are working in. Keep the name of a socket of your own in a
-`.env` at the root of the tree, which git ignores:
+The test harness gives each suite a temporary directory of its own and clears
+`TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable from the test process.
+`tmuxtest.Main` owns that setup and cleanup, including when sibling checkouts
+run together, so the tests need no setup of your own. A command run from the
+tree is another matter: `tmux-workspace` and `libtmux-mcp` pass tmux no socket
+unless a flag, `LIBTMUX_SOCKET_PATH`, or `LIBTMUX_SOCKET` names one, so tmux
+picks the server, which is the one you are working in. Keep the name of a socket
+of your own in a `.env` at the root of the tree, which git ignores:
 
 ```console
 $ printf 'LIBTMUX_SOCKET=libtmux-go-dev\n' > .env
@@ -288,8 +280,9 @@ The index of tools in `mcp/README.md` is generated too, by
 advertises.
 
 An example program takes one of two shapes. One a README quotes whole builds
-its own server, with a private `SocketName` and `ConfigFile: os.DevNull`, and
-is tested with `exampletest.Program`. One that shows a fragment takes its
+its own server with `ConfigFile: os.DevNull`, using a socket in a new temporary
+directory or an unused socket name, and is tested with `exampletest.Program`.
+One that shows a fragment takes its
 server as `run(ctx, server)` and is tested with `exampletest.Server`. Both
 compare standard output with `output.txt` exactly, so an example prints only
 what every machine prints alike. An example that types into a pane also runs
