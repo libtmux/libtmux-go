@@ -104,7 +104,8 @@ type ServerOptions struct {
 	Config []byte
 	// ProcessEnvironment supplies the server environment. Nil snapshots the
 	// current process environment, while a non-nil empty slice remains empty.
-	// Tmux targeting variables are removed in either case.
+	// TMUX, TMUX_PANE, and every LIBTMUX_SOCKET* variable are removed in
+	// either case. TMUX_TMPDIR is kept.
 	ProcessEnvironment []string
 	// InitialSession starts the daemon with this copied request. Nil returns a
 	// lazy bare server; a later tmux command may start it.
@@ -800,14 +801,15 @@ func cleanupRegisteredServers() error {
 	return errors.Join(failures...)
 }
 
+// scrubTmuxEnvironment returns environment without the variables that select a
+// server. TMUX_TMPDIR stays: it is where a command that names no socket looks,
+// so a child that loses it would look in the user's directory instead of the
+// suite's.
 func scrubTmuxEnvironment(environment []string) []string {
 	cleaned := make([]string, 0, len(environment))
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
-		switch key {
-		case "TMUX", "TMUX_PANE", "TMUX_TMPDIR":
-			continue
-		default:
+		if !isAmbientTmuxName(key) {
 			cleaned = append(cleaned, entry)
 		}
 	}
@@ -856,13 +858,15 @@ func ambientTmuxNames(environment []string) []string {
 	var names []string
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
-		if key == "TMUX" || key == "TMUX_PANE" || strings.HasPrefix(key, socketSelectorPrefix) {
-			if !slices.Contains(names, key) {
-				names = append(names, key)
-			}
+		if isAmbientTmuxName(key) && !slices.Contains(names, key) {
+			names = append(names, key)
 		}
 	}
 	return names
+}
+
+func isAmbientTmuxName(key string) bool {
+	return key == "TMUX" || key == "TMUX_PANE" || strings.HasPrefix(key, socketSelectorPrefix)
 }
 
 // sandboxFindings lists, by variable name and never by value, each way

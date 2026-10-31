@@ -19,9 +19,11 @@ import (
 // canary can be shown failing in a process that kept what a tmux pane sets.
 const withoutSuiteVariable = "LIBTMUX_CANARY_WITHOUT_SUITE"
 
-// recordingTmux writes an executable that appends its arguments and the
-// variables that select a tmux server to trace, and answers nothing. A child
-// process writes it, for the reason ScriptedTmux does.
+// recordingTmux writes an executable that appends its arguments to trace, and
+// the names of the variables that select a tmux server. It reports a version
+// and then that no server is running, which is all cleanup needs to finish.
+// The one value it records is TMUX_TMPDIR, which is a directory and not a
+// secret. A child process writes it, for the reason ScriptedTmux does.
 func recordingTmux(t testing.TB, trace string) string {
 	t.Helper()
 
@@ -30,10 +32,15 @@ func recordingTmux(t testing.TB, trace string) string {
 	body.WriteString("{\n")
 	body.WriteString("  printf 'argv %s\\n' \"$*\"\n")
 	body.WriteString("  env | while IFS= read -r line; do\n")
-	body.WriteString("    case $line in TMUX=*|TMUX_*|LIBTMUX_SOCKET*) printf 'env %s\\n' \"$line\";; esac\n")
+	body.WriteString("    case $line in\n")
+	body.WriteString("      TMUX_TMPDIR=*) printf 'tmpdir %s\\n' \"${line#TMUX_TMPDIR=}\";;\n")
+	body.WriteString("      TMUX=*|TMUX_PANE=*|LIBTMUX_SOCKET*) printf 'env %s\\n' \"${line%%=*}\";;\n")
+	body.WriteString("    esac\n")
 	body.WriteString("  done\n")
 	body.WriteString("} >>" + shellQuote(trace) + "\n")
-	body.WriteString("exit 0\n")
+	body.WriteString("case \" $* \" in *\" -V \"*) echo 'tmux 3.8'; exit 0;; esac\n")
+	body.WriteString("echo 'no server running on the recorder' >&2\n")
+	body.WriteString("exit 1\n")
 
 	path := filepath.Join(t.TempDir(), "tmux")
 	write := exec.Command("/bin/sh", "-c", `umask 077 && cat >"$1" && chmod 700 "$1"`, "sh", path)
@@ -66,6 +73,15 @@ func TestSuiteEnvironmentIsSandboxed(t *testing.T) {
 	defer cancel()
 	_, _ = server.Cmd(ctx, "list-sessions")
 
+	checkRecordedClient(t, trace, root, "a bare client")
+}
+
+// checkRecordedClient fails for each way the client that wrote trace was
+// steered off root: a socket in its arguments, a selector in its environment,
+// or a TMUX_TMPDIR outside root. It names variables and never their values.
+func checkRecordedClient(t *testing.T, trace, root, who string) {
+	t.Helper()
+
 	recorded, err := os.ReadFile(trace)
 	if err != nil {
 		t.Fatalf("the recording tmux was never run: %v", err)
@@ -75,20 +91,68 @@ func TestSuiteEnvironmentIsSandboxed(t *testing.T) {
 		switch {
 		case strings.HasPrefix(line, "argv "):
 			if slices.ContainsFunc(strings.Fields(line), func(field string) bool { return field == "-S" || field == "-L" }) {
-				t.Errorf("a bare client was given a socket: %s", line)
+				t.Errorf("%s was given a socket: %s", who, line)
 			}
-		case strings.HasPrefix(line, "env TMUX_TMPDIR="):
-			directory := strings.TrimPrefix(line, "env TMUX_TMPDIR=")
+		case strings.HasPrefix(line, "tmpdir "):
+			directory := strings.TrimPrefix(line, "tmpdir ")
 			if findings := sandboxFindings([]string{"TMUX_TMPDIR=" + directory}, root); len(findings) != 0 {
-				t.Errorf("a bare client was handed a TMUX_TMPDIR outside the suite: %s", strings.Join(findings, "; "))
+				t.Errorf("%s was handed a TMUX_TMPDIR outside the suite: %s", who, strings.Join(findings, "; "))
 			}
 		default:
-			name, _, _ := strings.Cut(strings.TrimPrefix(line, "env "), "=")
-			t.Errorf("a bare client was handed %s", name)
+			t.Errorf("%s was handed %s", who, strings.TrimPrefix(line, "env "))
 		}
 	}
 	if !slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, "argv ") }) {
 		t.Error("the recording tmux saw no command")
+	}
+}
+
+// A harness server is handed an environment the caller replaced, and tmux
+// children must still see none of the selectors in it and still see
+// TMUX_TMPDIR.
+func TestHarnessServersKeepTMUXTMPDIRAndDropSelectors(t *testing.T) {
+	root, err := activeSuiteRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	trace := filepath.Join(t.TempDir(), "trace")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	server := NewServerWithOptions(ctx, t, ServerOptions{
+		Binary: recordingTmux(t, trace),
+		ProcessEnvironment: []string{
+			"PATH=" + os.Getenv("PATH"),
+			"TMUX_TMPDIR=" + os.Getenv("TMUX_TMPDIR"),
+			"TMUX=/tmp/decoy,1,0",
+			"TMUX_PANE=%9",
+			"LIBTMUX_SOCKET=decoy",
+			"LIBTMUX_SOCKET_PATH=/tmp/decoy/path",
+		},
+	})
+	_, _ = server.Cmd(ctx, "list-sessions")
+
+	recorded, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("the recording tmux was never run: %v", err)
+	}
+	if !strings.Contains(string(recorded), "tmpdir "+root+"\n") {
+		t.Error("the server child lost TMUX_TMPDIR")
+	}
+	for _, name := range []string{"TMUX", "TMUX_PANE", "LIBTMUX_SOCKET", "LIBTMUX_SOCKET_PATH"} {
+		if strings.Contains(string(recorded), "env "+name+"\n") {
+			t.Errorf("the server child was handed %s", name)
+		}
+	}
+
+	environment, err := controlProcessEnvironment(server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ambientTmuxNames(environment); len(got) != 0 {
+		t.Errorf("the control client was handed %s", strings.Join(got, ", "))
+	}
+	if !slices.Contains(environment, "TMUX_TMPDIR="+root) {
+		t.Error("the control client lost TMUX_TMPDIR")
 	}
 }
 

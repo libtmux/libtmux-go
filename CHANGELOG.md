@@ -25,6 +25,11 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### tmux/tmuxtest
 
+- `tmuxtest.NewServerWithOptions` and `tmuxtest.NewControlMode` now remove
+  every `LIBTMUX_SOCKET*` variable, as well as `TMUX` and `TMUX_PANE`, from the
+  environment of the tmux they start, and no longer remove `TMUX_TMPDIR`.
+  A child that runs tmux without a socket therefore looks in the directory
+  the process was given.
 - `tmuxtest.Main` clears `TMUX`, `TMUX_PANE` and every `LIBTMUX_SOCKET*`
   variable from the test process for the length of the suite. Before, only
   `TMUX_TMPDIR` was redirected, so a suite started from inside tmux sent a

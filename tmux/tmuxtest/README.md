@@ -237,10 +237,12 @@ server you already hold, and remove it when the test ends.
   reaches yours.
 - **A generated minimal config.** Your `~/.tmux.conf` cannot change a result:
   no inherited `base-index`, no prompt in captured pane text, no hooks firing.
-- **Inherited state dropped.** `TMUX`, `TMUX_PANE`, and `TMUX_TMPDIR` are
-  removed from the environment of each tmux the harness starts, which it
-  points at a socket path instead, so a suite run from inside a pane stays
-  away from the server hosting it.
+- **Inherited state dropped.** `TMUX`, `TMUX_PANE`, and every
+  `LIBTMUX_SOCKET*` variable are removed from the environment of each tmux the
+  harness starts, which it points at a socket path instead, so a suite run
+  from inside a pane stays away from the server hosting it. `TMUX_TMPDIR`
+  stays, so a command a server's pane runs without a socket still looks in the
+  suite's directory.
 - **Verified teardown.** Cleanup asks the server answering on the socket for
   its process and confirms *that* process died, rather than trusting a PID
   recorded at startup, which may have been reused.
