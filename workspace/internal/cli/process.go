@@ -181,6 +181,28 @@ func (r *invocation) checkPython(tmuxpRequired bool) error {
 	return nil
 }
 
+// bridgeSocketArguments names the socket a tmuxp child must use to reach the
+// server this process selected. A flag is passed as given. A socket the
+// environment chose goes as -S, because tmuxp reads neither LIBTMUX_SOCKET
+// variable. When tmux chooses, the child is left to choose the same way.
+func bridgeSocketArguments(server tmux.Server, o *options) []string {
+	switch {
+	case o.socketPath != "":
+		return []string{"-S", o.socketPath}
+	case o.socketName != "":
+		return []string{"-L", o.socketName}
+	}
+	selection, err := server.SocketSelection()
+	if err != nil {
+		return nil
+	}
+	if selection.Source == tmux.SocketSourceEnvironmentPath ||
+		selection.Source == tmux.SocketSourceEnvironmentName {
+		return []string{"-S", selection.Path}
+	}
+	return nil
+}
+
 func bridgeArgv(args []string) []string {
 	return append([]string{pythonExecutable(), "-u", "-c", "from tmuxp.cli import cli; import sys; cli(sys.argv[1:])"}, args...)
 }
@@ -260,11 +282,7 @@ func (r *invocation) shell(cmd *cobra.Command, o *options, args []string) error 
 		return err
 	}
 	argv := []string{"--color", "never", "shell"}
-	if o.socketPath != "" {
-		argv = append(argv, "-S", o.socketPath)
-	} else if o.socketName != "" {
-		argv = append(argv, "-L", o.socketName)
-	}
+	argv = append(argv, bridgeSocketArguments(server, o)...)
 	argv = append(argv, "--"+o.backend)
 	if o.pythonrc {
 		argv = append(argv, "--use-pythonrc")

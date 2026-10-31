@@ -443,10 +443,10 @@ func handoffDocument(t *testing.T, script string) string {
 }
 
 func TestHumanLoadPreflight(t *testing.T) {
-	for _, mode := range []string{"endpoint", "stale-pid", "wrong-terminal", "no-client", "ambiguous", "detached", "append", "choice-detached", "choice-append"} {
+	for _, mode := range []string{"endpoint", "stale-pid", "wrong-terminal", "no-client", "ambiguous", "detached", "append", "choice-detached", "choice-append", "choice-append-comma-socket"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, server, pane := handoffServer(t)
-			if mode == "choice-detached" || mode == "choice-append" {
+			if mode == "choice-detached" || mode == "choice-append" || mode == "choice-append-comma-socket" {
 				// Replace the pane's interactive shell with a command that
 				// never reads its own stdin, so the keystroke below has
 				// exactly one reader: the load process waiting on the
@@ -464,6 +464,18 @@ func TestHumanLoadPreflight(t *testing.T) {
 			input := handoffInput(t, pane)
 			t.Setenv("TMUX", server.SocketPath()+","+daemonPID(t, server)+",0")
 			t.Setenv("TMUX_PANE", pane.ID().String())
+			// Naming no socket leaves the first answer to tmux, which reads TMUX up
+			// to its first comma. Choosing to append at the prompt has to build the
+			// server again from the whole TMUX, or a socket path holding a comma
+			// names another server and the append is refused.
+			namesSocket := mode != "choice-append-comma-socket"
+			if !namesSocket {
+				alias := filepath.Join(t.TempDir(), "with,comma")
+				if err := os.Symlink(server.SocketPath(), alias); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("TMUX", alias+","+daemonPID(t, server)+",0")
+			}
 			if mode != "no-client" {
 				handoffClient(ctx, t, server, false)
 			}
@@ -489,18 +501,22 @@ func TestHumanLoadPreflight(t *testing.T) {
 				if mode == "append" {
 					flags = []string{"-d", "--append"}
 				}
-			case "choice-detached", "choice-append":
+			case "choice-detached", "choice-append", "choice-append-comma-socket":
 				control = true
 				flags = nil
 				answer = "n"
-				if mode == "choice-append" {
+				if mode != "choice-detached" {
 					answer = "a"
 				}
 			}
 			marker := filepath.Join(t.TempDir(), "script")
 			script := write(t, t.TempDir(), "before.sh", "printf ran > '"+marker+"'\n")
 			path := handoffDocument(t, "/bin/sh "+script)
-			args := append([]string{"load", path, "--no-progress", "-S", selected.SocketPath()}, flags...)
+			args := []string{"load", path, "--no-progress"}
+			if namesSocket {
+				args = append(args, "-S", selected.SocketPath())
+			}
+			args = append(args, flags...)
 			var out, diagnostic bytes.Buffer
 			var code int
 			if answer != "" {

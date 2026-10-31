@@ -34,6 +34,19 @@ Modules are tagged per directory, so each carries its own version: the core as
   `tmux.SocketSourceExplicit`, `tmux.SocketSourceEnvironmentPath`,
   `tmux.SocketSourceEnvironmentName`, or `tmux.SocketSourceTmux`.
 
+### workspace
+
+- `tmux-workspace` no longer passes the socket `TMUX` names as `-S` when neither
+  `-S` nor `-L` is given, except for `--append`, which asks for the current
+  session. Otherwise it uses `LIBTMUX_SOCKET_PATH`, else `LIBTMUX_SOCKET`, and
+  with neither set it passes tmux no socket, so tmux picks the server, which
+  inside tmux is still the one `TMUX` names. Outside `--append`, a socket path
+  holding a comma follows tmux's reading of `TMUX`, which stops at the first
+  comma.
+- `tmux-workspace shell` and loads that run Python pass tmuxp `-S` for a socket
+  chosen by `LIBTMUX_SOCKET_PATH` or `LIBTMUX_SOCKET`, which tmuxp does not
+  read.
+
 ### tmux/tmuxtest
 
 - `tmuxtest.NewServerWithOptions` and `tmuxtest.NewControlMode` now remove

@@ -66,6 +66,11 @@ $ tmux-workspace load \
     ./project.yaml
 ```
 
+Without `-L` or `-S`, the command uses the socket in `LIBTMUX_SOCKET_PATH`,
+else the name in `LIBTMUX_SOCKET`. With neither set it passes tmux no socket,
+and tmux picks the server: the one `TMUX` names inside tmux, otherwise its
+default socket.
+
 List discovered documents with complete configuration data:
 
 ```console
@@ -354,7 +359,8 @@ order one input can produce them:
 
 | Variable | Effect |
 | --- | --- |
-| `TMUX`, `TMUX_PANE` | Identify the attached daemon and invoking pane for an attached `load` and for `--append`. |
+| `LIBTMUX_SOCKET_PATH`, `LIBTMUX_SOCKET` | Select the socket when neither `-S` nor `-L` is given: the path, else the name. With neither set, tmux picks the server. |
+| `TMUX`, `TMUX_PANE` | Identify the attached daemon and invoking pane for an attached `load` and for `--append`. With no socket selected, tmux picks the server `TMUX` names, and `--append` selects it. |
 | `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `FORCE_COLOR` | The usual precedence for disabling or forcing ANSI styling; `--color` overrides all of them explicitly. |
 | `TERM` | Must be set and not `dumb` for human load progress to render. |
 | `TMUXP_PROGRESS`, `TMUXP_PROGRESS_FORMAT`, `TMUXP_PROGRESS_LINES` | Defaults for `--no-progress`, `--progress-format` and `--progress-lines` while the presenter is active. |
