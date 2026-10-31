@@ -11,7 +11,13 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 func invoke(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()

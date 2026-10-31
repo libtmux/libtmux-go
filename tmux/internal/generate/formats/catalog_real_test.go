@@ -15,7 +15,12 @@ import (
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

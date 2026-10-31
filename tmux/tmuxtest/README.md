@@ -237,10 +237,12 @@ server you already hold, and remove it when the test ends.
   reaches yours.
 - **A generated minimal config.** Your `~/.tmux.conf` cannot change a result:
   no inherited `base-index`, no prompt in captured pane text, no hooks firing.
-- **Inherited state dropped.** `TMUX`, `TMUX_PANE`, and `TMUX_TMPDIR` are
-  removed from the environment of each tmux the harness starts, which it
-  points at a socket path instead, so a suite run from inside a pane stays
-  away from the server hosting it.
+- **Inherited state dropped.** `TMUX`, `TMUX_PANE`, and every
+  `LIBTMUX_SOCKET*` variable are removed from the environment of each tmux the
+  harness starts, which it points at a socket path instead, so a suite run
+  from inside a pane stays away from the server hosting it. `TMUX_TMPDIR`
+  stays, so a command a server's pane runs without a socket still looks in the
+  suite's directory.
 - **Verified teardown.** Cleanup asks the server answering on the socket for
   its process and confirms *that* process died, rather than trusting a PID
   recorded at startup, which may have been reused.
@@ -248,13 +250,26 @@ server you already hold, and remove it when the test ends.
 ## Keeping your suite to itself
 
 There is nothing to set up. [`tmuxtest.Main`][tmuxtest-main] gives each run of
-a suite a temporary directory of its own and points the test process's
-`TMPDIR`, `GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends.
+a suite a private temporary directory of its own and points the test process's
+`TMPDIR`, `GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends. It also
+clears `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable.
 
 - Two checkouts running their suites on one machine share no socket, and
   neither shares one with a tmux you are using.
+- A suite started from inside tmux does not reach that tmux. tmux follows
+  `TMUX` over `TMUX_TMPDIR`, so a command that names no socket would otherwise
+  land on the server around the suite. If any of those variables is still set
+  after the clearing, or the default socket would fall outside the directory,
+  `Main` exits 2 without running a test.
 - The directory's path is kept short, because a socket path may hold only about
   a hundred bytes.
+- A test that leaves a server running fails the run, even when every test
+  passed. When `m.Run` returns, `Main` scans the whole directory for sockets,
+  not only the one tmux names for itself, and stops each server answering on
+  one with `tmux -S <socket> kill-server`. It reports how many it found, split
+  between the default socket in `TMUX_TMPDIR` and any other, and never a path
+  or a value. It keeps the directory while a server still answers in it, or
+  when part of it could not be scanned, so the server can be found.
 
 ## What it leaves out
 

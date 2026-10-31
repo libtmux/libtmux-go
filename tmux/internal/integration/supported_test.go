@@ -2,6 +2,7 @@ package integration
 
 import (
 	"cmp"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -270,12 +271,134 @@ func TestRequiredMatrixCountsEveryExplicitlySelectedCell(t *testing.T) {
 	}
 }
 
+// A sweep runs in a directory of its own, made for the run, with none of the
+// variables that would point a tmux at somebody's server. The caller's
+// TMUX_TMPDIR is the directory of the tmux they use, so it is not reused.
+func TestMatrixSweepsInAFreshDirectoryWithoutSelectors(t *testing.T) {
+	matrix := t.TempDir()
+	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7c")
+	callers := t.TempDir()
+	var directories []string
+	for range 2 {
+		envLog := filepath.Join(t.TempDir(), "go-env")
+		output, err := runMatrixScript(t, matrix,
+			"LIBTMUX_MATRIX_VERSIONS=3.7c",
+			"LIBTMUX_MATRIX_MODULES=. workspace",
+			"LIBTMUX_MATRIX_TEST_ENV_LOG="+envLog,
+			"TMUX_TMPDIR="+callers,
+			"TMUX=/tmp/decoy,1,0",
+			"TMUX_PANE=%9",
+			"LIBTMUX_SOCKET=decoy",
+			"LIBTMUX_SOCKET_PATH=/tmp/decoy/path",
+			"LIBTMUX_SOCKET_DIR=/tmp/decoy",
+		)
+		if err != nil {
+			t.Fatalf("matrix failed: %v\n%s", err, output)
+		}
+		recorded, err := os.ReadFile(envLog)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := map[string]bool{}
+		for line := range strings.Lines(string(recorded)) {
+			line = strings.TrimSuffix(line, "\n")
+			if directory, ok := strings.CutPrefix(line, "tmpdir "); ok {
+				seen[directory] = true
+				continue
+			}
+			t.Errorf("a cell was handed %s", strings.TrimPrefix(line, "env "))
+		}
+		if len(seen) != 1 {
+			t.Fatalf("the cells saw %d TMUX_TMPDIR values, want one shared by the sweep", len(seen))
+		}
+		for directory := range seen {
+			if directory == callers || directory == "/tmp/libtmux-go-matrix" {
+				t.Errorf("the sweep reused a directory it was handed or a fixed one")
+			}
+			if _, err := os.Stat(directory); !os.IsNotExist(err) {
+				t.Errorf("the sweep left its socket directory behind: %v", err)
+			}
+			directories = append(directories, directory)
+		}
+	}
+	if len(directories) == 2 && directories[0] == directories[1] {
+		t.Error("two sweeps shared one socket directory")
+	}
+}
+
+// Deleting a directory with a socket in it could orphan the server behind the
+// socket, so the sweep keeps it and fails.
+func TestMatrixKeepsASocketDirectoryHoldingASocket(t *testing.T) {
+	matrix := t.TempDir()
+	installMatrixTmux(t, matrix, "3.7c", "tmux 3.7c")
+	envLog := filepath.Join(t.TempDir(), "go-env")
+	output, err := runMatrixScript(t, matrix,
+		"LIBTMUX_MATRIX_VERSIONS=3.7c",
+		"LIBTMUX_MATRIX_MODULES=.",
+		"LIBTMUX_MATRIX_TEST_ENV_LOG="+envLog,
+		"LIBTMUX_MATRIX_TEST_SOCKET_HELPER="+os.Args[0],
+	)
+	recorded, readErr := os.ReadFile(envLog)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	directory := strings.TrimSpace(strings.TrimPrefix(strings.SplitN(string(recorded), "\n", 2)[0], "tmpdir "))
+	if directory != "" && filepath.IsAbs(directory) && strings.Contains(filepath.Base(directory), "lmx.") {
+		t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	}
+
+	if err == nil {
+		t.Fatalf("the sweep reported success with a socket left in its directory:\n%s", output)
+	}
+	if !strings.Contains(output, "a socket remains in TMUX_TMPDIR, so the directory was kept") {
+		t.Errorf("the sweep did not say why it kept the directory:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "stale.sock")); err != nil {
+		t.Errorf("the directory holding a socket was deleted: %v", err)
+	}
+}
+
+// TestMatrixSocketHelper leaves a socket file nothing listens on, in the
+// directory the sweep script gave the fake go.
+func TestMatrixSocketHelper(t *testing.T) {
+	path := os.Getenv("LIBTMUX_MATRIX_TEST_SOCKET")
+	if path == "" {
+		return
+	}
+	address, err := net.ResolveUnixAddr("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.ListenUnix("unix", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener.SetUnlinkOnClose(false)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func runMatrixScript(t *testing.T, matrix string, variables ...string) (string, error) {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "bin")
+	// The recording keeps the names of the variables that select a server,
+	// never their values, and TMUX_TMPDIR, which is a directory.
 	writeMatrixExecutable(t, filepath.Join(bin, "go"), `#!/bin/sh
 if [ -n "${LIBTMUX_MATRIX_TEST_LOG:-}" ]; then
     printf '%s\n' "$PWD" >> "$LIBTMUX_MATRIX_TEST_LOG"
+fi
+if [ -n "${LIBTMUX_MATRIX_TEST_ENV_LOG:-}" ]; then
+    env | while IFS= read -r line; do
+        case $line in
+            TMUX_TMPDIR=*) printf 'tmpdir %s\n' "${line#TMUX_TMPDIR=}" ;;
+            TMUX=*|TMUX_*|LIBTMUX_SOCKET*) printf 'env %s\n' "${line%%=*}" ;;
+        esac
+    done >> "$LIBTMUX_MATRIX_TEST_ENV_LOG"
+fi
+if [ -n "${LIBTMUX_MATRIX_TEST_SOCKET_HELPER:-}" ]; then
+    LIBTMUX_MATRIX_TEST_SOCKET="$TMUX_TMPDIR/stale.sock" \
+        "$LIBTMUX_MATRIX_TEST_SOCKET_HELPER" -test.run='^TestMatrixSocketHelper$' >/dev/null
 fi
 exit 0
 `)
@@ -286,6 +409,7 @@ exit 0
 		"PATH=" + bin + ":" + os.Getenv("PATH"),
 		"LIBTMUX_TMUX_MATRIX=" + matrix,
 		"TMUX_TMPDIR=" + t.TempDir(),
+		"TMPDIR=" + os.Getenv("TMPDIR"),
 	}, variables...)
 	output, err := command.CombinedOutput()
 	return string(output), err

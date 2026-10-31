@@ -3,13 +3,19 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 // TestProcessCounterForwardsAndCountsRealTmux catches a proxy that records an
 // invocation without preserving the selected tmux executable's behavior.

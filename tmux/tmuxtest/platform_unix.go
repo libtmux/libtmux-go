@@ -4,6 +4,8 @@ package tmuxtest
 
 import (
 	"errors"
+	"io/fs"
+	"os"
 	"syscall"
 )
 
@@ -13,6 +15,12 @@ func platformSupported() bool {
 
 func shortTempBase() string {
 	return "/tmp"
+}
+
+// ownedByCaller reports whether info describes a file this process owns.
+func ownedByCaller(info fs.FileInfo) bool {
+	status, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(status.Uid) == os.Getuid()
 }
 
 func processAlive(pid int) bool {

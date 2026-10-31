@@ -137,17 +137,21 @@ func TestNewServerWithOptionsScrubsInheritedTmuxEnvironment(t *testing.T) {
 	t.Setenv("LIBTMUX_INHERITED_PROBE", "kept")
 	t.Setenv("TMUX", "/tmp/foreign,123,0")
 	t.Setenv("TMUX_PANE", "%9")
-	t.Setenv("TMUX_TMPDIR", "/tmp/foreign")
+	t.Setenv("LIBTMUX_SOCKET", "foreign")
+	t.Setenv("LIBTMUX_SOCKET_PATH", "/tmp/foreign/sock")
 
 	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{})
 	environment := server.ProcessEnvironment()
 	if !slices.Contains(environment, "LIBTMUX_INHERITED_PROBE=kept") {
 		t.Fatalf("ProcessEnvironment() omitted inherited probe: %#v", environment)
 	}
+	if want := "TMUX_TMPDIR=" + os.Getenv("TMUX_TMPDIR"); !slices.Contains(environment, want) {
+		t.Fatalf("ProcessEnvironment() dropped TMUX_TMPDIR, which the suite points at its root")
+	}
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
-		if key == "TMUX" || key == "TMUX_PANE" || key == "TMUX_TMPDIR" {
-			t.Fatalf("ProcessEnvironment() retained targeting variable %q", entry)
+		if key == "TMUX" || key == "TMUX_PANE" || strings.HasPrefix(key, "LIBTMUX_SOCKET") {
+			t.Fatalf("ProcessEnvironment() retained selector variable %q", key)
 		}
 	}
 }

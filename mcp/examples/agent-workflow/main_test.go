@@ -15,6 +15,10 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
+
 // TestAgentWorkflowPrintsItsPublishedOutput runs the program against a real
 // tmux on a socket with nothing on it, and holds what it prints to output.txt,
 // which its page and the package page publish.

@@ -170,9 +170,11 @@ version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 tmux is on `PATH`, so run the supported releases before anything ships.
 `scripts/matrix.sh` runs every compatible module suite, given a directory of
 tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
-whole 3.3a-through-3.8 range, with the feature example omissions above. With
-no matrix directory, the script skips with an explanation rather than
-reporting a pass it did not earn. Set `LIBTMUX_MATRIX_REQUIRED=1` for a
+whole 3.3a-through-3.8 range, with the feature example omissions above. It
+sweeps in a fresh socket directory of its own and drops `TMUX`, `TMUX_PANE`,
+and `LIBTMUX_SOCKET*` from the environment, so it never reaches the tmux you are
+using. With no matrix directory, the script skips with an explanation rather
+than reporting a pass it did not earn. Set `LIBTMUX_MATRIX_REQUIRED=1` for a
 release gate, where absence must fail. With no explicit
 `LIBTMUX_MATRIX_VERSIONS`, required mode checks every supported build; setting
 it intentionally narrows the run:
@@ -354,6 +356,13 @@ a preference:
 - Parses the package's source, or asserts the surface compiles — stays, because
   it is a structural gate on the package rather than a test of tmux.
 - Starts a tmux server — goes to `internal/integration`.
+
+Wherever a package can start tmux, its `TestMain` returns
+`tmuxtest.Main(m)`. Without it the test process keeps the `TMUX`, `TMUX_PANE`,
+and `LIBTMUX_SOCKET*` of whoever ran it, and a command that names no socket
+reaches that person's own server.
+`TestEveryPackageThatStartsTmuxEntersTheSandbox` fails on a package that
+imports the tmux client, or runs an executable named `tmux`, without one.
 
 An `Example` must end in an output comment. Without one Go compiles it and never
 runs it, so it renders on the package page exactly like a working example while

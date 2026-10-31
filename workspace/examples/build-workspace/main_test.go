@@ -8,7 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 // hostileConfig is a tmux configuration unlike the one the page was written
 // against. The program runs with it as the user's own, so output that

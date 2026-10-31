@@ -9,7 +9,13 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+
+	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
+
+func TestMain(m *testing.M) {
+	os.Exit(tmuxtest.Main(m))
+}
 
 // How this process exits matters to whatever started it. An agent CLI that
 // supervises the server reads a nonzero exit as a crash and says so, and the

@@ -22,10 +22,29 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if isPTYHelperProcess(os.Args[1:]) {
+	if isPTYHelperProcess(os.Args[1:]) || isCanaryControl(os.Args[1:]) {
 		os.Exit(m.Run())
 	}
 	os.Exit(tmuxtest.Main(m))
+}
+
+// isCanaryControl reports whether this process is the canary's negative
+// control: a child that keeps a decoy TMUX, which Main would clear, and runs
+// the canary alone. The variable by itself selects nothing, so an exported
+// one cannot run the other tests outside the suite.
+func isCanaryControl(arguments []string) bool {
+	if os.Getenv("LIBTMUX_CANARY_WITHOUT_SUITE") == "" {
+		return false
+	}
+	runs, canary := 0, false
+	for _, argument := range arguments {
+		name, value, _ := strings.Cut(strings.TrimLeft(argument, "-"), "=")
+		if name == "test.run" {
+			runs++
+			canary = value == "^TestSuiteEnvironmentIsSandboxed$"
+		}
+	}
+	return runs == 1 && canary
 }
 
 // isPTYHelperProcess reports whether this process is a child spawned onto a

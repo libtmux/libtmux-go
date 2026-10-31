@@ -31,7 +31,9 @@
 // # Setup and lifecycle
 //
 // Call [Main] exactly once from TestMain before creating servers. It redirects
-// temporary and tmux socket roots, then cleans registered servers.
+// temporary and tmux socket roots, clears the variables that point a tmux
+// client at a server outside them, then cleans registered servers. A server a
+// test leaves running in the root is stopped, and the run fails for it.
 //
 //	func TestMain(m *testing.M) {
 //		os.Exit(tmuxtest.Main(m))
@@ -79,6 +81,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,6 +91,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -103,7 +108,8 @@ type ServerOptions struct {
 	Config []byte
 	// ProcessEnvironment supplies the server environment. Nil snapshots the
 	// current process environment, while a non-nil empty slice remains empty.
-	// Tmux targeting variables are removed in either case.
+	// TMUX, TMUX_PANE, and every LIBTMUX_SOCKET* variable are removed in
+	// either case. TMUX_TMPDIR is kept.
 	ProcessEnvironment []string
 	// InitialSession starts the daemon with this copied request. Nil returns a
 	// lazy bare server; a later tmux command may start it.
@@ -140,8 +146,15 @@ const (
 	// fixedShellConfig supplies the default command for panes without one.
 	fixedShellConfig = "set -g default-shell /bin/sh\n" +
 		"set -g default-command \"ENV= PS1='" + ShellPrompt + "' /bin/sh -i\"\n"
-	maxSocketPathBytes  = 103
-	cleanupTimeout      = 3 * time.Second
+	maxSocketPathBytes = 103
+	// maxDefaultSocketBytes bounds the default socket,
+	// TMUX_TMPDIR/tmux-<uid>/default, so that it stays well inside the limit
+	// of a Unix socket path.
+	maxDefaultSocketBytes = 100
+	cleanupTimeout        = 3 * time.Second
+	// leakGrace is how long a server found at the end of the run may take to
+	// finish exiting before it counts as left running.
+	leakGrace           = time.Second
 	perTestCleanupTries = 3
 	// cleanupRetryGap gives an in-progress daemon shutdown time to complete.
 	cleanupRetryGap = 100 * time.Millisecond
@@ -238,6 +251,11 @@ var failureGuidance = struct {
 // These variables keep derived paths short and named sockets inside the suite root.
 var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
 
+// socketSelectorPrefix starts every variable a libtmux port may read to pick a
+// socket. The suite clears them with TMUX and TMUX_PANE, which tmux follows
+// to the server a command was typed inside and to the pane it targets.
+const socketSelectorPrefix = "LIBTMUX_SOCKET"
+
 // SuiteRootTagVariable names the environment variable that tags a suite's
 // temporary root. go test runs packages in parallel and every suite among them
 // creates a root beside the others, so a test spawning a child suite sets this
@@ -252,9 +270,17 @@ func suiteRootPrefix() string {
 }
 
 // Main runs the one-call package lifecycle for tmuxtest. It prepares short
-// temporary paths, redirects [suiteEnvironment] into them, runs m, cleans
-// registered servers, restores the environment, and returns the final status.
-// TestMain should return its result through [os.Exit].
+// temporary paths, redirects [suiteEnvironment] into them, clears the
+// variables that select a server outside them, runs m, cleans registered
+// servers, restores the environment, and returns the final status. It returns
+// 2 without running m when the environment would still reach a server outside
+// the suite.
+//
+// After m returns, Main scans the whole suite root for sockets and stops each
+// server still answering on one with kill-server. Such a server is a test's
+// leak: Main reports how many it found, without naming a path, and returns 1
+// even when every test passed. The root is kept while a server still answers
+// in it. TestMain should return its result through [os.Exit].
 func Main(m *testing.M) int {
 	if !platformSupported() {
 		fmt.Fprintf(os.Stderr, "tmuxtest: real tmux tests are unsupported on %s\n", runtime.GOOS)
@@ -272,6 +298,12 @@ func runSuite(run func() int) int {
 	restoreEnvironment, err := replaceSuiteEnvironment(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, harnessFailure("redirect the suite environment", err))
+		_ = os.RemoveAll(root)
+		return 2
+	}
+	if err := assertSandboxed(root); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		_ = restoreEnvironment()
 		_ = os.RemoveAll(root)
 		return 2
 	}
@@ -298,6 +330,14 @@ func runSuite(run func() int) int {
 			code = 1
 		}
 	}
+	tmuxPath, _ := exec.LookPath("tmux")
+	leaks := stopLeakedServers(root, tmuxPath)
+	if message := leaks.message(); message != "" {
+		fmt.Fprintln(os.Stderr, message)
+		if code == 0 {
+			code = 1
+		}
+	}
 
 	suite.Lock()
 	suite.active = false
@@ -310,7 +350,7 @@ func runSuite(run func() int) int {
 			code = 1
 		}
 	}
-	if cleanupErr == nil || !reachableDaemonRemains(surviving) {
+	if !leaks.keepsRoot() && (cleanupErr == nil || !reachableDaemonRemains(surviving)) {
 		if err := os.RemoveAll(root); err != nil {
 			fmt.Fprintln(os.Stderr, harnessFailure("remove temporary root", err))
 			if code == 0 {
@@ -786,24 +826,26 @@ func cleanupRegisteredServers() error {
 	return errors.Join(failures...)
 }
 
+// scrubTmuxEnvironment returns environment without the variables that select a
+// server. TMUX_TMPDIR stays: it is where a command that names no socket looks,
+// so a child that loses it would look in the user's directory instead of the
+// suite's.
 func scrubTmuxEnvironment(environment []string) []string {
 	cleaned := make([]string, 0, len(environment))
 	for _, entry := range environment {
 		key, _, _ := strings.Cut(entry, "=")
-		switch key {
-		case "TMUX", "TMUX_PANE", "TMUX_TMPDIR":
-			continue
-		default:
+		if !isAmbientTmuxName(key) {
 			cleaned = append(cleaned, entry)
 		}
 	}
 	return cleaned
 }
 
-// replaceSuiteEnvironment points every variable in [suiteEnvironment] at root
-// and returns one call that restores all of them. A variable that cannot be set
-// undoes the ones already replaced, so a failure leaves the environment as it
-// was found rather than half redirected.
+// replaceSuiteEnvironment points every variable in [suiteEnvironment] at root,
+// clears the variables [ambientTmuxNames] finds, and returns one call that
+// restores all of them. A variable that cannot be set undoes the ones already
+// replaced, so a failure leaves the environment as it was found rather than
+// half redirected.
 func replaceSuiteEnvironment(root string) (func() error, error) {
 	restores := make([]func() error, 0, len(suiteEnvironment))
 	restore := func() error {
@@ -823,7 +865,216 @@ func replaceSuiteEnvironment(root string) (func() error, error) {
 		}
 		restores = append(restores, undo)
 	}
+	for _, key := range ambientTmuxNames(os.Environ()) {
+		undo, err := unsetEnvironment(key)
+		if err != nil {
+			_ = restore()
+			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		restores = append(restores, undo)
+	}
 	return restore, nil
+}
+
+// ambientTmuxNames returns the names in environment through which a command
+// that names no socket still reaches a server the suite did not start: TMUX,
+// TMUX_PANE, and every variable starting with [socketSelectorPrefix].
+func ambientTmuxNames(environment []string) []string {
+	var names []string
+	for _, entry := range environment {
+		key, _, _ := strings.Cut(entry, "=")
+		if isAmbientTmuxName(key) && !slices.Contains(names, key) {
+			names = append(names, key)
+		}
+	}
+	return names
+}
+
+func isAmbientTmuxName(key string) bool {
+	return key == "TMUX" || key == "TMUX_PANE" || strings.HasPrefix(key, socketSelectorPrefix)
+}
+
+// sandboxFindings lists, by variable name and never by value, each way
+// environment lets a tmux command that names no socket leave root: an
+// ambient selector still set, or a default socket outside root.
+func sandboxFindings(environment []string, root string) []string {
+	var findings []string
+	for _, name := range ambientTmuxNames(environment) {
+		findings = append(findings, name+" is set")
+	}
+	directory := ""
+	for _, entry := range environment {
+		if value, ok := strings.CutPrefix(entry, "TMUX_TMPDIR="); ok {
+			directory = value
+		}
+	}
+	if directory == "" || !filepath.IsAbs(directory) {
+		return append(findings, "TMUX_TMPDIR is not an absolute path")
+	}
+	// The spelling of root is compared as written, never resolved: it is
+	// the one TMUX_TMPDIR was given.
+	socket := filepath.Join(directory, "tmux-"+strconv.Itoa(os.Getuid()), "default")
+	relative, err := filepath.Rel(root, socket)
+	if root == "" || err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		findings = append(findings, "the default socket is outside the suite root")
+	}
+	if len(socket) > maxDefaultSocketBytes {
+		findings = append(findings, "the default socket path is too long")
+	}
+	return findings
+}
+
+// privateRootFindings lists each way root fails to be a directory this
+// process alone can use.
+func privateRootFindings(root string) []string {
+	info, err := os.Lstat(root)
+	switch {
+	case err != nil || !info.IsDir():
+		return []string{"the suite root is not a directory"}
+	case info.Mode().Perm()&0o077 != 0:
+		return []string{"the suite root is not private"}
+	case !ownedByCaller(info):
+		return []string{"the suite root is owned by another user"}
+	}
+	return nil
+}
+
+// assertSandboxed fails unless the process environment holds no selector of a
+// server outside root, its default socket lies inside root, and root is
+// private to this process.
+func assertSandboxed(root string) error {
+	findings := append(sandboxFindings(os.Environ(), root), privateRootFindings(root)...)
+	if len(findings) == 0 {
+		return nil
+	}
+	return fmt.Errorf("tmuxtest: refusing to run unsandboxed: %s", strings.Join(findings, "; "))
+}
+
+// leakReport counts what the scan at the end of a run found.
+type leakReport struct {
+	// onDefault and elsewhere count the servers still answering on the
+	// default socket of TMUX_TMPDIR and on any other socket in the root.
+	onDefault, elsewhere int
+	// survivors counts the servers that kept answering after kill-server.
+	survivors int
+	// unscanned counts the entries the scan could not read.
+	unscanned int
+}
+
+// keepsRoot reports whether the root must stay: a server still answers in it,
+// or part of it was never searched.
+func (r leakReport) keepsRoot() bool {
+	return r.survivors > 0 || r.unscanned > 0
+}
+
+// message describes the report by counts and names no path. The split between
+// the default socket and another one says whether a test ran a client that
+// names no socket.
+func (r leakReport) message() string {
+	var lines []string
+	if r.onDefault+r.elsewhere > 0 {
+		line := fmt.Sprintf(
+			"tmuxtest: the suite left tmux servers running: %d on the default socket in TMUX_TMPDIR, %d on another socket",
+			r.onDefault, r.elsewhere,
+		)
+		if r.survivors > 0 {
+			line += fmt.Sprintf("; %d did not stop after kill-server, so the suite root was kept", r.survivors)
+		} else {
+			line += "; each was stopped with kill-server"
+		}
+		lines = append(lines, line)
+	}
+	if r.unscanned > 0 {
+		lines = append(lines, fmt.Sprintf(
+			"tmuxtest: %d entries in the suite root could not be scanned for servers, so the root was kept",
+			r.unscanned,
+		))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// stopLeakedServers searches the whole of root for sockets, not only the
+// directory tmux names for itself, and stops each server answering on one with
+// "tmux -S socket kill-server". An empty tmuxPath stops none.
+func stopLeakedServers(root, tmuxPath string) leakReport {
+	sockets, unscanned := socketsUnder(root)
+	report := leakReport{unscanned: unscanned}
+	for _, socket := range sockets {
+		if socketQuiet(socket, leakGrace) {
+			continue
+		}
+		if isDefaultSocket(socket) {
+			report.onDefault++
+		} else {
+			report.elsewhere++
+		}
+		if tmuxPath != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+			command := exec.CommandContext(ctx, tmuxPath, "-S", socket, "kill-server")
+			command.Env = scrubTmuxEnvironment(os.Environ())
+			_ = command.Run()
+			cancel()
+		}
+		if !socketQuiet(socket, cleanupTimeout) {
+			report.survivors++
+		}
+	}
+	return report
+}
+
+// socketsUnder lists the sockets in root, reached without following symbolic
+// links, and counts the entries it could not read.
+func socketsUnder(root string) (sockets []string, unscanned int) {
+	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			unscanned++
+		case entry.Type()&fs.ModeSocket != 0:
+			sockets = append(sockets, path)
+		}
+		return nil
+	})
+	return sockets, unscanned
+}
+
+// isDefaultSocket reports whether path is where tmux puts the server a client
+// reaches when it names no socket.
+func isDefaultSocket(path string) bool {
+	return filepath.Base(path) == "default" &&
+		strings.HasPrefix(filepath.Base(filepath.Dir(path)), "tmux-")
+}
+
+// socketQuiet reports whether nothing answers on socket within limit. A file
+// no process listens on refuses the connection, and a server that is exiting
+// stops answering, so both count as quiet. An error that says neither is
+// treated as an answer.
+func socketQuiet(socket string, limit time.Duration) bool {
+	deadline := time.Now().Add(limit)
+	for {
+		connection, err := (&net.Dialer{Timeout: time.Second}).Dial("unix", socket)
+		if err == nil {
+			_ = connection.Close()
+		} else if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func unsetEnvironment(key string) (func() error, error) {
+	previous, existed := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		return nil, err
+	}
+	return func() error {
+		if existed {
+			return os.Setenv(key, previous)
+		}
+		return os.Unsetenv(key)
+	}, nil
 }
 
 func replaceEnvironment(key, value string) (func() error, error) {

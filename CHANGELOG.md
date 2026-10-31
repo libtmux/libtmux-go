@@ -23,6 +23,30 @@ Modules are tagged per directory, so each carries its own version: the core as
   control-mode client, which tmux 3.8 would otherwise silently ignore; an
   older daemon is sent the request unchanged.
 
+### tmux/tmuxtest
+
+- `tmuxtest.NewServerWithOptions` and `tmuxtest.NewControlMode` now remove
+  every `LIBTMUX_SOCKET*` variable, as well as `TMUX` and `TMUX_PANE`, from the
+  environment of the tmux they start, and no longer remove `TMUX_TMPDIR`.
+  A child that runs tmux without a socket therefore looks in the directory
+  the process was given.
+- `tmuxtest.Main` now fails the run when a test leaves a tmux server running,
+  even if every test passed. It scans the whole suite directory for sockets,
+  stops each server answering on one with `kill-server`, and reports how many
+  it found without naming a path. Before, only servers registered with the
+  harness were stopped, and a server started by a bare `tmux` outlived the
+  run with its directory deleted. `Main` keeps the directory while a server
+  still answers in it.
+- `tmuxtest.Main` exits 2 without running a test when the suite directory is
+  not private to the user.
+- `tmuxtest.Main` clears `TMUX`, `TMUX_PANE` and every `LIBTMUX_SOCKET*`
+  variable from the test process for the length of the suite. Before, only
+  `TMUX_TMPDIR` was redirected, so a suite started from inside tmux sent a
+  command that named no socket to the server around it, because tmux follows
+  `TMUX` over `TMUX_TMPDIR`. `Main` now exits 2 without running a test when any
+  of them is still set, or when the default socket would land outside the
+  suite's directory.
+
 ## v0.1.0, workspace/v0.1.0, mcp/v0.1.0
 
 ### Documentation

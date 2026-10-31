@@ -15,17 +15,25 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-func TestScrubTmuxEnvironmentRemovesTargetingVariables(t *testing.T) {
+func TestScrubTmuxEnvironmentRemovesSelectorsAndKeepsTheSocketDirectory(t *testing.T) {
 	t.Parallel()
 
 	environment := []string{
 		"PATH=/bin",
 		"TMUX=/tmp/foreign,123,0",
 		"TMUX_PANE=%7",
-		"TMUX_TMPDIR=/tmp/foreign",
+		"TMUX_TMPDIR=/tmp/suite",
+		"LIBTMUX_SOCKET=foreign",
+		"LIBTMUX_SOCKET_PATH=/tmp/foreign/sock",
+		"LIBTMUX_SUITE_ROOT_TAG=tag",
 		"TERM=screen",
 	}
-	want := []string{"PATH=/bin", "TERM=screen"}
+	want := []string{
+		"PATH=/bin",
+		"TMUX_TMPDIR=/tmp/suite",
+		"LIBTMUX_SUITE_ROOT_TAG=tag",
+		"TERM=screen",
+	}
 	if got := scrubTmuxEnvironment(environment); !slices.Equal(got, want) {
 		t.Fatalf("scrubTmuxEnvironment() = %#v, want %#v", got, want)
 	}

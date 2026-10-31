@@ -852,8 +852,8 @@ directory beneath that suite root so its socket and config remain available for
 fallback cleanup after a test returns. Socket paths are checked against the
 portable 103-byte Unix socket-path ceiling and registered for suite cleanup.
 
-Every tmux child removes inherited `TMUX`, `TMUX_PANE`, and `TMUX_TMPDIR` unless
-a test explicitly opts in, and starts with an exact generated minimal `-f`
+Every tmux child removes inherited `TMUX`, `TMUX_PANE`, and `LIBTMUX_SOCKET*`
+unless a test opts in, and starts with an exact generated minimal `-f`
 configuration. Server and control-client startup take a caller-owned context
 first and apply an internal ceiling. `t.Cleanup` uses a fresh bounded context,
 requests `kill-server`, probes the daemon currently answering on the owned
@@ -870,7 +870,9 @@ artifact removal without issuing another tmux command through files an earlier
 attempt may already have removed. The final probe and removal rely on the
 harness's private socket namespace: no test may start a replacement daemon
 after it has returned control to cleanup. Tests never share a server. Parser
-and generator units may be process-free; behavior tests use real tmux.
+and generator units may be process-free; behavior tests use real tmux. A child
+keeps `TMUX_TMPDIR`, so a command that names no socket stays in the suite's
+directory.
 
 The reusable harness is built on supported Unix Go platforms where tmux offers
 filesystem `-S` sockets. Other platforms compile a clear unsupported-platform
