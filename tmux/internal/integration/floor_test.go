@@ -19,10 +19,6 @@ var goDirective = regexp.MustCompile(`(?m)^go (\d+\.\d+)(?:\.\d+)?\s*$`)
 // against, which is the run.go setting.
 var lintGoVersion = regexp.MustCompile(`(?m)^\s+go:\s*"?(\d+\.\d+)"?\s*$`)
 
-// workflowGoVersions matches the toolchains the tests workflow runs, which is a
-// YAML flow sequence of quoted versions.
-var workflowGoVersions = regexp.MustCompile(`(?m)^\s+go-version:\s*\[([^\]]+)\]`)
-
 // documentedFloor matches a language version stated to a reader, in any of the
 // ways the documentation states one. Whitespace rather than a space, because
 // prose wraps and a requirement split across two lines is still a requirement.
@@ -54,19 +50,18 @@ func TestEveryStatementOfTheLanguageFloorAgrees(t *testing.T) {
 		state(filepath.ToSlash(filepath.Join(module, ".golangci.yml")), lintGoVersion)
 	}
 	state("go.work", goDirective)
-	state(".github/workflows/tests.yml", workflowGoVersions)
 
-	// The workflow names a range, and only its oldest entry claims anything
+	// The CI manifest names a range, and only its oldest entry claims anything
 	// about the floor. A newer one claims that nothing has broken above it.
-	const workflow = ".github/workflows/tests.yml"
-	tested := strings.Split(stated[workflow], ",")
-	for i, entry := range tested {
-		tested[i] = strings.Trim(strings.TrimSpace(entry), `"'`)
+	tested := ciManifestEntries(t, root, "go")
+	if len(tested) == 0 {
+		t.Fatalf("%s lists no Go toolchain, and the tests workflow takes its "+
+			"toolchains from it", ciManifestPath)
 	}
 	slices.SortFunc(tested, func(left, right string) int {
 		return version.Compare("go"+left, "go"+right)
 	})
-	stated[workflow] = tested[0]
+	stated[ciManifestPath] = tested[0]
 
 	floor := stated["go.mod"]
 	for _, name := range slices.Sorted(maps.Keys(stated)) {
