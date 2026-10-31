@@ -172,12 +172,9 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(missingRoot, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "frozen-root"}); err != nil {
-		t.Fatal(err)
-	}
+	// Registered before the session exists: a NewSession that fails after tmux
+	// started the daemon would otherwise leave it running, outside the suite
+	// root where no end-of-run scan looks.
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
@@ -188,6 +185,12 @@ func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 			t.Errorf("remove the socket file the server left: %v", errors.Unwrap(err))
 		}
 	})
+	if err := os.Mkdir(missingRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "frozen-root"}); err != nil {
+		t.Fatal(err)
+	}
 	result, err := server.Cmd(ctx, "display-message", "-p", "#{socket_path}")
 	if err != nil || result.ExitCode != 0 || len(result.Stdout) != 1 {
 		t.Fatalf("display-message = %#v, %v", result, err)
