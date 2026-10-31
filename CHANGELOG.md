@@ -9,6 +9,8 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ## Unreleased
 
+## v0.1.1, workspace/v0.1.1, mcp/v0.1.1
+
 ### tmux
 
 - `Window.SelectLayout` and `Server.ValidateLayouts` accept a JSON layout from
