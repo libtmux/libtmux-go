@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+var pinnedTmate = regexp.MustCompile(`uses: mxschmitt/action-tmate@[0-9a-f]{40}\b`)
+
 var jobHeading = regexp.MustCompile(`(?m)^  ([a-z][a-z-]*):\s*$`)
 
 var flowSequenceOfVersions = regexp.MustCompile(`(?m)^\s+(?:tmux-version|rejected-version|go-version):\s*\[`)
@@ -76,5 +78,68 @@ func TestRequiredJobWaitsForEveryOtherJob(t *testing.T) {
 	slices.Sort(waits)
 	if !slices.Equal(others, waits) {
 		t.Errorf("required waits for %v and the workflow has %v", waits, others)
+	}
+}
+
+// jobSection returns the text of one job of a workflow, from its heading to the
+// next job's.
+func jobSection(t *testing.T, workflow, job string) string {
+	t.Helper()
+	headings := jobHeading.FindAllStringSubmatchIndex(workflow, -1)
+	for i, heading := range headings {
+		if workflow[heading[2]:heading[3]] != job {
+			continue
+		}
+		if i+1 < len(headings) {
+			return workflow[heading[0]:headings[i+1][0]]
+		}
+		return workflow[heading[0]:]
+	}
+	t.Fatalf("the workflow has no %s job", job)
+	return ""
+}
+
+func TestTmateIsPinnedLimitedAndConfinedToTheTmuxMatrix(t *testing.T) {
+	t.Parallel()
+
+	workflows := filepath.Join(repositoryRoot(t), ".github", "workflows")
+	content, err := os.ReadFile(filepath.Join(workflows, "tests.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	const action = "uses: mxschmitt/action-tmate@"
+	uses := strings.Count(text, action)
+	if uses == 0 {
+		t.Fatal("the tests workflow offers no tmate session")
+	}
+	if pinned := len(pinnedTmate.FindAllString(text, -1)); pinned != uses {
+		t.Errorf("%d tmate steps and %d are pinned by a full commit", uses, pinned)
+	}
+	if limited := strings.Count(text, "limit-access-to-actor: true"); limited != uses {
+		t.Errorf("%d tmate steps and %d limit access to the actor", uses, limited)
+	}
+	section := jobSection(t, text, "tmux-matrix")
+	if got := strings.Count(section, action); got != uses {
+		t.Errorf("%d tmate steps are in the tmux-matrix job and %d in the workflow", got, uses)
+	}
+	if !strings.Contains(section, "timeout-minutes:") {
+		t.Error("the job that opens a tmate session has no timeout-minutes cap")
+	}
+	others, err := filepath.Glob(filepath.Join(workflows, "*.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, other := range others {
+		if filepath.Base(other) == "tests.yml" {
+			continue
+		}
+		body, err := os.ReadFile(other)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(body), "action-tmate") {
+			t.Errorf("%s opens a tmate session", filepath.Base(other))
+		}
 	}
 }

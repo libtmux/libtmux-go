@@ -34,6 +34,11 @@ on:
         type: choice
         options: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04]
         default: ubuntu-latest
+      tmate:
+        description: Open a tmate session on the one tmux lane, which needs a single tmux-ref
+        type: choice
+        options: [off, before-tests, on-failure]
+        default: 'off'
 
 permissions:
   contents: read
@@ -79,6 +84,7 @@ jobs:
           INPUT_TMUX_REF: ${{ inputs.tmux-ref }}
           INPUT_GO_VERSION: ${{ inputs.go-version }}
           INPUT_OS: ${{ inputs.os }}
+          INPUT_TMATE: ${{ inputs.tmate }}
         run: scripts/ci-plan.sh
 
   # One check to require. A job the plan left out of scope may be skipped; every
@@ -399,7 +405,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.tmux != '[]' }}
     runs-on: ${{ needs.plan.outputs.os }}
-    timeout-minutes: 10
+    # A tmate session needs longer than a test run does.
+    timeout-minutes: ${{ matrix.tmate == 'off' && 10 || 60 }}
     continue-on-error: ${{ matrix.advisory }}
     strategy:
       fail-fast: false
@@ -418,6 +425,12 @@ jobs:
         uses: ./.github/actions/build-tmux
         with:
           ref: ${{ matrix.tmux-version }}
+
+      - name: Open a tmate session before the tests
+        if: ${{ matrix.tmate == 'before-tests' }}
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3.24
+        with:
+          limit-access-to-actor: true
 
       - name: Test compatible module coverage against tmux ${{ matrix.tmux-version }}
         env:
@@ -518,6 +531,12 @@ jobs:
             TestOlderCoreRuntimeBootstrapsWithoutControl \
             TestOlderPasteStagingRefusesBeforeTheFirstChunk \
             TestOlderWaitForTextPollsInsteadOfRefusing
+
+      - name: Open a tmate session after a failure
+        if: ${{ failure() && matrix.tmate == 'on-failure' }}
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3.24
+        with:
+          limit-access-to-actor: true
 
   # The releases below the floor stay in the repository as negative fixtures,
   # and they run with the whole table.
