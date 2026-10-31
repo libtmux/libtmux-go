@@ -215,16 +215,14 @@ resource templates carry socket and session or window selectors. One MCP
 process can therefore inspect several tmux servers over successive requests.
 
 Go pins one socket for the lifetime of the process. `LIBTMUX_SOCKET` selects a
-name and `LIBTMUX_SOCKET_PATH` an absolute path; they are mutually exclusive.
-`LIBTMUX_TMUX_CONFIG` selects a nonempty absolute configuration path. There is
-no per-call retargeting or public server-discovery tool.
+name and `LIBTMUX_SOCKET_PATH` a path, and the path wins when both are set, as
+in the Python server. `LIBTMUX_TMUX_CONFIG` selects a nonempty absolute
+configuration path. There is no per-call retargeting or public server-discovery
+tool.
 
-With no selector, Go uses the product-dedicated `libtmux-mcp` socket and bundled
-minimal configuration. Startup gives a new daemon a random owner nonce, reads
-back a global marker, and removes the nonce from tmux's environment. Only a
-matching marker proves process ownership and permits teardown by default. A
-racing, inherited, explicitly named, path-selected, or user-configured daemon
-cannot inherit that claim.
+With no flag and neither variable, Go passes tmux no socket, as the Python
+server does, so tmux picks the server: the one `TMUX` names, otherwise its
+default socket. Neither server starts one of its own.
 
 The trade is operational. Python provides broader per-call reach. Go makes the
 operator's startup choice the authority boundary, then addresses sessions,

@@ -5,13 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/libtmux/libtmux-go/tmux"
@@ -771,187 +768,53 @@ func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
 	}
 }
 
-func TestCapabilityManifestDefaultSocketProvenanceControlsTeardownDefault(t *testing.T) {
+// The socket provenance a server reports is the term for what chose the
+// socket, and no source grants teardown tools by default.
+func TestCapabilityManifestReportsWhatChoseTheSocket(t *testing.T) {
 	for _, name := range []string{ToolsetsEnvironmentVariable, ToolsEnvironmentVariable, ExcludeToolsEnvironmentVariable, SafetyEnvironmentVariable, RecipeToolEnvironmentVariable} {
 		clearEnvironment(t, name)
 	}
-	configPath, cleanupConfig, err := MaterializeMinimalConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cleanupConfig() })
-	if configPath == os.DevNull {
-		t.Fatal("the shipped minimal configuration resolved to the null device")
-	}
-	contents, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(contents), "libtmux-mcp") {
-		t.Fatalf("minimal configuration = %q, want the shipped package configuration", contents)
-	}
-	explicitCopy := filepath.Join(t.TempDir(), "operator.conf")
-	if err := os.WriteFile(explicitCopy, contents, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	explicitTarget, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName: "libtmux-mcp",
-		ConfigFile: explicitCopy,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	explicitProfile, err := profileForTarget(explicitTarget, "absent")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if explicitProfile.ConfigurationProvenance != "user-configured" || explicitProfile.defaultTeardown {
-		t.Fatalf("explicit copied config profile = %#v, want user-configured provenance", explicitProfile)
-	}
-
-	shortSocketRoot, err := os.MkdirTemp("/tmp", "ltgm-") //nolint:usetesting // tmux socket paths must stay short
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(shortSocketRoot) })
-	target, err := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: filepath.Join(shortSocketRoot, "mcp"),
-		ConfigFile: configPath,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = target.Kill(ctx)
-	})
-	absent, err := profileForTarget(target, "absent")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if absent.ConfigurationProvenance != "user-configured" || absent.defaultTeardown {
-		t.Fatalf("unverified default profile = %#v, want no inferred ownership", absent)
-	}
-	surface, err := resolveToolSurface(absent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(surface.tools) != 41 {
-		t.Fatalf("unverified minimal target defaults to %d tools, want teardown withheld", len(surface.tools))
-	}
-
-	existing, err := profileForTarget(target, "existing")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if existing.ConfigurationProvenance != "unknown" || existing.defaultTeardown {
-		t.Fatalf("existing default profile = %#v, want conservative provenance", existing)
-	}
-	surface, err = resolveToolSurface(existing)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(surface.tools) != 41 {
-		t.Fatalf("existing daemon defaults to %d tools, want teardown withheld", len(surface.tools))
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	profiles := make([]socketProfile, 2)
-	errorsByLauncher := make([]error, 2)
-	nonces := []string{"11111111111111111111111111111111", "22222222222222222222222222222222"}
-	var launchers sync.WaitGroup
-	for index := range nonces {
-		launchers.Add(1)
-		go func() {
-			defer launchers.Done()
-			profiles[index], errorsByLauncher[index] = pinDefaultMinimal(ctx, target, nonces[index])
-		}()
-	}
-	launchers.Wait()
-	owners := 0
-	for index, profile := range profiles {
-		if errorsByLauncher[index] != nil {
-			t.Fatalf("launcher %d: %v", index, errorsByLauncher[index])
-		}
-		if profile.defaultTeardown {
-			owners++
-			if profile.ConfigurationProvenance != "minimal" || profile.ServerState != "created" {
-				t.Errorf("owner profile = %#v", profile)
+	for _, test := range []struct {
+		name           string
+		options        tmux.ServerOptions
+		wantProvenance string
+	}{
+		{"nothing chose a socket", tmux.ServerOptions{}, "tmux-choice"},
+		{"a socket name option", tmux.ServerOptions{SocketName: "named"}, "explicit"},
+		{"a socket path option", tmux.ServerOptions{SocketPath: "/run/mcp.sock"}, "explicit"},
+		{
+			"the path variable",
+			tmux.ServerOptions{ProcessEnvironment: []string{"PATH=" + os.Getenv("PATH"), "LIBTMUX_SOCKET_PATH=/run/mcp.sock"}},
+			"env-socket-path",
+		},
+		{
+			"the name variable",
+			tmux.ServerOptions{ProcessEnvironment: []string{"PATH=" + os.Getenv("PATH"), "LIBTMUX_SOCKET=named"}},
+			"env-socket",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			target, err := tmux.NewServer(test.options)
+			if err != nil {
+				t.Fatal(err)
 			}
-		}
-	}
-	if owners != 1 {
-		t.Fatalf("authenticated launch owners = %d, want exactly one; profiles=%#v", owners, profiles)
-	}
-	marker, present, err := target.GlobalSessionScope().RawOption(ctx, minimalOwnerOption)
-	if err != nil || !present || !slices.Contains(nonces, marker) {
-		t.Fatalf("retained owner marker = (%q, %t, %v)", marker, present, err)
-	}
-	if value, present, err := target.GetEnvironment(ctx, minimalOwnerEnvironment); err != nil || present {
-		t.Fatalf("owner nonce remained in tmux environment = (%#v, %t, %v)", value, present, err)
-	}
-}
-
-// TestPinDefaultMinimalCreatesItsOwnSocketDirectory pins that the
-// default-dedicated target resolves to an explicit -S path (see
-// WithProcessEnvironmentValue), which skips tmux's own tmux-<uid>/ creation.
-// On a machine where tmux never ran - a fresh TMUX_TMPDIR with no tmux-<uid>/
-// yet - pinDefaultMinimal must create that directory itself, the way
-// tmux does for -L and the default socket.
-func TestPinDefaultMinimalCreatesItsOwnSocketDirectory(t *testing.T) {
-	configPath, cleanupConfig, err := MaterializeMinimalConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cleanupConfig() })
-
-	freshRoot, err := os.MkdirTemp("/tmp", "ltgm8-") //nolint:usetesting // tmux socket paths must stay short
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(freshRoot) })
-	target, err := tmux.NewServer(tmux.ServerOptions{
-		SocketName:         "libtmux-mcp",
-		ConfigFile:         configPath,
-		ProcessEnvironment: append(os.Environ(), "TMUX_TMPDIR="+freshRoot),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = target.Kill(ctx)
-	})
-
-	selection, err := target.SocketSelection()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, statErr := os.Stat(selection.NamedDirectory); statErr == nil {
-		t.Fatalf(
-			"tmux-<uid> directory %q already exists; test setup did not reproduce a fresh TMUX_TMPDIR",
-			selection.NamedDirectory,
-		)
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	profile, err := pinDefaultMinimal(ctx, target, "33333333333333333333333333333333")
-	if err != nil {
-		t.Fatalf(
-			"pinDefaultMinimal() where tmux never ran = %v, want the socket directory created like tmux itself would",
-			err,
-		)
-	}
-	if !profile.defaultTeardown {
-		t.Fatalf("profile = %#v, want an owned default-dedicated launch", profile)
-	}
-	alive, err := target.IsAlive(ctx)
-	if err != nil || !alive {
-		t.Fatalf("target alive after pinDefaultMinimal = (%t, %v), want alive", alive, err)
+			for _, state := range []string{"absent", "existing"} {
+				profile, err := profileForTarget(target, state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if profile.SelectionProvenance != test.wantProvenance {
+					t.Errorf("provenance with %s server = %q, want %q", state, profile.SelectionProvenance, test.wantProvenance)
+				}
+				surface, err := resolveToolSurface(profile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(surface.tools) != 41 {
+					t.Errorf("default surface with %s server has %d tools, want teardown withheld", state, len(surface.tools))
+				}
+			}
+		})
 	}
 }
 

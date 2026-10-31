@@ -47,6 +47,32 @@ Modules are tagged per directory, so each carries its own version: the core as
   chosen by `LIBTMUX_SOCKET_PATH` or `LIBTMUX_SOCKET`, which tmuxp does not
   read.
 
+### mcp
+
+- `libtmux-mcp` no longer starts a server of its own on the socket `libtmux-mcp`
+  when no socket is selected. It passes tmux no socket, so tmux picks the
+  server: the one `TMUX` names inside tmux, otherwise its default socket. A
+  launch that relied on the old default now reaches your own sessions; name a
+  socket with `-socket-name`, `-socket-path`, `LIBTMUX_SOCKET`, or
+  `LIBTMUX_SOCKET_PATH` to keep an agent apart from them.
+- `libtmux-mcp` no longer refuses to start when `LIBTMUX_SOCKET` and
+  `LIBTMUX_SOCKET_PATH` are both set: the path wins. A variable that is empty or
+  only whitespace now counts as unset instead of failing startup, and a
+  relative `LIBTMUX_SOCKET_PATH` is accepted and resolved against the working
+  directory. `-socket-path` still requires an absolute path.
+- `libtmux-mcp` no longer trims the spaces around `LIBTMUX_SOCKET` and
+  `LIBTMUX_SOCKET_PATH`. A padded value is used as written, and only an empty
+  or all-whitespace value counts as unset.
+- `tmux://capabilities` now reports `socketProvenance` as `explicit`,
+  `env-socket-path`, `env-socket`, or `tmux-choice`, replacing
+  `default-dedicated` and `operator-current`. `libtmux-mcp -doctor` prints the
+  same term.
+- `teardown` is no longer in the default toolsets for any launch. Select it
+  with `LIBTMUX_TOOLSETS`.
+- Remove `RunDefaultMinimal` and `MaterializeMinimalConfig`, and the third
+  parameter of `AdvertisedToolsFor`, with the default server they served. Use
+  `Run` and `AdvertisedToolsFor(ctx, target)`.
+
 ### tmux/tmuxtest
 
 - `tmuxtest.NewServerWithOptions` and `tmuxtest.NewControlMode` now remove

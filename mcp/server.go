@@ -2,14 +2,10 @@ package mcp
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -31,11 +27,6 @@ const fallbackVersion = "v0.1.0"
 // minimumTmuxVersion is the subprocess baseline. Control acquisition has
 // its own, higher feature requirement.
 const minimumTmuxVersion = tmux.MinimumSupportedVersion
-
-const (
-	minimalOwnerEnvironment = "LIBTMUX_MCP_OWNER"
-	minimalOwnerOption      = "@libtmux_mcp_owner"
-)
 
 func (i *Instance) requireTmuxVersion(ctx context.Context) error {
 	minimum, err := tmux.ParseVersion(minimumTmuxVersion)
@@ -199,26 +190,11 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	return instance, nil
 }
 
-func newToolRegistry(configured ...toolSurface) *tools {
-	var surface toolSurface
-	var configurationErr error
-	if len(configured) != 0 {
-		surface = configured[0]
-	} else {
-		surface, configurationErr = resolveToolSurface(socketProfile{
-			Selector:                "name:libtmux-mcp",
-			SelectionProvenance:     "default-dedicated",
-			ServerState:             "unknown",
-			ConfigurationProvenance: "minimal",
-			NamespaceBoundary:       "tmux-objects-only",
-			AttachCommand:           "tmux -N -L 'libtmux-mcp' attach",
-		})
-	}
+func newToolRegistry(surface toolSurface) *tools {
 	return &tools{
-		surface:         surface,
-		waitCeiling:     waitCeilingFromEnvironment(),
-		dispatchers:     map[string]dispatcher{},
-		registrationErr: configurationErr,
+		surface:     surface,
+		waitCeiling: waitCeilingFromEnvironment(),
+		dispatchers: map[string]dispatcher{},
 	}
 }
 
@@ -287,37 +263,6 @@ func Run(ctx context.Context, target tmux.Server) error {
 	return runPinnedSurface(ctx, target, surface)
 }
 
-// RunDefaultMinimal serves a package-created default dedicated target. It
-// starts or joins the daemon with a one-use owner marker and grants default
-// teardown only when the marker proves this process created that daemon.
-func RunDefaultMinimal(ctx context.Context, target tmux.Server) error {
-	if target.ConnectionBound() {
-		return ErrRuntimeTargetBound
-	}
-	environment := currentStartupEnvironment()
-	conservative, err := profileForTarget(target, "unknown")
-	if err != nil {
-		return fmt.Errorf("construct MCP server: %w", err)
-	}
-	// Invalid selection must fail before a tmux subprocess can open the socket.
-	if _, err := resolveToolSurfaceFrom(environment, conservative); err != nil {
-		return fmt.Errorf("construct MCP server: %w", err)
-	}
-	nonce, err := newMinimalOwnerNonce()
-	if err != nil {
-		return fmt.Errorf("construct MCP server: owner marker: %w", err)
-	}
-	profile, err := pinDefaultMinimal(ctx, target, nonce)
-	if err != nil {
-		return fmt.Errorf("pin default minimal tmux server: %w", err)
-	}
-	surface, err := resolveToolSurfaceFrom(environment, profile)
-	if err != nil {
-		return fmt.Errorf("construct MCP server: %w", err)
-	}
-	return runPinnedSurface(ctx, target, surface)
-}
-
 func runPinnedSurface(ctx context.Context, target tmux.Server, surface toolSurface) error {
 	instance, err := newServer(target, surface)
 	if err != nil {
@@ -327,98 +272,6 @@ func runPinnedSurface(ctx context.Context, target tmux.Server, surface toolSurfa
 	return instance.Run(ctx, stdio())
 }
 
-// ensureSocketDirectory creates dir with the same permissions tmux gives
-// tmux-<uid>/ (mode 0700) when this process is the one choosing its own
-// socket. It tolerates the directory already existing and leaves any
-// ownership or permission mismatch for tmux itself to refuse.
-func ensureSocketDirectory(dir string) error {
-	if dir == "" {
-		return nil
-	}
-	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
-		return err
-	}
-	return nil
-}
-
-func newMinimalOwnerNonce() (string, error) {
-	value := make([]byte, 16)
-	if _, err := rand.Read(value); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(value), nil
-}
-
-func pinDefaultMinimal(
-	ctx context.Context,
-	target tmux.Server,
-	nonce string,
-) (socketProfile, error) {
-	minimal, err := isShippedMinimalConfig(target.ConfigFile())
-	if err != nil {
-		return socketProfile{}, err
-	}
-	if !minimal {
-		return socketProfile{}, fmt.Errorf("default minimal target does not use the package-owned config")
-	}
-	launcher, err := target.WithProcessEnvironmentValue(minimalOwnerEnvironment, nonce)
-	if err != nil {
-		return socketProfile{}, err
-	}
-	// The launcher pins its resolved endpoint as an explicit -S path (see
-	// WithProcessEnvironmentValue), which skips tmux's own tmux-<uid>/
-	// creation for -L and the default socket. This process chose that
-	// directory, unlike an operator-supplied -socket-path, so it may
-	// create it the way tmux itself would.
-	selection, err := launcher.SocketSelection()
-	if err != nil {
-		return socketProfile{}, err
-	}
-	if err := ensureSocketDirectory(selection.NamedDirectory); err != nil {
-		return socketProfile{}, fmt.Errorf("create tmux socket directory: %w", err)
-	}
-	if err := launcher.Start(ctx); err != nil {
-		return socketProfile{}, err
-	}
-	marker, present, err := target.GlobalSessionScope().RawOption(ctx, minimalOwnerOption)
-	if err != nil {
-		return socketProfile{}, err
-	}
-	return defaultMinimalProfile(target, present && marker == nonce)
-}
-
-// defaultMinimalProfile describes the default dedicated target, granting
-// default teardown only when owned: this process created that tmux server.
-func defaultMinimalProfile(target tmux.Server, owned bool) (socketProfile, error) {
-	selection, err := target.SocketSelection()
-	if err != nil {
-		return socketProfile{}, err
-	}
-	selector := "path:" + selection.Path
-	if filepath.Base(selection.Path) == "libtmux-mcp" {
-		selector = "name:libtmux-mcp"
-	}
-	profile := socketProfile{
-		Selector:                selector,
-		SelectionProvenance:     "default-dedicated",
-		ServerState:             "existing",
-		ConfigurationProvenance: "unknown",
-		NamespaceBoundary:       "tmux-objects-only",
-		ResolvedSocketPath:      selection.Path,
-		AttachCommand: shellQuote(target.Executable()) + " -N -S " +
-			shellQuote(selection.Path) + " attach",
-		defaultTeardown: owned,
-	}
-	if selection.Path == "" {
-		return socketProfile{}, fmt.Errorf("default minimal target has no socket path")
-	}
-	if owned {
-		profile.ServerState = "created"
-		profile.ConfigurationProvenance = "minimal"
-	}
-	return profile, nil
-}
-
 func profileForTarget(target tmux.Server, state string) (socketProfile, error) {
 	selection, err := target.SocketSelection()
 	if err != nil {
@@ -426,7 +279,7 @@ func profileForTarget(target tmux.Server, state string) (socketProfile, error) {
 	}
 	profile := socketProfile{
 		Selector:                "path:" + selection.Path,
-		SelectionProvenance:     "operator-current",
+		SelectionProvenance:     string(selection.Source),
 		ServerState:             state,
 		ConfigurationProvenance: "unknown",
 		NamespaceBoundary:       "tmux-objects-only",

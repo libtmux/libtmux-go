@@ -105,10 +105,8 @@ selected tmux pane with the user's permissions.
 ### Ending things
 
 `clear_pane_scrollback`, `kill_pane`, `kill_window`, and `kill_session` belong
-to `teardown`. A new authenticated product-dedicated server with the bundled
-minimal configuration enables all four toolsets by default. An existing,
-explicitly named, path-selected, or user-configured server omits teardown by
-default; selecting teardown explicitly is the opt-in.
+to `teardown`. No launch enables it by default, whichever server the socket
+reaches; selecting teardown explicitly is the opt-in.
 
 ### Reading a pane repeatedly
 

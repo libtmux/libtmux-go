@@ -170,7 +170,7 @@ func TestStartupInspectionAnswersARefusedTmuxWithTheRemedy(t *testing.T) {
 	target := mustInternalTmuxServer(t, options)
 	for name, start := range map[string]func() error{
 		"Run":                func() error { return Run(t.Context(), target) },
-		"AdvertisedToolsFor": func() error { _, err := AdvertisedToolsFor(t.Context(), target, false); return err },
+		"AdvertisedToolsFor": func() error { _, err := AdvertisedToolsFor(t.Context(), target); return err },
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := start()

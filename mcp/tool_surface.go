@@ -39,7 +39,6 @@ type socketProfile struct {
 	NamespaceBoundary       string `json:"namespaceBoundary"`
 	ResolvedSocketPath      string `json:"-"`
 	AttachCommand           string `json:"-"`
-	defaultTeardown         bool
 }
 
 type toolSurface struct {
@@ -111,9 +110,6 @@ func resolveToolSurfaceFrom(environment startupEnvironment, profile socketProfil
 	}
 
 	selected := []toolset{toolsetInspect, toolsetManage, toolsetExecute}
-	if profile.defaultTeardown {
-		selected = slices.Clone(allToolsets)
-	}
 	if configured := environment[ToolsetsEnvironmentVariable]; configured.set {
 		selected, err = parseToolsets(configured.value)
 		if err != nil {

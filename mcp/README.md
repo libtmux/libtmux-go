@@ -80,7 +80,7 @@ It answers without a client in the way, and prints something like this:
 ```text
 libtmux-mcp doctor
   tmux:    3.6 (requires 3.3a or newer)
-  socket:  /tmp/tmux-1000/libtmux-mcp (from default dedicated socket)
+  socket:  /tmp/tmux-1000/default (from tmux-choice)
   holds:   nothing — no tmux server is running on that socket
            (not a fault; tmux starts one when something asks it to)
   caller:  not running inside a tmux pane
@@ -132,18 +132,24 @@ afterwards. [Settings](#settings) lists the other flags, and
 
 ### [`-socket-name`][guide-choose-a-server]: pick a socket by name
 
-With no flag, the server drives a tmux server of its own, on a socket named
-`libtmux-mcp`, started with a minimal configuration the package ships. An agent
-given that cannot touch the sessions you already have.
+With no flag and neither `LIBTMUX_SOCKET_PATH` nor `LIBTMUX_SOCKET` set, the
+server passes tmux no socket, so tmux picks the server. Started inside tmux,
+that is the server you are in. Started elsewhere, it is tmux's default socket,
+which holds the sessions you already have, and an agent given it can change
+them. A named socket keeps an agent apart from them:
+
+```console
+$ claude mcp add tmux -- libtmux-mcp -socket-name my-application
+```
 
 Once it has made a session, watch it work from another terminal:
 
 ```console
-$ tmux -L libtmux-mcp attach
+$ tmux -L my-application attach
 ```
 
-To let it drive the tmux you use every day, name that socket. tmux calls its
-usual one `default`:
+To drive the tmux you use every day from outside it, name that socket. tmux
+calls its usual one `default`:
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp -socket-name default
@@ -169,8 +175,9 @@ $ libtmux-mcp \
     -socket-path /tmp/my-application.sock
 ```
 
-The environment makes the same choices, which is how a client's configuration
-sets them:
+The environment makes the same choices when no flag is given, which is how a
+client's configuration sets them. `LIBTMUX_SOCKET_PATH` names a socket path and
+`LIBTMUX_SOCKET` a socket name, and the path wins when both are set:
 
 ```console
 $ LIBTMUX_SOCKET=my-application libtmux-mcp -doctor
@@ -315,8 +322,7 @@ Three behaviours matter before you grant `execute`:
 It takes toolset names separated by commas, in any order. Without it the
 server grants `inspect`, `manage`, and `execute`.
 
-- `teardown` joins that default only when this process started the tmux server
-  on the `libtmux-mcp` socket. Everywhere else, ask for it by name.
+- `teardown` is never in that default. Ask for it by name.
 - A value that is set and empty grants no toolset, and there is no `none`
   keyword.
 
@@ -401,8 +407,8 @@ The environment sets the rest:
 | [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] | selects any unordered subset of the toolsets |
 | [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] | includes exact tool names after toolset expansion |
 | [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] | removes exact names after every inclusion |
-| [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects an absolute socket path; mutually exclusive with [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] |
-| [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] | names the tmux socket when no socket flag selects one |
+| [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects the socket path when no socket flag selects one; wins over [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] |
+| [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] | names the tmux socket when no socket flag and no `LIBTMUX_SOCKET_PATH` select one |
 | [`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable] | selects a nonempty absolute tmux configuration path |
 | [`LIBTMUX_TMUX_BIN`][mcp-binaryenvironmentvariable] | selects the tmux executable when `-binary` is empty |
 | [`LIBTMUX_MCP_WAIT_MAX_SECONDS`][mcp-waitceilingenvironmentvariable] | the longest any one wait may run; 300 by default |
