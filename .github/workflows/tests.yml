@@ -4,10 +4,36 @@ name: tests
 # once for each event, and the two runs compete for the same runners while
 # driving real tmux servers. That contention is what makes the timing-sensitive
 # tests fail on one of the pair and pass on the other.
+#
+# A push or pull request runs the oldest and the newest supported tmux. A `v*`
+# tag and a dispatch with scope=full run the whole table. scripts/ci-plan.sh
+# decides, from .github/ci-matrix.txt, and every tmux lane below takes its
+# matrix from that plan.
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: edges runs the oldest and newest tmux, full the whole table, custom the tmux-ref list
+        type: choice
+        options: [edges, full, custom]
+        default: edges
+      tmux-ref:
+        description: With scope=custom, comma-separated tmux versions, tags, branches or commits
+        type: string
+        default: ''
+      go-version:
+        description: Comma-separated Go versions; empty runs the normal ones
+        type: string
+        default: ''
+      os:
+        description: Runner image for the test and tmux jobs
+        type: choice
+        options: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04]
+        default: ubuntu-latest
 
 permissions:
   contents: read
@@ -32,14 +58,37 @@ env:
   TMUX_TMPDIR: /tmp/libtmux-go-ci
 
 jobs:
-  test:
+  plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tmux: ${{ steps.plan.outputs.tmux }}
+      rejected: ${{ steps.plan.outputs.rejected }}
+      go-versions: ${{ steps.plan.outputs.go-versions }}
+      os: ${{ steps.plan.outputs.os }}
+      skip: ${{ steps.plan.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Inputs reach the script through the environment, never inline.
+      - name: Plan the tmux lanes
+        id: plan
+        env:
+          INPUT_SCOPE: ${{ inputs.scope }}
+          INPUT_TMUX_REF: ${{ inputs.tmux-ref }}
+          INPUT_GO_VERSION: ${{ inputs.go-version }}
+          INPUT_OS: ${{ inputs.os }}
+        run: scripts/ci-plan.sh
+
+  test:
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         module: [".", "examples", "workspace", "mcp", "benchmarks", "internal/tools"]
-        go-version: ["1.26", "1.27"]
+        go-version: ${{ fromJSON(needs.plan.outputs.go-versions) }}
     steps:
       # Whole history, because the gates on staleness compare what is written
       # down against the tags -- the version a source build reports, and the
@@ -319,69 +368,53 @@ jobs:
   #
   # This module carries code that only runs on tmux 3.8 and later - JSON
   # layouts, the 3.8 format fields, a popup guard, session-scoped subscriptions
-  # - so the list ends with 3.8 and tmux master. Master reports
-  # "next-X.Y"; it moves, so its lane is advisory. It runs every module's full
-  # suite and is expected to pass: a red master lane means upstream changed
-  # something this library has not followed yet, to fix in its own change, and
-  # it never blocks the one under review. The only tests that skip on master
-  # are the popup tests that need a client overlay, which tmux replaced with a
-  # floating pane.
+  # - so the table ends with 3.8 and the full scope adds tmux master. Master
+  # reports "next-X.Y"; it moves, so its lane is advisory. It runs every
+  # module's full suite and is expected to pass: a red master lane means
+  # upstream changed something this library has not followed yet, to fix in its
+  # own change, and it never blocks the one under review. The only tests that
+  # skip on master are the popup tests that need a client overlay, which tmux
+  # replaced with a floating pane.
   tmux-matrix:
-    runs-on: ubuntu-latest
+    name: tmux-matrix (${{ matrix.name }})
+    needs: plan
+    if: ${{ needs.plan.outputs.tmux != '[]' }}
+    runs-on: ${{ needs.plan.outputs.os }}
     timeout-minutes: 10
-    continue-on-error: ${{ matrix.tmux-version == 'master' }}
+    continue-on-error: ${{ matrix.advisory }}
     strategy:
       fail-fast: false
       matrix:
-        tmux-version: ['3.3a', '3.4', '3.5', '3.6', '3.7', '3.7a', '3.7b', '3.7c', '3.8', 'master']
+        include: ${{ fromJSON(needs.plan.outputs.tmux) }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
-          go-version: stable
+          go-version: ${{ matrix.go-version }}
           cache-dependency-path: go.mod
 
-      - name: Cache the tmux build for ${{ matrix.tmux-version }}
-        id: tmux-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/tmux-builds/tmux-${{ matrix.tmux-version }}
-          key: tmux-${{ matrix.tmux-version }}${{ matrix.tmux-version == 'master' && format('-{0}', github.run_id) || '' }}
-
       - name: Build tmux ${{ matrix.tmux-version }}
-        if: steps.tmux-cache.outputs.cache-hit != 'true'
-        env:
-          TMUX_VERSION: ${{ matrix.tmux-version }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
-            libutempter-dev bison autoconf automake pkg-config
-          git clone --depth 1 --branch "$TMUX_VERSION" \
-            https://github.com/tmux/tmux.git ~/tmux-src
-          cd ~/tmux-src
-          sh autogen.sh
-          ./configure --prefix="$HOME/tmux-builds/tmux-$TMUX_VERSION"
-          make && make install
+        id: tmux
+        uses: ./.github/actions/build-tmux
+        with:
+          ref: ${{ matrix.tmux-version }}
 
       - name: Test compatible module coverage against tmux ${{ matrix.tmux-version }}
         env:
-          TMUX_VERSION: ${{ matrix.tmux-version }}
+          TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
+          TMUX_EXPECT: ${{ matrix.expect }}
         run: |
           sudo apt-get update
           sudo apt-get install --yes libevent-2.1-7
-          export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
+          export PATH="$TMUX_PREFIX/bin:$PATH"
           actual_version=$(tmux -V)
-          expected_version="tmux $TMUX_VERSION"
-          if [ "$TMUX_VERSION" = master ]; then
-            case "$actual_version" in
-              "tmux next-"*) ;;
-              *) echo "::error::expected a next-X.Y master build, got $actual_version" >&2; exit 1 ;;
-            esac
-          elif [ "$actual_version" != "$expected_version" ]; then
-            echo "::error::expected $expected_version, got $actual_version" >&2
-            exit 1
-          fi
+          # The expected version is a glob: master reports next-X.Y.
+          # shellcheck disable=SC2254
+          case "$actual_version" in
+            $TMUX_EXPECT) ;;
+            *) echo "::error::expected $TMUX_EXPECT, got $actual_version" >&2; exit 1 ;;
+          esac
           printf '%s\n' "$actual_version"
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks internal/tools; do
@@ -392,13 +425,15 @@ jobs:
       # These tests skip on every release but the one they exercise, and the
       # step above is not verbose, so a lane that stopped running its own would
       # pass without them. The lane built for the release names them and fails
-      # if one does not run and pass.
+      # if one does not run and pass. 3.3a is the oldest supported release and
+      # runs on every push; the others run with the whole table.
       - name: Run the tests that need exactly tmux ${{ matrix.tmux-version }}
         if: contains(fromJSON('["3.3a", "3.4", "3.5", "3.6", "3.7"]'), matrix.tmux-version)
         env:
           TMUX_VERSION: ${{ matrix.tmux-version }}
+          TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
         run: |
-          export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
+          export PATH="$TMUX_PREFIX/bin:$PATH"
           test "$(tmux -V)" = "tmux $TMUX_VERSION"
           mkdir -p "$TMUX_TMPDIR"
           set -o pipefail
@@ -421,38 +456,25 @@ jobs:
 
       # Tests that put a 3.3a daemon beside this lane's newer client skip
       # without a 3.3a build, and a lane that skips them proves nothing. Lanes
-      # from 3.7 up have the control client those tests start, so they build
-      # 3.3a, name it, and fail if any of the tests does not run and pass.
-      - name: Cache the tmux 3.3a build for the older-daemon tests
-        id: older-cache
-        if: contains(fromJSON('["3.7", "3.7a", "3.7b", "3.7c", "3.8", "master"]'), matrix.tmux-version)
-        uses: actions/cache@v6
-        with:
-          path: ~/tmux-builds/tmux-3.3a
-          key: tmux-3.3a
-
+      # with the control client those tests start build 3.3a, name it, and fail
+      # if any of the tests does not run and pass.
       - name: Build tmux 3.3a for the older-daemon tests
-        if: steps.older-cache.outcome == 'success' && steps.older-cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
-            libutempter-dev bison autoconf automake pkg-config
-          git clone --depth 1 --branch 3.3a \
-            https://github.com/tmux/tmux.git ~/tmux-src-3.3a
-          cd ~/tmux-src-3.3a
-          sh autogen.sh
-          ./configure --prefix="$HOME/tmux-builds/tmux-3.3a"
-          make && make install
+        id: older
+        if: ${{ matrix.control }}
+        uses: ./.github/actions/build-tmux
+        with:
+          ref: '3.3a'
 
       - name: Run the older-daemon tests against tmux ${{ matrix.tmux-version }}
-        if: steps.older-cache.outcome == 'success'
+        if: ${{ matrix.control }}
         env:
-          TMUX_VERSION: ${{ matrix.tmux-version }}
+          TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
+          OLDER_PREFIX: ${{ steps.older.outputs.prefix }}
         run: |
           sudo apt-get update
           sudo apt-get install --yes libevent-2.1-7
-          export PATH="$HOME/tmux-builds/tmux-$TMUX_VERSION/bin:$PATH"
-          export LIBTMUX_OPTIONAL_OLD_TMUX="$HOME/tmux-builds/tmux-3.3a/bin/tmux"
+          export PATH="$TMUX_PREFIX/bin:$PATH"
+          export LIBTMUX_OPTIONAL_OLD_TMUX="$OLDER_PREFIX/bin/tmux"
           test "$("$LIBTMUX_OPTIONAL_OLD_TMUX" -V)" = 'tmux 3.3a'
           mkdir -p "$TMUX_TMPDIR"
           set -o pipefail
@@ -478,56 +500,51 @@ jobs:
             TestOlderPasteStagingRefusesBeforeTheFirstChunk \
             TestOlderWaitForTextPollsInsteadOfRefusing
 
+  # The releases below the floor stay in the repository as negative fixtures,
+  # and they run with the whole table.
   tmux-rejected:
-    runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.rejected != '[]' }}
+    runs-on: ${{ needs.plan.outputs.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        rejected-version: ['3.0a', '3.1c', '3.2a', '3.3']
+        rejected-version: ${{ fromJSON(needs.plan.outputs.rejected) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache-dependency-path: go.mod
-      - name: Install tmux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libevent-dev libncurses5-dev libtinfo-dev \
-            libutempter-dev bison autoconf automake pkg-config
-      - name: Cache supported and rejected tmux fixtures
-        id: version-cache
-        uses: actions/cache@v6
+      - name: Build the supported floor tmux
+        id: floor
+        uses: ./.github/actions/build-tmux
         with:
-          path: ~/tmux-version-builds
-          key: tmux-version-3.3a-3.7c-${{ matrix.rejected-version }}
-      - name: Build version-check fixtures
-        if: steps.version-cache.outputs.cache-hit != 'true'
-        env:
-          REJECTED_VERSION: ${{ matrix.rejected-version }}
-        run: |
-          # The unpatched 3.3 lane also builds 3.7c, the newer client the
-          # stale-executable test needs beside the 3.3a floor build.
-          releases="3.3a $REJECTED_VERSION"
-          if [ "$REJECTED_VERSION" = 3.3 ]; then releases="$releases 3.7c"; fi
-          for release in $releases; do
-            git clone --depth 1 --branch "$release" \
-              https://github.com/tmux/tmux.git "$RUNNER_TEMP/tmux-$release"
-            (
-              cd "$RUNNER_TEMP/tmux-$release"
-              sh autogen.sh
-              ./configure --prefix="$HOME/tmux-version-builds/$release"
-              make -j2 && make install
-            )
-          done
+          ref: '3.3a'
+      - name: Build the rejected tmux ${{ matrix.rejected-version }}
+        id: rejected
+        uses: ./.github/actions/build-tmux
+        with:
+          ref: ${{ matrix.rejected-version }}
+      # The unpatched 3.3 lane also needs 3.7c, the newer client the
+      # stale-executable test starts beside the 3.3a floor build.
+      - name: Build the newer client tmux 3.7c
+        id: newer
+        if: ${{ matrix.rejected-version == '3.3' }}
+        uses: ./.github/actions/build-tmux
+        with:
+          ref: '3.7c'
       - name: Refuse unsupported daemons before effects
         env:
           REJECTED_VERSION: ${{ matrix.rejected-version }}
+          FLOOR_PREFIX: ${{ steps.floor.outputs.prefix }}
+          REJECTED_PREFIX: ${{ steps.rejected.outputs.prefix }}
+          NEWER_PREFIX: ${{ steps.newer.outputs.prefix }}
         run: |
-          export PATH="$HOME/tmux-version-builds/3.3a/bin:$PATH"
-          export LIBTMUX_REJECTED_TMUX="$HOME/tmux-version-builds/$REJECTED_VERSION/bin/tmux"
-          export LIBTMUX_FLOOR_TMUX="$HOME/tmux-version-builds/3.3a/bin/tmux"
+          export PATH="$FLOOR_PREFIX/bin:$PATH"
+          export LIBTMUX_REJECTED_TMUX="$REJECTED_PREFIX/bin/tmux"
+          export LIBTMUX_FLOOR_TMUX="$FLOOR_PREFIX/bin/tmux"
           test "$(tmux -V)" = 'tmux 3.3a'
           test "$("$LIBTMUX_REJECTED_TMUX" -V)" = "tmux $REJECTED_VERSION"
           mkdir -p "$TMUX_TMPDIR"
@@ -549,6 +566,6 @@ jobs:
             # A configured 3.7c executable replaced by the 3.3a floor build must
             # be checked afresh, which needs both on hand.
             name=TestCoreMinimumColdFeatureRequirementUsesFreshExecutable
-            PATH="$HOME/tmux-version-builds/3.7c/bin:$PATH" go test -count=1 -timeout 2m -v ./tmux/internal/integration -run "^$name\$" | tee "$RUNNER_TEMP/cold.log"
+            PATH="$NEWER_PREFIX/bin:$PATH" go test -count=1 -timeout 2m -v ./tmux/internal/integration -run "^$name\$" | tee "$RUNNER_TEMP/cold.log"
             grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/cold.log" || { echo "::error::$name did not run and pass"; exit 1; }
           fi
