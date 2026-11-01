@@ -62,6 +62,16 @@ configuration is parsed and rendered, and every new backup destination is
 checked first. One malformed configuration or unusable backup therefore leaves
 the whole selected set unchanged.
 
+**It judges only the entry it wrote.** Claude Code and Grok keep their own
+state in the files that hold their servers and rewrite them while they run. A
+later `use` or `revert` compares the `tmux` entry against the process it
+recorded and ignores the rest of the file, so an edit elsewhere does not stop
+it, while a changed or missing entry does. While the file is as the swapper
+left it, `revert` restores the backup whole. Otherwise it puts back that one
+entry, or removes it when the file had none, and keeps the client's other
+values and the file's current mode. Plain JSON is decoded and written again, as
+`use` does, so key order and escaping follow the swap's.
+
 **This edits real configuration files.** `status` and `--dry-run` do not. Run
 one of those first.
 
@@ -131,6 +141,12 @@ $ go run ./internal/tools/mcp-swap revert --scope project --client claude
 
 After the newer project layer is restored, a separate user-scoped revert is
 safe. A plain `revert --client claude` restores both as one transaction.
+
+The project layer is recorded for one checkout. A `use` from a second checkout
+re-points it while the file is as the swapper left it, and stops, naming the
+first checkout, once the file has changed; run `revert --scope project` first.
+A client rewrite after the second swap leaves the first checkout's override in
+place after the revert.
 
 ## Environment and toolsets
 

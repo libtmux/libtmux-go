@@ -26,6 +26,9 @@ type nativeUsePlan struct {
 	BackupPath     string
 	Existing       *nativeLedgerEntry
 	BackupRewrites []nativeBackupRewrite
+	// Drifted reports that the file no longer matches what the newest layer
+	// wrote, so Updated carries the client's own changes.
+	Drifted bool
 }
 
 type nativeBackupRewrite struct {
@@ -41,6 +44,12 @@ type nativeRevertPlan struct {
 	Entry  nativeLedgerEntry
 	Route  nativeSnapshot
 	Backup nativeSnapshot
+	// Restored is what the revert writes, with Mode. While the file is as the
+	// swapper left it, that is the backup and its original mode (Exact);
+	// otherwise it is the current file with only this layer's entry put back.
+	Restored []byte
+	Mode     uint32
+	Exact    bool
 }
 
 type nativeOperation struct {
@@ -239,12 +248,13 @@ func planNativeUse(
 		backup := nativeBackupPath(binding.Resolved, sequence)
 		var existingPointer *nativeLedgerEntry
 		var rewrites []nativeBackupRewrite
+		drifted := false
 		if exists {
 			existingCopy := existing
 			existingPointer = &existingCopy
 			sequence = existing.Sequence
 			backup = existing.BackupPath
-			rewrites, err = planNativeBackupRewrites(target, configured, ledger, existing, contents, binding)
+			rewrites, drifted, err = planNativeBackupRewrites(target, configured, ledger, existing, contents, binding)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", target.name, err)
 			}
@@ -267,7 +277,7 @@ func planNativeUse(
 			Target: target, Key: key, Sequence: sequence,
 			Original: nativeSnapshot{Contents: contents, Binding: binding},
 			Updated:  updated, Spec: spec, Action: action, BackupPath: backup,
-			Existing: existingPointer, BackupRewrites: rewrites,
+			Existing: existingPointer, BackupRewrites: rewrites, Drifted: drifted,
 		})
 	}
 	return plans, validateNativeLedgerArtifacts(ledger)
@@ -280,9 +290,12 @@ func planNativeBackupRewrites(
 	existing nativeLedgerEntry,
 	current []byte,
 	binding destinationBinding,
-) ([]nativeBackupRewrite, error) {
+) ([]nativeBackupRewrite, bool, error) {
 	if existing.ConfigPath != target.path || !sameTopology(existing.Route, binding) {
-		return nil, errors.New("configuration route changed")
+		return nil, false, errors.New("configuration route changed")
+	}
+	if err := managedEntryIntact(target, current, existing); err != nil {
+		return nil, false, err
 	}
 	newer := make([]struct {
 		key   string
@@ -300,9 +313,7 @@ func planNativeBackupRewrites(
 			}
 		}
 	}
-	if !newest.Expected.matches(current, binding) {
-		return nil, errors.New("configuration changed since mcp-swap wrote its newest layer")
-	}
+	drifted := !newest.Expected.matches(current, binding)
 	sort.Slice(newer, func(left, right int) bool {
 		return newer[left].entry.Sequence < newer[right].entry.Sequence
 	})
@@ -310,17 +321,26 @@ func planNativeBackupRewrites(
 	for _, item := range newer {
 		backup, err := readNativeBackup(item.entry)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		updated, err := renderEntryChange(target, backup.Contents, configured)
 		if err != nil {
-			return nil, fmt.Errorf("recovery chain: %w", err)
+			return nil, false, fmt.Errorf("recovery chain: %w", err)
 		}
 		rewrites = append(rewrites, nativeBackupRewrite{
 			Key: item.key, Entry: item.entry, Snapshot: backup, Updated: updated,
 		})
 	}
-	return rewrites, nil
+	// A newer layer's backup holds the client's changes when this layer no
+	// longer expects it.
+	changed := drifted || len(rewrites) != 0 &&
+		!existing.Expected.matchesContent(rewrites[0].Snapshot.Contents, existing.OriginalMode)
+	if changed && existing.Scope == scopeProject && existing.Repository != target.repository {
+		return nil, false, fmt.Errorf(
+			"the project layer is swapped for %s and the file has changed since; "+
+				"run revert --scope project first", existing.Repository)
+	}
+	return rewrites, drifted, nil
 }
 
 func planNativeRevert(
@@ -371,10 +391,7 @@ func planNativeRevert(
 	sort.Slice(entries, func(left, right int) bool {
 		return entries[left].entry.Sequence > entries[right].entry.Sequence
 	})
-	restored := map[string]struct {
-		contents []byte
-		mode     uint32
-	}{}
+	restored := map[string]nativeRevertPlan{}
 	plans := make([]nativeRevertPlan, 0, len(entries))
 	for _, item := range entries {
 		target := selected[item.entry.Client]
@@ -387,30 +404,62 @@ func planNativeRevert(
 		if target.path != item.entry.ConfigPath || !sameTopology(binding, item.entry.Route) {
 			return nil, fmt.Errorf("%s: configuration route changed", item.key)
 		}
-		if prior, found := restored[binding.Resolved]; found {
-			if !item.entry.Expected.matchesContent(prior.contents, prior.mode) {
-				return nil, fmt.Errorf("%s: recovery chain changed", item.key)
-			}
-		} else if !item.entry.Expected.matches(contents, binding) {
-			return nil, fmt.Errorf("%s: configuration changed before revert", item.key)
+		current, mode := contents, binding.Mode
+		var exact bool
+		if prior, chained := restored[binding.Resolved]; chained {
+			current, mode = prior.Restored, prior.Mode
+			exact = item.entry.Expected.matchesContent(current, mode)
+		} else {
+			exact = item.entry.Expected.matches(contents, binding)
 		}
 		backup, err := readNativeBackup(item.entry)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", item.key, err)
 		}
-		restored[binding.Resolved] = struct {
-			contents []byte
-			mode     uint32
-		}{backup.Contents, item.entry.OriginalMode}
-		plans = append(plans, nativeRevertPlan{
+		plan := nativeRevertPlan{
 			Target: target, Key: item.key, Entry: item.entry,
 			Route: nativeSnapshot{Contents: contents, Binding: binding}, Backup: backup,
-		})
+			Restored: backup.Contents, Mode: item.entry.OriginalMode, Exact: exact,
+		}
+		if !exact {
+			if err := managedEntryIntact(target, current, item.entry); err != nil {
+				return nil, fmt.Errorf("%s: %w", item.key, err)
+			}
+			plan.Restored, err = restoreEntryChange(target, current, backup.Contents)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", item.key, err)
+			}
+			plan.Mode = mode
+		}
+		restored[binding.Resolved] = plan
+		plans = append(plans, plan)
 	}
 	if err := validateNativeLedgerArtifacts(ledger); err != nil {
 		return nil, err
 	}
 	return plans, nil
+}
+
+// managedEntryIntact returns nil when contents still hold, for the layer entry
+// records, the process mcp-swap recorded. The rest of the file is the client's
+// own and is not compared.
+func managedEntryIntact(target client, contents []byte, entry nativeLedgerEntry) error {
+	target.scope, target.repository = entry.Scope, entry.Repository
+	found, present, err := entryFromContents(target, contents)
+	if err != nil {
+		return fmt.Errorf("read the %s entry: %w", serverName, err)
+	}
+	if !present {
+		return fmt.Errorf("the %s entry is missing", serverName)
+	}
+	spec, err := processSpecFromEntry(found)
+	if err != nil {
+		return fmt.Errorf("the %s entry: %w", serverName, err)
+	}
+	if !spec.equal(entry.Spec.process()) {
+		return fmt.Errorf("the %s entry changed since mcp-swap wrote it", serverName)
+	}
+	return nil
 }
 
 func stageNativeUse(
@@ -470,11 +519,16 @@ func stageNativeUse(
 		}
 		configIdentity := nativeIdentity(plan.Updated, operation.futureBinding())
 		expectedIdentity := configIdentity
-		if len(plan.BackupRewrites) != 0 && plan.Existing != nil {
+		if plan.Existing != nil && (plan.Drifted || len(plan.BackupRewrites) != 0) {
 			expectedIdentity = plan.Existing.Expected
-			expectedIdentity.Mode = plan.Existing.OriginalMode
-			expectedIdentity.Size = int64(len(plan.BackupRewrites[0].Updated))
-			expectedIdentity.SHA256 = digest(plan.BackupRewrites[0].Updated)
+			if len(plan.BackupRewrites) != 0 {
+				first := plan.BackupRewrites[0]
+				if expectedIdentity.matchesContent(first.Snapshot.Contents, plan.Existing.OriginalMode) {
+					expectedIdentity.Mode = plan.Existing.OriginalMode
+					expectedIdentity.Size = int64(len(first.Updated))
+					expectedIdentity.SHA256 = digest(first.Updated)
+				}
+			}
 		}
 		entry := nativeLedgerEntry{
 			Client: plan.Target.name, Scope: plan.Target.scope, Sequence: plan.Sequence,
@@ -495,9 +549,11 @@ func stageNativeUse(
 				newestKey, newestSequence = key, candidate.Sequence
 			}
 		}
-		newest := next.Entries[newestKey]
-		newest.Expected = configIdentity
-		next.Entries[newestKey] = newest
+		if !plan.Drifted {
+			newest := next.Entries[newestKey]
+			newest.Expected = configIdentity
+			next.Entries[newestKey] = newest
+		}
 		configOperations = append(configOperations, operation)
 	}
 	stateContents, err := encodeNativeLedger(next)
@@ -535,6 +591,8 @@ func stageNativeRevert(
 	restored := make([]struct {
 		target   string
 		sequence uint64
+		contents []byte
+		mode     uint32
 		identity nativeFileIdentity
 	}, 0, len(plans))
 	for _, plan := range plans {
@@ -544,7 +602,7 @@ func stageNativeRevert(
 		}
 		operation, err := stageNativeReplacement(
 			lock, "config-"+plan.Key, plan.Route.Binding.Resolved,
-			plan.Target.path, plan.Backup.Contents, plan.Entry.OriginalMode, &prior,
+			plan.Target.path, plan.Restored, plan.Mode, &prior,
 			&plan.Route,
 		)
 		if err != nil {
@@ -553,15 +611,17 @@ func stageNativeRevert(
 		operations = append(operations, operation)
 		future := operation.futureBinding()
 		current[plan.Route.Binding.Resolved] = nativeSnapshot{
-			Contents: plan.Backup.Contents, Binding: future,
+			Contents: plan.Restored, Binding: future,
 		}
 		restored = append(restored, struct {
 			target   string
 			sequence uint64
+			contents []byte
+			mode     uint32
 			identity nativeFileIdentity
 		}{
 			plan.Entry.Route.Resolved, plan.Entry.Sequence,
-			nativeIdentity(plan.Backup.Contents, future),
+			plan.Restored, plan.Mode, nativeIdentity(plan.Restored, future),
 		})
 		delete(next.Entries, plan.Key)
 	}
@@ -576,8 +636,10 @@ func stageNativeRevert(
 		}
 		if predecessorKey != "" {
 			entry := next.Entries[predecessorKey]
-			entry.Expected = item.identity
-			next.Entries[predecessorKey] = entry
+			if entry.Expected.matchesContent(item.contents, item.mode) {
+				entry.Expected = item.identity
+				next.Entries[predecessorKey] = entry
+			}
 		}
 	}
 	priorState := &nativeSnapshot{Contents: state.Contents, Binding: state.Binding}
@@ -1010,6 +1072,12 @@ func printNativeRevert(plans []nativeRevertPlan, dryRun bool) {
 		verb := "restored from"
 		if dryRun {
 			verb = "would restore"
+		}
+		if !plan.Exact {
+			verb = "restored the " + serverName + " entry from"
+			if dryRun {
+				verb = "would restore the " + serverName + " entry from"
+			}
 		}
 		fmt.Printf("%-16s %s %s\n", plan.Key, verb, filepath.Base(plan.Entry.BackupPath))
 	}

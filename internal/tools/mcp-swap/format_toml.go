@@ -41,6 +41,33 @@ func tomlTableSpan(text []byte, table string) (start int, end int, found bool) {
 	return 0, 0, false
 }
 
+// restoreTOMLTable puts the span a table and its sub-tables occupy in text
+// back to the one they occupy in backup, or removes it when backup has none.
+// It refuses a span with a child table other than env, which it would drop.
+func restoreTOMLTable(text, backup []byte, table string) ([]byte, error) {
+	if err := validateTOMLPreservation(text, table); err != nil {
+		return nil, err
+	}
+	start, end, found := tomlTableSpan(text, table)
+	if !found {
+		return nil, fmt.Errorf("no [%s] table to restore", table)
+	}
+	var replacement []byte
+	if from, to, had := tomlTableSpan(backup, table); had {
+		replacement = backup[from:to]
+		if end < len(text) && !bytes.HasSuffix(replacement, []byte("\n")) {
+			replacement = append(append([]byte{}, replacement...), '\n')
+		}
+	}
+	restored := append(append(append([]byte{}, text[:start]...), replacement...), text[end:]...)
+	if len(replacement) == 0 && end == len(text) {
+		// A table appended to a file arrives after a separating blank line.
+		tail := len(backup) - len(bytes.TrimRight(backup, "\n"))
+		restored = append(bytes.TrimRight(restored, "\n"), bytes.Repeat([]byte("\n"), tail)...)
+	}
+	return restored, nil
+}
+
 func tomlHeaderMatches(line, header []byte) bool {
 	if !bytes.HasPrefix(line, header) {
 		return false

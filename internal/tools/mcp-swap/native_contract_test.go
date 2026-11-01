@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -558,5 +559,725 @@ func TestNativeDoctorIsReadOnlyAndReportsSafetyAuthAndOrphans(t *testing.T) {
 	}
 	if _, err := os.Lstat(stateRoot); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("doctor created the state root: %v", err)
+	}
+}
+
+// A client rewrites its own configuration while it runs, and Claude Code keeps
+// counters and per-project state in the file that holds its servers. Only the
+// tmux entry belongs to the swapper, so only that entry decides whether a later
+// swap or revert may go on.
+
+type nativeRig struct {
+	home       string
+	repository string
+}
+
+func newNativeRig(t *testing.T) nativeRig {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".state"))
+	return nativeRig{home: home, repository: filepath.Join(t.TempDir(), "checkout")}
+}
+
+func (rig nativeRig) client(t *testing.T, name string, scope configScope) client {
+	t.Helper()
+	for _, target := range knownClients(rig.home) {
+		if target.name == name {
+			target.scope = scope
+			target.repository = rig.repository
+			return target
+		}
+	}
+	t.Fatalf("no client named %s", name)
+	return client{}
+}
+
+func entryPlanFor(entry map[string]any) entryPlan {
+	return entryPlan{configured: entry, install: func() error { return nil }, cleanup: func() {}}
+}
+
+func movedEntry() map[string]any {
+	entry := devEntry()
+	entry["args"] = []any{"-C", "/moved/repo/mcp", "run", "./cmd/libtmux-mcp"}
+	return entry
+}
+
+func swapSpec(t *testing.T, target client) (processSpec, bool) {
+	t.Helper()
+	entry, present, err := entryOf(target)
+	if err != nil {
+		t.Fatalf("%s entry: %v", target.name, err)
+	}
+	if !present {
+		return processSpec{}, false
+	}
+	spec, err := processSpecFromEntry(entry)
+	if err != nil {
+		t.Fatalf("%s entry spec: %v", target.name, err)
+	}
+	return spec, true
+}
+
+func readJSONConfig(t *testing.T, path string) map[string]any {
+	t.Helper()
+	var config map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, path)), &config); err != nil {
+		t.Fatal(err)
+	}
+	return config
+}
+
+// rewriteClaudeState does what Claude Code does to ~/.claude.json while it
+// runs: it bumps a counter and records a project, and leaves mcpServers alone.
+func rewriteClaudeState(t *testing.T, path, how string, startups float64) {
+	t.Helper()
+	config := readJSONConfig(t, path)
+	config["numStartups"] = startups
+	projects, _ := config["projects"].(map[string]any)
+	if projects == nil {
+		projects = map[string]any{}
+		config["projects"] = projects
+	}
+	projects["/work/other"] = map[string]any{"hasTrustDialogAccepted": true}
+	contents, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents = append(contents, '\n')
+	switch how {
+	case "in place":
+		if err := os.WriteFile(path, contents, 0o640); err != nil {
+			t.Fatal(err)
+		}
+	case "replaced file":
+		replaceContentsAtSamePath(t, path, contents)
+	case "replaced file with another mode":
+		replaceContentsAtSamePath(t, path, contents)
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	default:
+		t.Fatalf("unknown rewrite %q", how)
+	}
+}
+
+func assertClaudeState(t *testing.T, path string, startups float64) {
+	t.Helper()
+	config := readJSONConfig(t, path)
+	if got, _ := config["numStartups"].(float64); got != startups {
+		t.Errorf("numStartups = %v, want %v", got, startups)
+	}
+	projects, _ := config["projects"].(map[string]any)
+	if _, kept := projects["/work/other"]; !kept {
+		t.Error("the client's own project record did not survive")
+	}
+}
+
+func swappedClaude(t *testing.T) (client, string) {
+	t.Helper()
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeUser)
+	original := `{
+  "numStartups": 1,
+  "mcpServers": {"tmux": {"command": "uvx", "args": ["libtmux-mcp"]}},
+  "projects": {}
+}
+`
+	if err := os.WriteFile(target.path, []byte(original), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	return target, rig.repository
+}
+
+var clientRewrites = []string{"in place", "replaced file", "replaced file with another mode"}
+
+func TestNativeReswapGoesOnAfterAClientRewritesItsOwnState(t *testing.T) {
+	for _, how := range clientRewrites {
+		t.Run(how, func(t *testing.T) {
+			target, repository := swappedClaude(t)
+			rewriteClaudeState(t, target.path, how, 2)
+			if err := nativeUse([]client{target}, []client{target}, entryPlanFor(movedEntry()),
+				options{scope: scopeUser, noPreflight: true}, repository); err != nil {
+				t.Fatalf("reswap after the client rewrote its state: %v", err)
+			}
+			spec, present := swapSpec(t, target)
+			if !present || !slices.Contains(spec.args, "/moved/repo/mcp") {
+				t.Errorf("reswap left the entry at its old build (present %t)", present)
+			}
+			assertClaudeState(t, target.path, 2)
+		})
+	}
+}
+
+func TestNativeRevertGoesOnAfterAClientRewritesItsOwnState(t *testing.T) {
+	for _, how := range clientRewrites {
+		t.Run(how, func(t *testing.T) {
+			target, repository := swappedClaude(t)
+			rewriteClaudeState(t, target.path, how, 2)
+			before, err := os.Stat(target.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ledger, _, err := loadNativeLedger()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := nativeRevert([]client{target}, []client{target}, options{}, repository); err != nil {
+				t.Fatalf("revert after the client rewrote its state: %v", err)
+			}
+			spec, present := swapSpec(t, target)
+			if !present || spec.command != "uvx" || !slices.Equal(spec.args, []string{"libtmux-mcp"}) {
+				t.Errorf("revert did not put the original entry back (present %t)", present)
+			}
+			assertClaudeState(t, target.path, 2)
+			after, err := os.Stat(target.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Mode().Perm() != before.Mode().Perm() {
+				t.Errorf("revert changed the mode of a file the client had rewritten")
+			}
+			if _, err := os.Stat(nativeStatePath()); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("revert retained native state: %v", err)
+			}
+			for _, entry := range ledger.Entries {
+				if _, err := os.Stat(entry.BackupPath); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("revert retained a backup: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestNativeRevertRemovesAnEntryThatWasAbsentBeforeTheSwap(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeUser)
+	if err := os.WriteFile(target.path, []byte(`{"numStartups": 1, "projects": {}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	rewriteClaudeState(t, target.path, "in place", 2)
+	if err := nativeRevert([]client{target}, []client{target}, options{}, rig.repository); err != nil {
+		t.Fatalf("revert after the client rewrote its state: %v", err)
+	}
+	if _, present := swapSpec(t, target); present {
+		t.Error("revert left a tmux entry the file did not have before the swap")
+	}
+	assertClaudeState(t, target.path, 2)
+}
+
+func TestNativeRefusesWhenTheManagedEntryItselfChanged(t *testing.T) {
+	edits := map[string]func(servers map[string]any){
+		"arguments": func(servers map[string]any) {
+			servers["tmux"].(map[string]any)["args"] = []any{"edited"}
+		},
+		"command": func(servers map[string]any) {
+			servers["tmux"].(map[string]any)["command"] = "edited"
+		},
+		"environment": func(servers map[string]any) {
+			servers["tmux"].(map[string]any)["env"] = map[string]any{"LIBTMUX_MCP_SWAP": "edited"}
+		},
+		"removed": func(servers map[string]any) { delete(servers, "tmux") },
+	}
+	for name, edit := range edits {
+		t.Run(name, func(t *testing.T) {
+			target, repository := swappedClaude(t)
+			config := readJSONConfig(t, target.path)
+			edit(config["mcpServers"].(map[string]any))
+			contents, err := json.MarshalIndent(config, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target.path, contents, 0o640); err != nil {
+				t.Fatal(err)
+			}
+			configBefore := readFile(t, target.path)
+			stateBefore := readFile(t, nativeStatePath())
+
+			want := "the tmux entry changed since mcp-swap wrote it"
+			if name == "removed" {
+				want = "the tmux entry is missing"
+			}
+			err = nativeUse([]client{target}, []client{target}, entryPlanFor(movedEntry()),
+				options{scope: scopeUser, noPreflight: true}, repository)
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("reswap error = %v, want a refusal saying %q", err, want)
+			}
+			err = nativeRevert([]client{target}, []client{target}, options{}, repository)
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("revert error = %v, want a refusal saying %q", err, want)
+			}
+			if readFile(t, target.path) != configBefore {
+				t.Error("a refused command changed the configuration")
+			}
+			if readFile(t, nativeStatePath()) != stateBefore {
+				t.Error("a refused command changed the recovery state")
+			}
+		})
+	}
+}
+
+func writeNativeOriginals(t *testing.T, rig nativeRig, withForeignEntry bool) []client {
+	t.Helper()
+	foreign := map[string]any{"command": "old", "args": []any{"a"}}
+	var targets []client
+	for _, known := range knownClients(rig.home) {
+		target := rig.client(t, known.name, scopeUser)
+		var base string
+		if target.format == formatTOML {
+			base = "[" + target.key + ".keep]\ncommand = \"keep\"\n"
+		} else {
+			base = "{\n  \"" + target.key + "\": {\"keep\": {\"command\": \"keep\"}}\n}\n"
+		}
+		contents := []byte(base)
+		if withForeignEntry {
+			var err error
+			if contents, err = renderEntryChange(target, contents, foreign); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.MkdirAll(filepath.Dir(target.path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target.path, contents, 0o640); err != nil {
+			t.Fatal(err)
+		}
+		targets = append(targets, target)
+	}
+	return targets
+}
+
+// driftClientConfig edits a configuration the way its owner might: outside the
+// tmux entry, in the format the file is written in.
+func driftClientConfig(t *testing.T, target client) {
+	t.Helper()
+	contents := readFile(t, target.path)
+	switch target.format {
+	case formatTOML:
+		contents = "# rewritten by the client\n" + contents + "\n[drift]\nvalue = 1\n"
+	case formatJSONC:
+		contents = strings.Replace(contents, "{", "{\n  // rewritten by the client\n  \"drift\": 1,", 1)
+	case formatJSON:
+		var config map[string]any
+		if err := json.Unmarshal([]byte(contents), &config); err != nil {
+			t.Fatal(err)
+		}
+		config["drift"] = 1
+		rewritten, err := json.MarshalIndent(config, "", "    ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		contents = string(rewritten) + "\n"
+	}
+	if err := os.WriteFile(target.path, []byte(contents), 0o640); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNativeEveryClientGoesOnAfterItsConfigDrifts(t *testing.T) {
+	for _, withForeignEntry := range []bool{false, true} {
+		name := "no entry before the swap"
+		if withForeignEntry {
+			name = "foreign entry before the swap"
+		}
+		t.Run(name, func(t *testing.T) {
+			rig := newNativeRig(t)
+			targets := writeNativeOriginals(t, rig, withForeignEntry)
+			if err := nativeUse(targets, targets, entryPlanFor(devEntry()),
+				options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+				t.Fatal(err)
+			}
+			for _, target := range targets {
+				driftClientConfig(t, target)
+			}
+			if err := nativeUse(targets, targets, entryPlanFor(movedEntry()),
+				options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+				t.Fatalf("reswap after the configs drifted: %v", err)
+			}
+			for _, target := range targets {
+				spec, present := swapSpec(t, target)
+				if !present || !slices.Contains(spec.args, "/moved/repo/mcp") {
+					t.Errorf("%s: reswap left the entry at its old build (present %t)", target.name, present)
+				}
+			}
+			if err := nativeRevert(targets, targets, options{scope: scopeUser}, rig.repository); err != nil {
+				t.Fatalf("revert after the configs drifted: %v", err)
+			}
+			for _, target := range targets {
+				text := readFile(t, target.path)
+				if !strings.Contains(text, "drift") || !strings.Contains(text, "keep") {
+					t.Errorf("%s: revert dropped content the swapper does not own", target.name)
+				}
+				spec, present := swapSpec(t, target)
+				if withForeignEntry {
+					if !present || spec.command != "old" || !slices.Equal(spec.args, []string{"a"}) {
+						t.Errorf("%s: revert did not restore the foreign entry (present %t)", target.name, present)
+					}
+				} else if present {
+					t.Errorf("%s: revert left an entry the file did not have", target.name)
+				}
+			}
+			if _, err := os.Stat(nativeStatePath()); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("revert retained native state: %v", err)
+			}
+		})
+	}
+}
+
+func foreignClaudeWithUserAndProjectLayers(t *testing.T) (user, project client, repository string) {
+	t.Helper()
+	rig := newNativeRig(t)
+	user = rig.client(t, "claude", scopeUser)
+	project = rig.client(t, "claude", scopeProject)
+	original := `{
+  "numStartups": 1,
+  "mcpServers": {"tmux": {"command": "uvx", "args": ["libtmux-mcp"]}},
+  "projects": {}
+}
+`
+	if err := os.WriteFile(user.path, []byte(original), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []configScope{scopeUser, scopeProject} {
+		if err := nativeUse([]client{user}, []client{user}, entryPlanFor(devEntry()),
+			options{scope: scope, noPreflight: true}, rig.repository); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return user, project, rig.repository
+}
+
+func TestNativeClaudeLayersGoOnAfterDriftThroughScopedReverts(t *testing.T) {
+	for _, driftAgain := range []bool{true, false} {
+		t.Run(fmt.Sprintf("drift again %t", driftAgain), func(t *testing.T) {
+			user, project, repository := foreignClaudeWithUserAndProjectLayers(t)
+			rewriteClaudeState(t, user.path, "in place", 2)
+			if err := nativeRevert([]client{user}, []client{user},
+				options{scope: scopeProject}, repository); err != nil {
+				t.Fatalf("project revert after the client rewrote its state: %v", err)
+			}
+			if _, present := swapSpec(t, project); present {
+				t.Error("project revert left the project entry")
+			}
+			entry, present, err := entryOf(user)
+			if err != nil || !present || !isLocal(entry) {
+				t.Fatalf("project revert disturbed the user layer: present %t, err %v", present, err)
+			}
+			assertClaudeState(t, user.path, 2)
+
+			startups := float64(2)
+			if driftAgain {
+				startups = 3
+				rewriteClaudeState(t, user.path, "replaced file", startups)
+			}
+			if err := nativeRevert([]client{user}, []client{user},
+				options{scope: scopeUser}, repository); err != nil {
+				t.Fatalf("user revert: %v", err)
+			}
+			if spec, present := swapSpec(t, user); !present || spec.command != "uvx" {
+				t.Errorf("user revert did not restore the original entry (present %t)", present)
+			}
+			assertClaudeState(t, user.path, startups)
+			if _, err := os.Stat(nativeStatePath()); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("reverts retained native state: %v", err)
+			}
+		})
+	}
+}
+
+func TestNativeRevertKeepsWhatAReswapAlreadyTookFromTheClient(t *testing.T) {
+	target, repository := swappedClaude(t)
+	rewriteClaudeState(t, target.path, "in place", 2)
+	if err := nativeUse([]client{target}, []client{target}, entryPlanFor(movedEntry()),
+		options{scope: scopeUser, noPreflight: true}, repository); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeRevert([]client{target}, []client{target}, options{}, repository); err != nil {
+		t.Fatal(err)
+	}
+	if spec, present := swapSpec(t, target); !present || spec.command != "uvx" {
+		t.Errorf("revert did not restore the original entry (present %t)", present)
+	}
+	assertClaudeState(t, target.path, 2)
+}
+
+func TestNativeLayerSwappedAfterDriftKeepsItThroughReverts(t *testing.T) {
+	for _, scoped := range []bool{false, true} {
+		t.Run(fmt.Sprintf("scoped %t", scoped), func(t *testing.T) {
+			rig := newNativeRig(t)
+			user := rig.client(t, "claude", scopeUser)
+			project := rig.client(t, "claude", scopeProject)
+			original := `{"numStartups": 1, "mcpServers": {"tmux": {"command": "uvx"}}, "projects": {}}`
+			if err := os.WriteFile(user.path, []byte(original), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			plan := entryPlanFor(devEntry())
+			if err := nativeUse([]client{user}, []client{user}, plan,
+				options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+				t.Fatal(err)
+			}
+			rewriteClaudeState(t, user.path, "in place", 2)
+			if err := nativeUse([]client{user}, []client{user}, plan,
+				options{scope: scopeProject, noPreflight: true}, rig.repository); err != nil {
+				t.Fatal(err)
+			}
+			reverts := []options{{}}
+			if scoped {
+				reverts = []options{{scope: scopeProject}, {scope: scopeUser}}
+			}
+			for _, chosen := range reverts {
+				if err := nativeRevert([]client{user}, []client{user}, chosen, rig.repository); err != nil {
+					t.Fatalf("revert of a layer swapped after the client rewrote its state: %v", err)
+				}
+			}
+			if spec, present := swapSpec(t, user); !present || spec.command != "uvx" {
+				t.Errorf("revert did not restore the user entry (present %t)", present)
+			}
+			if _, present := swapSpec(t, project); present {
+				t.Error("revert left the project entry")
+			}
+			assertClaudeState(t, user.path, 2)
+		})
+	}
+}
+
+func TestNativeOlderLayerReswappedAfterDriftKeepsItThroughRevert(t *testing.T) {
+	rig := newNativeRig(t)
+	user := rig.client(t, "claude", scopeUser)
+	original := `{"numStartups": 1, "mcpServers": {"tmux": {"command": "uvx"}}, "projects": {}}`
+	if err := os.WriteFile(user.path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []configScope{scopeUser, scopeProject} {
+		if scope == scopeProject {
+			rewriteClaudeState(t, user.path, "in place", 2)
+		}
+		if err := nativeUse([]client{user}, []client{user}, entryPlanFor(devEntry()),
+			options{scope: scope, noPreflight: true}, rig.repository); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := nativeUse([]client{user}, []client{user}, entryPlanFor(movedEntry()),
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeRevert([]client{user}, []client{user}, options{}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	if spec, present := swapSpec(t, user); !present || spec.command != "uvx" {
+		t.Errorf("revert did not restore the user entry (present %t)", present)
+	}
+	assertClaudeState(t, user.path, 2)
+}
+
+func TestNativeRevertRefusesATOMLChildTableItWouldDrop(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "codex", scopeUser)
+	if err := os.MkdirAll(filepath.Dir(target.path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target.path, []byte("[mcp_servers.keep]\ncommand = \"keep\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	child := "\n[mcp_servers.tmux.tools.run_shell_command]\napproval_mode = \"approve\"\n"
+	if err := os.WriteFile(target.path, []byte(readFile(t, target.path)+child), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configBefore, stateBefore := readFile(t, target.path), readFile(t, nativeStatePath())
+	err := nativeRevert([]client{target}, []client{target}, options{}, rig.repository)
+	if err == nil || !strings.Contains(err.Error(), "child table") {
+		t.Fatalf("revert error = %v, want a refusal to drop the client's child table", err)
+	}
+	if readFile(t, target.path) != configBefore || readFile(t, nativeStatePath()) != stateBefore {
+		t.Error("a refused revert changed the configuration or the recovery state")
+	}
+}
+
+func TestNativeOlderClaudeLayerReswapsAfterDriftAndTheChainStillUnwinds(t *testing.T) {
+	user, project, repository := foreignClaudeWithUserAndProjectLayers(t)
+	rewriteClaudeState(t, user.path, "in place", 2)
+	if err := nativeUse([]client{user}, []client{user}, entryPlanFor(movedEntry()),
+		options{scope: scopeUser, noPreflight: true}, repository); err != nil {
+		t.Fatalf("reswap of the older layer after the client rewrote its state: %v", err)
+	}
+	if spec, present := swapSpec(t, user); !present || !slices.Contains(spec.args, "/moved/repo/mcp") {
+		t.Errorf("reswap left the user entry at its old build (present %t)", present)
+	}
+	rewriteClaudeState(t, user.path, "in place", 3)
+	if err := nativeRevert([]client{user}, []client{user}, options{}, repository); err != nil {
+		t.Fatalf("unscoped revert after further drift: %v", err)
+	}
+	if spec, present := swapSpec(t, user); !present || spec.command != "uvx" {
+		t.Errorf("revert did not restore the user entry (present %t)", present)
+	}
+	if _, present := swapSpec(t, project); present {
+		t.Error("revert left the project entry")
+	}
+	assertClaudeState(t, user.path, 3)
+}
+
+func TestNativeProjectLayerSwapsFromASecondCheckout(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeProject)
+	original := []byte(`{"numStartups":1,"projects":{}}`)
+	if err := os.WriteFile(target.path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(t.TempDir(), "other-checkout")
+	for _, repository := range []string{rig.repository, other} {
+		if err := nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+			options{scope: scopeProject, noPreflight: true}, repository); err != nil {
+			t.Fatalf("project swap from %s: %v", filepath.Base(repository), err)
+		}
+	}
+	target.repository = other
+	if entry, present, err := entryOf(target); err != nil || !present || !isLocal(entry) {
+		t.Fatalf("second checkout entry: present %t, err %v", present, err)
+	}
+	if err := nativeRevert([]client{target}, []client{target}, options{}, other); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal([]byte(readFile(t, target.path)), original) {
+		t.Error("revert did not restore the file the first swap saw")
+	}
+}
+
+func TestNativeProjectLayerRefusesASecondCheckoutAfterTheFileChanged(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeProject)
+	if err := os.WriteFile(target.path, []byte(`{"numStartups":1,"projects":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+		options{scope: scopeProject, noPreflight: true}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	rewriteClaudeState(t, target.path, "in place", 2)
+	configBefore, stateBefore := readFile(t, target.path), readFile(t, nativeStatePath())
+	other := filepath.Join(t.TempDir(), "other-checkout")
+	err := nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+		options{scope: scopeProject, noPreflight: true}, other)
+	if err == nil || !strings.Contains(err.Error(), rig.repository) ||
+		!strings.Contains(err.Error(), "revert --scope project") {
+		t.Fatalf("swap from a second checkout error = %v, want a refusal naming the first and the way forward", err)
+	}
+	if readFile(t, target.path) != configBefore || readFile(t, nativeStatePath()) != stateBefore {
+		t.Error("a refused swap changed the configuration or the recovery state")
+	}
+	if err := nativeRevert([]client{target}, []client{target}, options{}, rig.repository); err != nil {
+		t.Fatalf("revert after the refusal: %v", err)
+	}
+	if _, present := swapSpec(t, target); present {
+		t.Error("revert left the project entry")
+	}
+	assertClaudeState(t, target.path, 2)
+}
+
+func TestNativeProjectLayerReswapsFromTheSameCheckoutAfterTheFileChanged(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeProject)
+	original := []byte(`{"numStartups":1,"projects":{}}`)
+	if err := os.WriteFile(target.path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	use := func(entry map[string]any) {
+		t.Helper()
+		if err := nativeUse([]client{target}, []client{target}, entryPlanFor(entry),
+			options{scope: scopeProject, noPreflight: true}, rig.repository); err != nil {
+			t.Fatal(err)
+		}
+	}
+	use(devEntry())
+	rewriteClaudeState(t, target.path, "in place", 2)
+	use(movedEntry())
+	if err := nativeRevert([]client{target}, []client{target}, options{}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := swapSpec(t, target); present {
+		t.Error("revert left the project entry")
+	}
+	assertClaudeState(t, target.path, 2)
+}
+
+func TestNativeProjectLayerRefusesASecondCheckoutBehindAnotherLayer(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeProject)
+	if err := os.WriteFile(target.path, []byte(`{"numStartups":1,"projects":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(t.TempDir(), "other-checkout")
+	use := func(scope configScope, repository string) error {
+		return nativeUse([]client{target}, []client{target}, entryPlanFor(devEntry()),
+			options{scope: scope, noPreflight: true}, repository)
+	}
+	if err := use(scopeProject, other); err != nil {
+		t.Fatal(err)
+	}
+	rewriteClaudeState(t, target.path, "in place", 2)
+	if err := use(scopeUser, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	configBefore, stateBefore := readFile(t, target.path), readFile(t, nativeStatePath())
+	err := use(scopeProject, rig.repository)
+	if err == nil || !strings.Contains(err.Error(), other) {
+		t.Fatalf("swap from a second checkout error = %v, want a refusal naming the first", err)
+	}
+	if readFile(t, target.path) != configBefore || readFile(t, nativeStatePath()) != stateBefore {
+		t.Error("a refused swap changed the configuration or the recovery state")
+	}
+}
+
+func captureStdout(t *testing.T, run func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = writer
+	defer func() { os.Stdout = stdout }()
+	done := make(chan string)
+	go func() {
+		var buffer bytes.Buffer
+		_, _ = buffer.ReadFrom(reader)
+		done <- buffer.String()
+	}()
+	run()
+	_ = writer.Close()
+	return <-done
+}
+
+func TestNativeRevertSaysWhenItPutsBackOnlyTheEntry(t *testing.T) {
+	target, repository := swappedClaude(t)
+	dryRun := func() string {
+		var err error
+		output := captureStdout(t, func() {
+			err = nativeRevert([]client{target}, []client{target}, options{dryRun: true}, repository)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return output
+	}
+	if output := dryRun(); !strings.Contains(output, "would restore .claude.json.bak") ||
+		strings.Contains(output, "entry") {
+		t.Errorf("dry run of a revert from the backup said %q", output)
+	}
+	rewriteClaudeState(t, target.path, "in place", 2)
+	if output := dryRun(); !strings.Contains(output, "would restore the tmux entry from .claude.json.bak") {
+		t.Errorf("dry run of an entry-only revert said %q", output)
 	}
 }

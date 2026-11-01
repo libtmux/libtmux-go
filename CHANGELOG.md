@@ -33,6 +33,20 @@ Modules are tagged per directory, so each carries its own version: the core as
   acts on the session's current window unless it is targeted, and to pass
   `-t "$TMUX_PANE"` to mean the pane. (#114)
 
+### internal/tools
+
+- `mcp-swap use` and `revert` no longer stop with `configuration changed since
+  mcp-swap wrote its newest layer` or `configuration changed before revert`
+  after a client rewrites its own configuration, as Claude Code and Grok do.
+  They refuse when the `tmux` entry they wrote differs. (#111)
+- `mcp-swap use --scope project` from a second checkout now stops once the file
+  has changed since the last swap, naming the first checkout and the
+  `revert --scope project` to run first. (#111)
+- `mcp-swap revert` of a file a client has rewritten puts back only the `tmux`
+  entry, or removes it when the file had none, and keeps the client's changes
+  and the file's mode. A file still as the swapper left it is restored whole.
+  (#111)
+
 ## v0.1.1, workspace/v0.1.1, mcp/v0.1.1
 
 ### tmux
