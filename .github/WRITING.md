@@ -159,6 +159,15 @@ old behavior only when it explains a published break, and mechanism only when
 callers can observe it. Add entries under `## Unreleased`; the maintainer
 assigns versions.
 
+Each published module keeps its own `CHANGELOG.md` beside its `go.mod`, and an
+entry goes in the file of the module it changes: `workspace/CHANGELOG.md` for
+`workspace`, `mcp/CHANGELOG.md` for `mcp`, and the root `CHANGELOG.md` for the
+tmux module (`tmux`, `tmux/tmuxtest` and `tmuxq`). A change that spans modules,
+such as documentation, CI, release tooling, `examples` or `internal/tools`,
+goes in the root file. The modules are tagged together, so a release heading
+names the tags of its release, and a release with nothing for a module says
+``No entries for `workspace`.`` under it.
+
 ## Release notes
 
 Release notes brief an upgrader; they do not repeat the ledger. Lead with the

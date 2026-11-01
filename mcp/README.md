@@ -27,7 +27,7 @@ $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 
 Releases are numbered `0.1.N`, and each release increments `N`. The API is not
 settled: any release may change or remove exported identifiers, and the
-changelog marks each break. Pin an exact version to avoid one.
+[changelog](CHANGELOG.md) marks each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) ·
 [Connect another client](#connect-another-client) ·
@@ -655,6 +655,7 @@ It serves one tmux server over stdin and stdout. Reference:
 | --- | --- |
 | [Reference](https://libtmux.org/en/go/latest/mcp/reference/) | Every exported identifier, method, and field, one page each |
 | [`docs/contracts.md`](docs/contracts.md) | What the server promises beyond this page |
+| [`CHANGELOG.md`](CHANGELOG.md) | What each release of this module changed |
 | [`TOOLS.md`](TOOLS.md) | Every tool's arguments and results |
 | [`PARITY.md`](PARITY.md) | Where this server and the Python one differ |
 | [`MIGRATING.md`](MIGRATING.md) | Settings from earlier releases, and what replaced each |

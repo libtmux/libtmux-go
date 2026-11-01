@@ -26,7 +26,7 @@ $ go get github.com/libtmux/libtmux-go/workspace@latest
 
 Releases are numbered `0.1.N`, and each release increments `N`. The API is not
 settled: any release may change or remove exported identifiers, and the
-changelog marks each break. Pin an exact version to avoid one.
+[changelog](CHANGELOG.md) marks each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) ·
 [A workspace file](#a-workspace-file) · [Using it](#using-it) ·
@@ -520,6 +520,7 @@ The program above, with a page of its own, ready to run from a clone.
 | --- | --- |
 | [Reference](https://libtmux.org/en/go/latest/workspace/reference/) | Every exported identifier, method, and field, one page each |
 | [`docs/contracts.md`](docs/contracts.md) | What the library and the command promise beyond this page |
+| [`CHANGELOG.md`](CHANGELOG.md) | What each release of this module changed |
 | [`CLI.md`](CLI.md) | The `tmux-workspace` command |
 | [`examples/build-workspace`](examples/build-workspace) | The quick start, as a directory you can run |
 | [`../tmux/`](../tmux/) | The library this builds with |

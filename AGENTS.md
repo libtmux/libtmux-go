@@ -57,6 +57,9 @@ stated twice, the file listed above is the one that governs.
   the bakeoff decisions behind them
 - [PARITY.md](PARITY.md) — how the surface is checked against the Python
   library
+- [CHANGELOG.md](CHANGELOG.md), [workspace/CHANGELOG.md](workspace/CHANGELOG.md)
+  and [mcp/CHANGELOG.md](mcp/CHANGELOG.md) — one changelog for each published
+  module; a change spanning modules goes in the root file
 - [BENCHMARKS.md](BENCHMARKS.md) — what each way of reaching tmux costs
 - Go doc comments: https://go.dev/doc/comment
 - Go release notes, the model for the changelog: https://go.dev/doc/go1.24
