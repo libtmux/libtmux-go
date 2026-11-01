@@ -78,6 +78,14 @@ func TestParseArgumentsReadsCommandsAndFlagsInAnyOrder(t *testing.T) {
 				},
 			},
 		},
+		{
+			"the attended input setting",
+			[]string{"use", "--env", "LIBTMUX_ALLOW_ATTENDED_INPUT=1"},
+			options{
+				command: "use-local", mode: modeDev,
+				environment: map[string]string{"LIBTMUX_ALLOW_ATTENDED_INPUT": "1"},
+			},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -235,8 +243,9 @@ func TestBuildEntryCarriesRequestedEnvironment(t *testing.T) {
 	entry, err := buildEntry(options{
 		mode: modeInstalled,
 		environment: map[string]string{
-			"LIBTMUX_TOOLSETS": "inspect,execute",
-			"LIBTMUX_SOCKET":   "qa",
+			"LIBTMUX_TOOLSETS":             "inspect,execute",
+			"LIBTMUX_SOCKET":               "qa",
+			"LIBTMUX_ALLOW_ATTENDED_INPUT": "1",
 		},
 	}, t.TempDir())
 	if err != nil {
@@ -245,6 +254,7 @@ func TestBuildEntryCarriesRequestedEnvironment(t *testing.T) {
 	environment := entryEnvironment(entry)
 	if environment["LIBTMUX_TOOLSETS"] != "inspect,execute" ||
 		environment["LIBTMUX_SOCKET"] != "qa" ||
+		environment["LIBTMUX_ALLOW_ATTENDED_INPUT"] != "1" ||
 		environment["LIBTMUX_MCP_SWAP"] != string(modeInstalled) {
 		t.Fatalf("entry environment = %v", environment)
 	}
