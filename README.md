@@ -41,7 +41,7 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 
 Releases are numbered `0.1.N`, and each release increments `N`. The API is not
 settled: any release may change or remove exported identifiers, and the
-changelog marks each break. Pin an exact version to avoid one.
+[changelog](CHANGELOG.md) marks each break. Pin an exact version to avoid one.
 
 It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
 older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
@@ -803,7 +803,8 @@ period, so pin an exact version. Not recommended for production.
   compiles, and CI tests executable lookup there; no tmux runs there.
 - **Tagged per directory.** Each module carries its own version: the tags are
   `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the exact ones
-  you want in your own go.mod; the commands here fetch the newest.
+  you want in your own go.mod; the commands here fetch the newest. Each module
+  keeps a changelog of its own beside its `go.mod`.
 
 ## Documentation
 
@@ -828,7 +829,9 @@ leads to its method without a lookup.
 | [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to, and the bakeoffs behind them |
 | [`PARITY.md`](PARITY.md) | How the surface is checked against the Python libtmux |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
-| [`CHANGELOG.md`](CHANGELOG.md) | What each release changed |
+| [`CHANGELOG.md`](CHANGELOG.md) | What each release of the tmux module changed, and the changes that span modules |
+| [`workspace/CHANGELOG.md`](workspace/CHANGELOG.md) | What each release of `workspace` changed |
+| [`mcp/CHANGELOG.md`](mcp/CHANGELOG.md) | What each release of `mcp` changed |
 | [`SECURITY.md`](SECURITY.md) | What this software executes, and how to report a hole in it |
 | [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) | The gates a change has to pass, and where the writing rules live |
 | [`WRITING.md`](.github/WRITING.md) | How this repository writes: docs, the changelog, commits |

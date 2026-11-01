@@ -401,11 +401,14 @@ Every gate above passes, in every module rather than only the one that changed,
 and:
 
 - New exported behaviour carries an `Example` ending in an output comment.
-- Anything a caller can observe has an entry under `## Unreleased` in
-  `CHANGELOG.md`.
+- Anything a caller can observe has an entry under `## Unreleased` in the
+  `CHANGELOG.md` of the module it changes. [WRITING.md](WRITING.md#changelog)
+  says which file that is.
 
-The second is the one nothing enforces. A change that reaches a caller and
-leaves no changelog entry is not finished.
+Nothing checks that an entry exists.
+`TestEveryPublishedModuleKeepsAChangelog` fails only when a published module
+loses its changelog or its `## Unreleased` heading. A change that reaches a
+caller and leaves no changelog entry is not finished.
 
 ## Pull requests
 

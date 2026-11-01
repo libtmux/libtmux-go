@@ -26,7 +26,8 @@ $ go get github.com/libtmux/libtmux-go/tmux@latest
 
 Releases are numbered `0.1.N`, and each release increments `N`. The API is not
 settled: any release may change or remove exported identifiers, and the
-changelog marks each break. Pin an exact version to avoid one.
+[changelog](../CHANGELOG.md) marks each break. Pin an exact version to avoid
+one.
 
 **Contents** — [Quick start](#quick-start) · [Records](#records) ·
 [Method names](#method-names) · [Options and hooks](#options-and-hooks) ·
@@ -593,6 +594,7 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 | [`../tmuxq/`](../tmuxq/) | Filtering helpers for the records this package returns |
 | [`../examples/pane-io`](../examples/pane-io) | Type into a pane and wait for what the command prints, not for what you typed |
 | [`../examples/`](../examples/) | Runnable programs |
+| [`../CHANGELOG.md`](../CHANGELOG.md) | What each release of this module changed |
 | [`../DESIGN.md`](../DESIGN.md) | Why the surface looks like this |
 | [`../BENCHMARKS.md`](../BENCHMARKS.md) | What each transport costs |
 

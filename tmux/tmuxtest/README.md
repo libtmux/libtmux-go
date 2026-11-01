@@ -25,7 +25,8 @@ $ go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest
 
 Releases are numbered `0.1.N`, and each release increments `N`. The API is not
 settled: any release may change or remove exported identifiers, and the
-changelog marks each break. Pin an exact version to avoid one.
+[changelog](../../CHANGELOG.md) marks each break. Pin an exact version to avoid
+one.
 
 **Contents** — [Quick start](#quick-start) · [The waits](#the-waits) ·
 [Testing without a tmux](#testing-without-a-tmux) ·
