@@ -53,7 +53,7 @@ $ libtmux-mcp -version
 ```
 
 ```text
-libtmux-mcp v0.1.1
+libtmux-mcp v0.1.2
 ```
 
 ### [`libtmux-mcp -tools`][guide-inspect-the-selection]: what a client would see
