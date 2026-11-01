@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -234,4 +235,77 @@ func TestTheSocketAndBinaryComeFromTheEnvironmentToo(t *testing.T) {
 			t.Errorf("binaryFrom() = %q, want the path from the environment", got)
 		}
 	})
+}
+
+func TestDoctorReportsWhetherInputMayReachAViewedPane(t *testing.T) {
+	ctx := t.Context()
+	server := tmuxtest.NewServer(ctx, t)
+	for _, test := range []struct {
+		name  string
+		value string
+		set   bool
+		want  string
+	}{
+		{name: "unset refuses", want: "  input:   refused for a pane a tmux client is viewing\n"},
+		{
+			name: "1 allows", value: "1", set: true,
+			want: "  input:   allowed to a pane a tmux client is viewing (LIBTMUX_ALLOW_ATTENDED_INPUT=1)\n",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setAllowAttendedInput(t, test.value, test.set)
+			report, err := doctorReport(t, server)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(report, test.want) {
+				t.Errorf("doctor report lacks %q:\n%s", test.want, report)
+			}
+		})
+	}
+}
+
+func TestDoctorRefusesAnInvalidAttendedInputSetting(t *testing.T) {
+	const value = "perhaps-yes"
+	setAllowAttendedInput(t, value, true)
+	_, err := doctorReport(t, tmuxtest.NewServer(t.Context(), t))
+	if err == nil || !strings.Contains(err.Error(), "LIBTMUX_ALLOW_ATTENDED_INPUT") {
+		t.Fatalf("doctor error = %v, want one naming LIBTMUX_ALLOW_ATTENDED_INPUT", err)
+	}
+	if strings.Contains(err.Error(), value) {
+		t.Errorf("doctor error %q echoes the value", err)
+	}
+}
+
+// doctorReport returns what reportDoctor prints. It swaps os.Stdout, so its
+// callers must not run in parallel.
+func doctorReport(t *testing.T, server tmux.Server) (string, error) {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	stdout := os.Stdout
+	os.Stdout = writer
+	reportErr := reportDoctor(server)
+	os.Stdout = stdout
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	report, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(report), reportErr
+}
+
+func setAllowAttendedInput(t *testing.T, value string, set bool) {
+	t.Helper()
+	t.Setenv("LIBTMUX_ALLOW_ATTENDED_INPUT", value)
+	if !set {
+		if err := os.Unsetenv("LIBTMUX_ALLOW_ATTENDED_INPUT"); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

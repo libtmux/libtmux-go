@@ -21,6 +21,14 @@ Modules are tagged per directory, so each carries its own version: the core as
 
 ### mcp
 
+- Add `LIBTMUX_ALLOW_ATTENDED_INPUT`, a launch setting that is off by default.
+  Set to `1`, it lets the input tools deliver to a pane a tmux client is
+  viewing, which they otherwise refuse with `pane is attended by a tmux client`.
+  It lifts that refusal only: a dead pane, a pane with input disabled, a pane in
+  a mode, and a synchronized pane with such a member are still refused. Any
+  other value stops startup with a message that names the variable.
+  `tmux://capabilities` reports the setting as `allowAttendedInput`, and
+  `libtmux-mcp -doctor` prints it. (#113)
 - `run_shell_command` now says in its description that a tmux command run there
   acts on the session's current window unless it is targeted, and to pass
   `-t "$TMUX_PANE"` to mean the pane. (#114)

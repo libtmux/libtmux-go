@@ -306,7 +306,7 @@ of tools, and it is what an operator grants or withholds:
 documentation site gives each tool the page linked above. That reference is
 for searching, which is why it is not here.
 
-Three behaviours matter before you grant `execute`:
+Four behaviours matter before you grant `execute`:
 
 - **Input goes where tmux sends it.** With `synchronize-panes` on, tmux types
   into every pane of the window. [`send_keys`][send_keys] reports the linked
@@ -316,6 +316,9 @@ Three behaviours matter before you grant `execute`:
   [`run_shell_command`][run_shell_command] works.
 - **Copy mode is left to the person.** Reads never take over an attached
   view, and [`get_pane_info`][get_pane_info] reports when a pane is in a mode.
+- **A pane someone is viewing is refused.** The input tools do not type into a
+  pane a tmux client is showing, unless you launch the server with
+  [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable].
 
 [The contract][contract-input] has the rest of each.
 
@@ -368,6 +371,27 @@ Choosing tools shapes what a client is offered. Every call runs with your
 user's authority. [The contract][contract-exact-tools] covers the variables
 from earlier releases.
 
+### [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]: allow input to a pane someone is viewing
+
+Every input tool refuses a pane that a tmux client is viewing, so an agent does
+not type into the window a person is looking at. That refusal is the default.
+To let the agent type into the window you are viewing, launch the server with
+`LIBTMUX_ALLOW_ATTENDED_INPUT=1`:
+
+```console
+$ claude mcp add tmux \
+    -e LIBTMUX_ALLOW_ATTENDED_INPUT=1 \
+    -- libtmux-mcp -socket-name default
+```
+
+The setting lifts that one refusal. A dead pane, a pane with input disabled, a
+pane in a mode, and a synchronized pane that has such a member are still
+refused. The only accepted value is `1`. Any other value, including an empty
+one, stops startup with a message that names the variable.
+
+The server reads it once, at startup. `tmux://capabilities` reports it as
+`allowAttendedInput`, and `libtmux-mcp -doctor` prints it.
+
 ### [`libtmux-mcp -tools`][guide-inspect-the-selection]: see what a client would be offered
 
 ```console
@@ -402,7 +426,7 @@ will not start needs:
 | --- | --- |
 | `-version` | which build this is |
 | `-tools` | the tools and toolsets a client would see |
-| `-doctor` | which socket it reaches, what is on it, and whether it is running inside that tmux itself |
+| `-doctor` | which socket it reaches, what is on it, whether it is running inside that tmux itself, and whether input may reach a pane a client is viewing |
 
 The environment sets the rest:
 
@@ -411,6 +435,7 @@ The environment sets the rest:
 | [`LIBTMUX_TOOLSETS`][mcp-toolsetsenvironmentvariable] | selects any unordered subset of the toolsets |
 | [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] | includes exact tool names after toolset expansion |
 | [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] | removes exact names after every inclusion |
+| [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable] | `1` lets the input tools type into a pane a tmux client is viewing; unset refuses it |
 | [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] | selects the socket path when no socket flag selects one; wins over [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] |
 | [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable] | names the tmux socket when no socket flag and no `LIBTMUX_SOCKET_PATH` select one |
 | [`LIBTMUX_TMUX_CONFIG`][mcp-tmuxconfigenvironmentvariable] | selects a nonempty absolute tmux configuration path |
@@ -658,6 +683,7 @@ It serves one tmux server over stdin and stdout. Reference:
 [guide-inspect-the-selection]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#inspect-the-selection
 [libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [list_sessions]: https://libtmux.org/en/go/latest/mcp/tools/list_sessions/
+[mcp-allowattendedinputenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-allowattendedinputenvironmentvariable/
 [mcp-assumeresponsecommit]: https://libtmux.org/en/go/latest/mcp/reference/mcp-assumeresponsecommit/
 [mcp-auditenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-auditenvironmentvariable/
 [mcp-binaryenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-binaryenvironmentvariable/

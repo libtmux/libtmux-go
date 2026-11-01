@@ -214,6 +214,12 @@ func reportDoctor(target tmux.Server) error {
 	if err := callInto(ctx, session, "get_server_info", &info); err != nil {
 		return err
 	}
+	var capabilities struct {
+		AllowAttendedInput bool `json:"allowAttendedInput"`
+	}
+	if err := readResourceInto(ctx, session, tmuxmcp.CapabilitiesResourceURI, &capabilities); err != nil {
+		return err
+	}
 
 	fmt.Println("libtmux-mcp doctor")
 	fmt.Printf("  tmux:    %s (requires %s or newer)\n", orUnknown(info.Version), orUnknown(info.MinimumVersion))
@@ -234,8 +240,30 @@ func reportDoctor(target tmux.Server) error {
 	default:
 		fmt.Println("  caller:  not running inside a tmux pane")
 	}
+	if capabilities.AllowAttendedInput {
+		fmt.Printf("  input:   allowed to a pane a tmux client is viewing (%s=1)\n",
+			tmuxmcp.AllowAttendedInputEnvironmentVariable)
+	} else {
+		fmt.Println("  input:   refused for a pane a tmux client is viewing")
+	}
 
 	return nil
+}
+
+func readResourceInto(
+	ctx context.Context,
+	session *sdk.ClientSession,
+	uri string,
+	into any,
+) error {
+	result, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri})
+	if err != nil {
+		return fmt.Errorf("read %s: %w", uri, err)
+	}
+	if len(result.Contents) != 1 {
+		return fmt.Errorf("read %s: %d contents, want 1", uri, len(result.Contents))
+	}
+	return json.Unmarshal([]byte(result.Contents[0].Text), into)
 }
 
 func callInto(

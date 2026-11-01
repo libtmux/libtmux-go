@@ -23,6 +23,10 @@ const (
 	ToolsEnvironmentVariable = "LIBTMUX_TOOLS"
 	// ExcludeToolsEnvironmentVariable removes exact names after every inclusion.
 	ExcludeToolsEnvironmentVariable = "LIBTMUX_EXCLUDE_TOOLS"
+	// AllowAttendedInputEnvironmentVariable lets the input tools deliver to a
+	// pane a tmux client is viewing. The only accepted value is 1, and unset
+	// keeps the refusal.
+	AllowAttendedInputEnvironmentVariable = "LIBTMUX_ALLOW_ATTENDED_INPUT"
 	// SafetyEnvironmentVariable is rejected because ordered safety tiers were retired.
 	SafetyEnvironmentVariable = "LIBTMUX_SAFETY"
 	// capabilitiesEnvironmentVariable is rejected because capability classes were retired.
@@ -48,6 +52,8 @@ type toolSurface struct {
 	tools    []toolDefinition
 	byName   map[string]toolDefinition
 	socket   socketProfile
+	// allowAttendedInput lifts only the refusal of a pane a client is viewing.
+	allowAttendedInput bool
 }
 
 type environmentValue struct {
@@ -58,11 +64,12 @@ type environmentValue struct {
 type startupEnvironment map[string]environmentValue
 
 func currentStartupEnvironment() startupEnvironment {
-	values := make(startupEnvironment, 6)
+	values := make(startupEnvironment, 7)
 	for _, name := range []string{
 		ToolsetsEnvironmentVariable,
 		ToolsEnvironmentVariable,
 		ExcludeToolsEnvironmentVariable,
+		AllowAttendedInputEnvironmentVariable,
 		SafetyEnvironmentVariable,
 		capabilitiesEnvironmentVariable,
 		RecipeToolEnvironmentVariable,
@@ -99,6 +106,10 @@ func resolveToolSurfaceFrom(environment startupEnvironment, profile socketProfil
 			"%s was retired; use the typed tool workflows directly",
 			RecipeToolEnvironmentVariable,
 		)
+	}
+	allowAttendedInput, err := parseAllowAttendedInput(environment[AllowAttendedInputEnvironmentVariable])
+	if err != nil {
+		return toolSurface{}, err
 	}
 	definitions, err := toolManifest()
 	if err != nil {
@@ -174,13 +185,29 @@ func resolveToolSurfaceFrom(environment startupEnvironment, profile socketProfil
 		byName[bounded.name] = bounded
 	}
 	return toolSurface{
-		toolsets: slices.Clone(selected),
-		included: slices.Clone(included),
-		excluded: slices.Clone(excluded),
-		tools:    effective,
-		byName:   byName,
-		socket:   profile,
+		toolsets:           slices.Clone(selected),
+		included:           slices.Clone(included),
+		excluded:           slices.Clone(excluded),
+		tools:              effective,
+		byName:             byName,
+		socket:             profile,
+		allowAttendedInput: allowAttendedInput,
 	}, nil
+}
+
+// parseAllowAttendedInput accepts only 1. Its error names the variable and
+// never the value.
+func parseAllowAttendedInput(configured environmentValue) (bool, error) {
+	if !configured.set {
+		return false, nil
+	}
+	if configured.value != "1" {
+		return false, fmt.Errorf(
+			"%s must be 1 to allow input to a pane a tmux client is viewing; unset it to refuse that input",
+			AllowAttendedInputEnvironmentVariable,
+		)
+	}
+	return true, nil
 }
 
 func parseToolsets(configured string) ([]toolset, error) {
@@ -299,6 +326,7 @@ func (surface toolSurface) capabilityReport() map[string]any {
 		"tools":                   rows,
 		"hostCommandTools":        0,
 		"toolFilteringBoundary":   "interface-shaping-not-authorization",
+		"allowAttendedInput":      surface.allowAttendedInput,
 		"executionAuthority":      "tmux-user",
 		"operatingSystemBoundary": "none",
 		"boundary":                boundary,

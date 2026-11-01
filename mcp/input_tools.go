@@ -428,15 +428,17 @@ func (t *tools) preflightPaneInput(
 			return empty, fmt.Errorf("%s refused: %w; capture_pane reads text without changing pane mode", tool, err)
 		}
 	}
-	attended, err := attendedPaneInputMembership(
-		snapshot.Clients(), snapshot.Panes(), resolved.WindowID().String(),
-	)
-	if err != nil {
-		return empty, fmt.Errorf("%s refused: %w", tool, err)
-	}
-	for _, paneID := range ids {
-		if attended[paneID] {
-			return empty, paneInputRefusal(tool, paneID, errors.New("pane is attended by a tmux client"))
+	if !t.surface.allowAttendedInput {
+		attended, err := attendedPaneInputMembership(
+			snapshot.Clients(), snapshot.Panes(), resolved.WindowID().String(),
+		)
+		if err != nil {
+			return empty, fmt.Errorf("%s refused: %w", tool, err)
+		}
+		for _, paneID := range ids {
+			if attended[paneID] {
+				return empty, paneInputRefusal(tool, paneID, errors.New("pane is attended by a tmux client"))
+			}
 		}
 	}
 

@@ -72,7 +72,8 @@ The default [toolsets][topic-tool-selection] never include `teardown`.
 $ libtmux-mcp -doctor -socket-name my-application
 ```
 
-It reports the socket, the tmux version, and what the socket holds.
+It reports the socket, the tmux version, what the socket holds, and whether
+input may reach a pane a client is viewing.
 [`mcp/README.md`](../../README.md#quick-start) shows what it prints.
 
 ## Running it
@@ -92,6 +93,9 @@ It then waits on stdin and prints nothing, because stdout is the protocol.
   removes names after inclusion.
 - **Bad lists.** Unknown names and malformed lists fail before tmux opens. The
   retired `LIBTMUX_SAFETY` and its two siblings fail startup too.
+- **Viewed panes.** The input tools refuse a pane a tmux client is viewing.
+  [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]
+  set to `1` lifts that refusal only, and any other value fails startup.
 
 The tools and the static [`tmux://capabilities`][tmux-capabilities] resource
 come from one native manifest. [The contract][contract-capability-disclosure]
@@ -200,6 +204,7 @@ one.
 [get_server_info]: https://libtmux.org/en/go/latest/mcp/tools/get_server_info/
 [guide-diagnose-startup]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#diagnose-startup
 [guide-inspect-the-selection]: https://libtmux.org/en/go/latest/mcp/guides/connect-client/#inspect-the-selection
+[mcp-allowattendedinputenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-allowattendedinputenvironmentvariable/
 [mcp-binaryenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-binaryenvironmentvariable/
 [mcp-excludetoolsenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-excludetoolsenvironmentvariable/
 [mcp-socketenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-socketenvironmentvariable/
