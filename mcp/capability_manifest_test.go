@@ -848,6 +848,24 @@ func TestRunShellCommandHasNoRetiredJobHandles(t *testing.T) {
 	}
 }
 
+// A tmux command typed into a pane resolves an untargeted target from the
+// session's current window, not from the pane it ran in.
+func TestRunShellCommandTellsCallersToTargetTmuxCommands(t *testing.T) {
+	setCapabilityEnvironment(t, "execute", "", "")
+	const sentence = "A tmux command run here acts on the session's current window " +
+		"unless you target it, so pass `-t \"$TMUX_PANE\"` to mean this pane."
+	tools, err := AdvertisedTools(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description := namedTool(t, tools, "run_shell_command").Description; !strings.Contains(description, sentence) {
+		t.Errorf("run_shell_command description omits the targeting sentence: %q", description)
+	}
+	if details, _ := ToolDetails("run_shell_command"); !strings.Contains(details, sentence) {
+		t.Errorf("run_shell_command details omit the targeting sentence: %q", details)
+	}
+}
+
 func TestCapabilityManifestDisclosesConfiguredInputMembership(t *testing.T) {
 	setCapabilityEnvironment(t, "execute", "", "")
 	tools, err := AdvertisedTools(t.Context())

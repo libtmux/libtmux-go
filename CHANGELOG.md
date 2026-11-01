@@ -19,6 +19,12 @@ Modules are tagged per directory, so each carries its own version: the core as
 - Snapshot examples describe sequential collection rather than an atomic
   single-command read. Queries over the captured records still run locally.
 
+### mcp
+
+- `run_shell_command` now says in its description that a tmux command run there
+  acts on the session's current window unless it is targeted, and to pass
+  `-t "$TMUX_PANE"` to mean the pane. (#114)
+
 ## v0.1.1, workspace/v0.1.1, mcp/v0.1.1
 
 ### tmux

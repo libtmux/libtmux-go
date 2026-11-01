@@ -1399,7 +1399,7 @@ Belongs to the `execute` toolset.
 
 ### `run_shell_command`
 
-Run a shell command in a pane with your user's permissions. Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status.
+Run a shell command in a pane with your user's permissions. Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status. A tmux command run here acts on the session's current window unless you target it, so pass `-t "$TMUX_PANE"` to mean this pane.
 
 Belongs to the `execute` toolset.
 

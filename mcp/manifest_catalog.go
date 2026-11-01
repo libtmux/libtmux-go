@@ -502,7 +502,7 @@ func appendExecuteDefinitions(definitions []toolDefinition) []toolDefinition {
 		}, (*tools).catalogRespawnPane),
 		defineTool(toolDefinition{
 			name: "run_shell_command", title: "Run a shell command",
-			details: "Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status.",
+			details: "Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status. A tmux command run here acts on the session's current window unless you target it, so pass `-t \"$TMUX_PANE\"` to mean this pane.",
 			toolset: toolsetExecute, processReach: processPaneCommand,
 			effects:          effects(effectObserve, effectChange),
 			outputClasses:    outputs(outputTerminalContent, outputTmuxMetadata),
