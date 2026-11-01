@@ -139,8 +139,10 @@ non-control client makes its active pane attended while viewing a zoomed
 window, or every visible pane in that window attended otherwise. Malformed or
 incomplete client rows fail closed. Every configured synchronized cohort member
 is checked; `paste_text` remains target-only, but its target must still be
-unattended. This is protection against racing a human terminal, not an
-operating-system sandbox.
+unattended. Python has no such check. Launching the Go server with
+`LIBTMUX_ALLOW_ATTENDED_INPUT=1` lifts this refusal and none of the others.
+This is protection against racing a human terminal, not an operating-system
+sandbox.
 
 ## Watching a pane
 

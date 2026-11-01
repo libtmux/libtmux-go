@@ -107,7 +107,11 @@ resource come from one native manifest, so each tool carries the same
 capability row the resource reports.
 
 The resource also reports its schema version, frozen surface, effective names,
-connection provenance, and common trust boundary.
+connection provenance, and common trust boundary. `allowAttendedInput` is true
+when the server was launched with
+[`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]
+set to `1`, so a client can see that its input may reach a pane a person is
+watching.
 
 ## Bounded reads and batches
 
@@ -175,6 +179,19 @@ refuse, so [`split_window`][split_window] followed at once by
 **Copy mode is left to the person.** Captures, snapshots, searches, and
 cursors read pane output without taking over the view of someone attached, and
 [`get_pane_info`][get_pane_info] reports when a pane is already in a mode.
+
+**A pane someone is viewing is refused.** Before it sends, pastes, or dispatches
+a command, an input tool lists the tmux clients. A client that is not in control
+mode attends the active pane while its window is zoomed, and every pane of its
+window otherwise. A call that reaches an attended pane is refused before
+anything is sent.
+
+Launching the server with
+[`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]
+set to `1` lifts that refusal and no other: a dead pane, a pane with input
+disabled, a pane in a mode, and a synchronized pane with such a member are
+still refused. The server reads the variable once, at startup. It accepts only
+`1`, and any other value stops startup with a message that names the variable.
 
 ## The pane the server runs in
 
@@ -316,6 +333,7 @@ one.
 [get_pane_info]: https://libtmux.org/en/go/latest/mcp/tools/get_pane_info/
 [get_server_info]: https://libtmux.org/en/go/latest/mcp/tools/get_server_info/
 [list_sessions]: https://libtmux.org/en/go/latest/mcp/tools/list_sessions/
+[mcp-allowattendedinputenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-allowattendedinputenvironmentvariable/
 [mcp-assumeresponsecommit]: https://libtmux.org/en/go/latest/mcp/reference/mcp-assumeresponsecommit/
 [mcp-binaryenvironmentvariable]: https://libtmux.org/en/go/latest/mcp/reference/mcp-binaryenvironmentvariable/
 [mcp-capabilitiesresourceuri]: https://libtmux.org/en/go/latest/mcp/reference/mcp-capabilitiesresourceuri/

@@ -21,6 +21,11 @@
 // policy fails before tmux opens. Tool arguments cannot change the selected
 // socket, and identifiers that look like flags or foreign targets are rejected.
 //
+// The input tools refuse a pane that a tmux client is viewing.
+// LIBTMUX_ALLOW_ATTENDED_INPUT=1 at startup lifts that refusal and no other,
+// and any other value fails startup.
+// See [AllowAttendedInputEnvironmentVariable].
+//
 // # Lifecycle and transport
 //
 // The server requires tmux 3.3a or newer. [NewServer] validates a target

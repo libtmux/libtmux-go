@@ -34,6 +34,10 @@ The four unordered toolsets are `inspect`, `manage`, `execute`, and `teardown`.
 `LIBTMUX_EXCLUDE_TOOLS` removes named tools last. An empty `LIBTMUX_TOOLSETS`
 is the valid zero subset. Unknown names and malformed comma lists fail startup.
 
+The input tools refuse a pane that a tmux client is viewing.
+`LIBTMUX_ALLOW_ATTENDED_INPUT=1` at launch lifts that refusal and no other;
+any other value fails startup.
+
 Every tool carries conservative MCP annotations: `readOnlyHint=false`,
 `destructiveHint=true`, `idempotentHint=false`, and `openWorldHint=true`.
 Those hints do not claim that an unknown tmux configuration is harmless. The
@@ -442,7 +446,8 @@ configured process deliberately; it is not a mode-recovery shortcut.
 in the pane. Its symptom can resemble a busy foreground program, so inspect
 the pane before interrupting it. Input tools fail closed on dead, modal,
 attended, caller-protected, or malformed configured state rather than waiting
-on an input path that cannot safely complete.
+on an input path that cannot safely complete. Only the attended refusal has an
+operator setting, `LIBTMUX_ALLOW_ATTENDED_INPUT=1`.
 
 ## Gotchas
 
@@ -517,9 +522,9 @@ tmux: command failed: kill-session exited 1: can't find session: no-such-session
 
 The startup selectors fail before tmux opens when a tool name or toolset is
 unknown, a nonempty comma list contains an empty token, a socket path or config
-path is relative, or any of the retired `LIBTMUX_SAFETY`,
-`LIBTMUX_MCP_CAPABILITIES`, and `LIBTMUX_MCP_PROMPTS_AS_TOOLS` variables is
-present.
+path is relative, a `LIBTMUX_ALLOW_ATTENDED_INPUT` value is not `1`, or any of
+the retired `LIBTMUX_SAFETY`, `LIBTMUX_MCP_CAPABILITIES`, and
+`LIBTMUX_MCP_PROMPTS_AS_TOOLS` variables is present.
 
 ## Retired MCP surface
 
@@ -1399,7 +1404,7 @@ Belongs to the `execute` toolset.
 
 ### `run_shell_command`
 
-Run a shell command in a pane with your user's permissions. Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status.
+Run a shell command in a pane with your user's permissions. Runs one command you author in a pane that is not synchronized with others, rechecks the pane just before sending, and waits for it to finish, reporting its exit status. A tmux command run here acts on the session's current window unless you target it, so pass `-t "$TMUX_PANE"` to mean this pane.
 
 Belongs to the `execute` toolset.
 

@@ -652,6 +652,80 @@ func TestEmptyNamedToolEnvironmentFailsAtStartup(t *testing.T) {
 	}
 }
 
+func TestInvalidAttendedInputSettingRefusesStartupWithoutEchoingIt(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		value string
+		echo  bool
+	}{
+		{name: "empty", value: ""},
+		{name: "zero", value: "0"},
+		{name: "padded before", value: " 1"},
+		{name: "padded after", value: "1 "},
+		{name: "word", value: "true", echo: true},
+		{name: "other word", value: "secret-token", echo: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setCapabilityEnvironment(t, "inspect", "", "")
+			t.Setenv(AllowAttendedInputEnvironmentVariable, test.value)
+			target := mustInternalTmuxServer(t, tmux.ServerOptions{
+				SocketName: "libtmux-mcp-attended-unused", ConfigFile: "/dev/null",
+			})
+			failures := map[string]error{}
+			_, failures["AdvertisedTools"] = AdvertisedTools(t.Context())
+			instance, newErr := NewServer(target)
+			if instance != nil {
+				_ = instance.Close()
+			}
+			failures["NewServer"] = newErr
+			failures["Run"] = Run(t.Context(), target)
+			for entry, err := range failures {
+				if err == nil || !strings.Contains(err.Error(), AllowAttendedInputEnvironmentVariable) {
+					t.Errorf("%s error = %v, want startup refused naming %s",
+						entry, err, AllowAttendedInputEnvironmentVariable)
+					continue
+				}
+				if test.echo && strings.Contains(err.Error(), test.value) {
+					t.Errorf("%s error %q echoes the value", entry, err)
+				}
+			}
+		})
+	}
+}
+
+func TestCapabilitiesReportWhetherAttendedInputIsAllowed(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		set  bool
+		want bool
+	}{
+		{name: "unset", want: false},
+		{name: "set to 1", set: true, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setCapabilityEnvironment(t, "inspect", "", "")
+			if test.set {
+				t.Setenv(AllowAttendedInputEnvironmentVariable, "1")
+			}
+			instance := mustInternalMCPServer(t, mustInternalTmuxServer(t, tmux.ServerOptions{
+				SocketName: "libtmux-mcp-attended-unused", ConfigFile: "/dev/null",
+			}))
+			session := connectInputTestClient(t.Context(), t, instance, nil)
+			read, err := session.ReadResource(t.Context(), &sdk.ReadResourceParams{URI: testCapabilitiesURI})
+			if err != nil || len(read.Contents) != 1 {
+				t.Fatalf("ReadResource() = (%v, %v)", read, err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(read.Contents[0].Text), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if got, present := payload["allowAttendedInput"]; !present || got != test.want {
+				t.Errorf("allowAttendedInput = (%v, present %t), want %t", got, present, test.want)
+			}
+		})
+	}
+}
+
 func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
 	setCapabilityEnvironment(t, "inspect,manage,execute,teardown", "", "")
 	target, err := tmux.NewServer(tmux.ServerOptions{
@@ -848,6 +922,24 @@ func TestRunShellCommandHasNoRetiredJobHandles(t *testing.T) {
 	}
 }
 
+// A tmux command typed into a pane resolves an untargeted target from the
+// session's current window, not from the pane it ran in.
+func TestRunShellCommandTellsCallersToTargetTmuxCommands(t *testing.T) {
+	setCapabilityEnvironment(t, "execute", "", "")
+	const sentence = "A tmux command run here acts on the session's current window " +
+		"unless you target it, so pass `-t \"$TMUX_PANE\"` to mean this pane."
+	tools, err := AdvertisedTools(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if description := namedTool(t, tools, "run_shell_command").Description; !strings.Contains(description, sentence) {
+		t.Errorf("run_shell_command description omits the targeting sentence: %q", description)
+	}
+	if details, _ := ToolDetails("run_shell_command"); !strings.Contains(details, sentence) {
+		t.Errorf("run_shell_command details omit the targeting sentence: %q", details)
+	}
+}
+
 func TestCapabilityManifestDisclosesConfiguredInputMembership(t *testing.T) {
 	setCapabilityEnvironment(t, "execute", "", "")
 	tools, err := AdvertisedTools(t.Context())
@@ -885,6 +977,7 @@ func setCapabilityEnvironment(t *testing.T, toolsets, included, excluded string)
 	clearEnvironment(t, SafetyEnvironmentVariable)
 	clearEnvironment(t, RecipeToolEnvironmentVariable)
 	clearEnvironment(t, testCapabilitiesEnvironment)
+	clearEnvironment(t, AllowAttendedInputEnvironmentVariable)
 	t.Setenv(testToolsetsEnvironment, toolsets)
 	clearEnvironment(t, testToolsEnvironment)
 	clearEnvironment(t, testExcludeEnvironment)
