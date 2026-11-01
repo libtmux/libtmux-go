@@ -1,13 +1,16 @@
 package integration
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -86,6 +89,136 @@ var publishedModules = map[string]string{
 var readmeInstall = regexp.MustCompile(
 	`(github\.com/libtmux/libtmux-go[a-zA-Z0-9./_-]*)@(v\d[0-9A-Za-z.-]*)`,
 )
+
+// changelogOpening is the sentence a module's changelog opens with. It names
+// the module, so a changelog pasted over another module's fails where it was
+// pasted.
+var changelogOpening = regexp.MustCompile("(?m)^Notable changes to `([^`]+)`\\.$")
+
+// moduleDirective matches the module line of a go.mod.
+var moduleDirective = regexp.MustCompile(`(?m)^module (\S+)\s*$`)
+
+// changelogFailures lists every way the changelogs of the modules in directories
+// fall short of the policy.
+//
+// A module is fetched as its whole directory, so a CHANGELOG.md beside its
+// go.mod reaches every consumer with each tag; a module without one has nothing
+// for a release to carry. Each claim is answerable from the directory:
+//
+//   - the file exists beside go.mod;
+//   - it opens with the module path that go.mod declares; and
+//   - it has an Unreleased section for the next release to land under.
+func changelogFailures(root string, directories []string) []string {
+	var failures []string
+	for _, directory := range directories {
+		manifest, err := os.ReadFile(filepath.Join(root, directory, "go.mod"))
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s/go.mod: %v", directory, err))
+			continue
+		}
+		declared := moduleDirective.FindSubmatch(manifest)
+		if declared == nil {
+			failures = append(failures, directory+"/go.mod: declares no module")
+			continue
+		}
+		module, path := string(declared[1]), filepath.ToSlash(filepath.Join(directory, "CHANGELOG.md"))
+		changelog, err := os.ReadFile(filepath.Join(root, directory, "CHANGELOG.md"))
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %s is published and has no changelog", path, module))
+			continue
+		}
+		switch opening := changelogOpening.FindSubmatch(changelog); {
+		case opening == nil:
+			failures = append(failures, fmt.Sprintf("%s: does not open with \"Notable changes to `%s`.\"", path, module))
+		case string(opening[1]) != module:
+			failures = append(failures, fmt.Sprintf("%s: is the changelog of %s, not %s", path, opening[1], module))
+		}
+		if !strings.Contains("\n"+outsideFences(string(changelog)), "\n## Unreleased\n") {
+			failures = append(failures, path+": has no \"## Unreleased\" section")
+		}
+	}
+	return failures
+}
+
+// TestEveryPublishedModuleKeepsAChangelog holds each module this repository
+// tags to a changelog of its own, so a release of one module does not have to
+// be read out of another's history.
+func TestEveryPublishedModuleKeepsAChangelog(t *testing.T) {
+	t.Parallel()
+
+	for _, failure := range changelogFailures(repositoryRoot(t), slices.Sorted(maps.Values(publishedModules))) {
+		t.Error(failure)
+	}
+}
+
+// TestChangelogFailuresAreFound pins the check above to the ways a changelog
+// goes missing, with one that meets the policy beside them, so a change that
+// stops it looking cannot go unnoticed.
+func TestChangelogFailuresAreFound(t *testing.T) {
+	t.Parallel()
+
+	const (
+		good    = "# Changelog\n\nNotable changes to `example.test/lib`.\n\n## Unreleased\n"
+		openAs  = "# Changelog\n\nNotable changes to `%s`.\n\n"
+		fenced  = "```markdown\n## Unreleased\n```\n"
+		heading = "## Unreleased\n"
+	)
+	for _, test := range []struct {
+		name       string
+		changelog  *string
+		manifest   string // the go.mod text; empty means one that declares example.test/lib
+		noManifest bool
+		want       string
+	}{
+		{name: "a changelog that meets the policy", changelog: new(good)},
+		{name: "no changelog", want: "example.test/lib is published and has no changelog"},
+		{
+			name:      "another module's changelog pasted over this one",
+			changelog: new(fmt.Sprintf(openAs, "example.test/other") + heading),
+			want:      "is the changelog of example.test/other, not example.test/lib",
+		},
+		{name: "no opening sentence", changelog: new("# Changelog\n\n" + heading), want: "does not open with"},
+		{
+			name:      "no Unreleased section",
+			changelog: new(fmt.Sprintf(openAs, "example.test/lib") + "## v0.1.0\n"),
+			want:      "has no \"## Unreleased\" section",
+		},
+		{
+			name:      "an Unreleased heading inside a code fence",
+			changelog: new(fmt.Sprintf(openAs, "example.test/lib") + fenced),
+			want:      "has no \"## Unreleased\" section",
+		},
+		{name: "no go.mod", changelog: new(good), noManifest: true, want: "lib/go.mod:"},
+		{name: "a go.mod that declares no module", changelog: new(good), manifest: "go 1.26\n", want: "declares no module"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, "lib"), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			manifest := cmp.Or(test.manifest, "module example.test/lib\n\ngo 1.26\n")
+			if !test.noManifest {
+				if err := os.WriteFile(filepath.Join(root, "lib", "go.mod"), []byte(manifest), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.changelog != nil {
+				if err := os.WriteFile(filepath.Join(root, "lib", "CHANGELOG.md"), []byte(*test.changelog), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := changelogFailures(root, []string{"lib"})
+			switch {
+			case test.want == "" && len(got) != 0:
+				t.Errorf("changelogFailures = %q, want none", got)
+			case test.want != "" && (len(got) != 1 || !strings.Contains(got[0], test.want)):
+				t.Errorf("changelogFailures = %q, want one containing %q", got, test.want)
+			}
+		})
+	}
+}
 
 // ownRequirement matches a require directive naming a module of this
 // repository, capturing the version a consumer would resolve.
