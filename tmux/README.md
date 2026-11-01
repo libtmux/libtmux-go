@@ -566,10 +566,11 @@ $ libtmux-mcp -doctor
 - **No runtime dependencies.** The module imports only the standard library.
 - **Go 1.26+ and tmux 3.3a or newer.** An older tmux gets
   [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] before the requested
-  operation; a read-only version probe may run first. CI runs
-  tmux 3.3a through 3.8, and [the contract][contract-version] has the details.
+  operation; a read-only version probe may run first. CI runs tmux 3.3a and
+  3.8 on each push, and tmux 3.3a through 3.8 for each release.
+  [The contract][contract-version] has the details.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  across tmux 3.3a through 3.8. macOS is supported on a best-effort
+  against the same releases. macOS is supported on a best-effort
   basis, and CI coverage for it is highly limited.
 - **Unsettled API.** Any release may change exported identifiers. Pin an exact
   version.

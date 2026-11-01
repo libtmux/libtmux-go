@@ -277,8 +277,12 @@ not on the client's `PATH`, fails at startup and says so.
 `LIBTMUX_EXCLUDE_TOOLS` shaped what is offered. `-tools` prints what a client
 receives.
 
-**It sees none of your sessions.** Without `-socket-name` it drives a tmux
-server of its own. `-doctor` names the socket it reaches.
+**It sees none of your sessions.** With no socket flag and neither
+[`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] nor
+[`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable], tmux picks the server: the
+one `TMUX` names, otherwise its default socket, which may not hold your
+sessions. `-doctor` names the socket it reaches and what chose it. Point the
+server at yours with `-socket-name` or `-socket-path`.
 
 **It reaches the wrong tmux.** A client's environment is not your shell's:
 `TMUX_TMPDIR` set in your profile is not set for a server the client started.

@@ -515,8 +515,12 @@ $ libtmux-mcp -doctor -socket-name default
   [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable], or
   [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] shaped the
   listing. `-tools` prints what a client receives.
-- **It sees none of your sessions.** Without `-socket-name` it drives a tmux
-  server of its own. `-doctor` names the socket.
+- **It sees none of your sessions.** With no socket flag and neither
+  [`LIBTMUX_SOCKET_PATH`][mcp-socketpathenvironmentvariable] nor
+  [`LIBTMUX_SOCKET`][mcp-socketenvironmentvariable], tmux picks the server:
+  the one `TMUX` names, otherwise its default socket, which may not hold your
+  sessions. `-doctor` names the socket and what chose it. Point the server at
+  yours with `-socket-name` or `-socket-path`.
 - **It reaches the wrong tmux.** A client's environment is not your shell's,
   so `TMUX_TMPDIR` from your profile may be unset for it.
 - **Sessions you can see are reported as nothing there.** Compare the tmux
