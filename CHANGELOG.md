@@ -18,6 +18,10 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ## Unreleased
 
+## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
+
+No entries for `tmux`.
+
 ### Documentation
 
 - The quickstart owns a unique temporary socket path and cleans it up. Other

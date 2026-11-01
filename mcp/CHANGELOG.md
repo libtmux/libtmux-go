@@ -17,6 +17,8 @@ documentation, CI and release tooling, are in the core changelog.
 
 ## Unreleased
 
+## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
+
 ### mcp
 
 - Add `LIBTMUX_ALLOW_ATTENDED_INPUT`, a launch setting that is off by default.
