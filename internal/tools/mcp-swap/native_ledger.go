@@ -38,8 +38,12 @@ type nativeLedgerEntry struct {
 	OriginalMode uint32             `json:"original_mode"`
 	Route        destinationBinding `json:"route"`
 	Backup       nativeFileIdentity `json:"backup"`
-	Expected     nativeFileIdentity `json:"expected_config"`
-	Spec         nativeStoredSpec   `json:"spec"`
+	// Expected identifies the newest file mcp-swap wrote, built only from a
+	// backup and its own entry change, with nothing the client changed since.
+	// Revert restores the backup whole only while the file is still that one;
+	// otherwise it puts back the layer's entry alone.
+	Expected nativeFileIdentity `json:"expected_config"`
+	Spec     nativeStoredSpec   `json:"spec"`
 }
 
 type nativeFileIdentity struct {
@@ -273,6 +277,10 @@ func (identity nativeFileIdentity) matches(contents []byte, binding destinationB
 func (identity nativeFileIdentity) matchesContent(contents []byte, mode uint32) bool {
 	return identity.Mode == mode && identity.Size == int64(len(contents)) &&
 		identity.SHA256 == digest(contents)
+}
+
+func (spec nativeStoredSpec) process() processSpec {
+	return processSpec{command: spec.Command, args: spec.Args, env: spec.Env}
 }
 
 func storedNativeSpec(spec processSpec) nativeStoredSpec {

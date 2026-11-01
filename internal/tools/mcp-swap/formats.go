@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"maps"
 )
+
+const toolsetsVariable = "LIBTMUX_TOOLSETS"
 
 // TOML and JSONC writers splice only the target server entry so neighboring
 // bytes survive. Plain JSON is decoded and rendered again.
@@ -71,7 +74,7 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 	}
 	for _, name := range []string{"env", "environment"} {
 		if incoming, ok := fresh[name].(map[string]any); ok {
-			if _, replacesSafety := incoming["LIBTMUX_TOOLSETS"]; replacesSafety {
+			if _, replacesSafety := incoming[toolsetsVariable]; replacesSafety {
 				delete(environment, "LIBTMUX_SAFETY")
 			}
 		}
@@ -85,4 +88,24 @@ func mergeWithExisting(existing, fresh map[string]any) map[string]any {
 		}
 	}
 	return merged
+}
+
+// refuseCarriedEmptyToolsets stops a swap from copying an empty
+// LIBTMUX_TOOLSETS out of an entry the swapper did not write: the Go server
+// reads it as no toolsets, and the other server may not have meant that.
+func refuseCarriedEmptyToolsets(existing, requested, written map[string]any) error {
+	if existing == nil || isLocal(existing) {
+		return nil
+	}
+	if _, asked := entryEnvironment(requested)[toolsetsVariable]; asked {
+		return nil
+	}
+	if value, set := entryEnvironment(written)[toolsetsVariable].(string); !set || value != "" {
+		return nil
+	}
+	return fmt.Errorf("the existing %s entry sets %s to the empty string, "+
+		"which the Go server reads as no toolsets; "+
+		"pass --env %s=inspect,manage,execute for the default toolsets "+
+		"or --env %s= to keep it empty",
+		serverName, toolsetsVariable, toolsetsVariable, toolsetsVariable)
 }

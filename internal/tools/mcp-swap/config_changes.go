@@ -482,19 +482,27 @@ func entryFromContents(c client, contents []byte) (map[string]any, bool, error) 
 	case formatJSON:
 		fallthrough
 	default:
-		if err := rejectDuplicateJSONNames(contents); err != nil {
+		decoded, err := decodeJSONConfig(contents)
+		if err != nil {
 			return nil, false, err
-		}
-		var decoded map[string]any
-		if err := json.Unmarshal(contents, &decoded); err != nil {
-			return nil, false, err
-		}
-		if decoded == nil {
-			return nil, false, errors.New("JSON config root is not an object")
 		}
 		entry, found, err := clientServerEntry(decoded, c, false)
 		return validateDecodedEntry(entry, found, err)
 	}
+}
+
+func decodeJSONConfig(contents []byte) (map[string]any, error) {
+	if err := rejectDuplicateJSONNames(contents); err != nil {
+		return nil, err
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return nil, err
+	}
+	if decoded == nil {
+		return nil, errors.New("JSON config root is not an object")
+	}
+	return decoded, nil
 }
 
 func validateDecodedEntry(
@@ -999,15 +1007,9 @@ func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte,
 	case formatJSON:
 		fallthrough
 	default:
-		if err := rejectDuplicateJSONNames(contents); err != nil {
+		decoded, err := decodeJSONConfig(contents)
+		if err != nil {
 			return nil, err
-		}
-		var decoded map[string]any
-		if err := json.Unmarshal(contents, &decoded); err != nil {
-			return nil, err
-		}
-		if decoded == nil {
-			return nil, errors.New("JSON config root is not an object")
 		}
 		servers, err := clientServerContainer(decoded, c, true)
 		if err != nil {
@@ -1024,6 +1026,103 @@ func renderEntryChange(c client, contents []byte, entry map[string]any) ([]byte,
 		}
 		return append(updated, '\n'), nil
 	}
+}
+
+// restoreEntryChange puts the tmux entry of c's layer back to what backup
+// holds, or removes it when backup has none, and keeps every other value in
+// contents. Plain JSON is decoded and rendered again, as renderEntryChange does.
+func restoreEntryChange(c client, contents, backup []byte) ([]byte, error) {
+	previous, hadEntry, err := entryFromContents(c, backup)
+	if err != nil {
+		return nil, fmt.Errorf("read backup entry: %w", err)
+	}
+	var updated []byte
+	switch c.format {
+	case formatTOML:
+		updated, err = restoreTOMLTable(contents, backup, c.key+"."+serverName)
+	case formatJSONC:
+		updated, err = restoreJSONCEntry(c, contents, backup)
+	case formatJSON:
+		fallthrough
+	default:
+		updated, err = restoreJSONEntry(c, contents, backup)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("restore the %s entry: %w", serverName, err)
+	}
+	restored, present, err := entryFromContents(c, updated)
+	if err != nil {
+		return nil, fmt.Errorf("restored configuration: %w", err)
+	}
+	if present != hadEntry {
+		return nil, fmt.Errorf("restored configuration disagrees with the backup about the %s entry", serverName)
+	}
+	if present {
+		want, err := processSpecFromEntry(previous)
+		if err != nil {
+			return nil, err
+		}
+		got, err := processSpecFromEntry(restored)
+		if err != nil {
+			return nil, err
+		}
+		if !got.equal(want) {
+			return nil, fmt.Errorf("restored %s entry differs from the backup", serverName)
+		}
+	}
+	return updated, nil
+}
+
+func restoreJSONEntry(c client, contents, backup []byte) ([]byte, error) {
+	decoded, err := decodeJSONConfig(contents)
+	if err != nil {
+		return nil, err
+	}
+	servers, err := clientServerContainer(decoded, c, false)
+	if err != nil {
+		return nil, err
+	}
+	if servers == nil {
+		return nil, errors.New("the server table is missing")
+	}
+	original, err := decodeJSONConfig(backup)
+	if err != nil {
+		return nil, err
+	}
+	previous, found, err := clientServerEntry(original, c, false)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		servers[serverName] = previous
+	} else {
+		delete(servers, serverName)
+	}
+	updated, err := json.MarshalIndent(decoded, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(updated, '\n'), nil
+}
+
+func restoreJSONCEntry(c client, contents, backup []byte) ([]byte, error) {
+	path, err := clientServerPath(c)
+	if err != nil {
+		return nil, err
+	}
+	path = append(path, serverName)
+	original, err := readJSONC(backup)
+	if err != nil {
+		return nil, err
+	}
+	previous, found, err := clientServerEntry(original, c, false)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return setJSONCMember(contents, path, previous, "  ")
+	}
+	return removeJSONCMember(contents, path)
 }
 
 // writeBesideBackup retains the first pre-swap copy across repeated swaps.

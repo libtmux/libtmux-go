@@ -847,3 +847,160 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(contents)
 }
+
+func TestRemoveJSONCMemberKeepsEveryOtherByte(t *testing.T) {
+	for _, test := range []struct{ name, text, want string }{
+		{
+			"first of several",
+			"{\n  \"a\": {\n    \"tmux\": {\"x\": 1},\n    \"b\": 2\n  }\n}\n",
+			"{\n  \"a\": {\n    \"b\": 2\n  }\n}\n",
+		},
+		{
+			"middle",
+			"{\"a\": {\"b\": 1, \"tmux\": {\"x\": 1}, \"c\": 2}}",
+			"{\"a\": {\"b\": 1, \"c\": 2}}",
+		},
+		{
+			"last of several",
+			"{\"a\": {\"b\": 2,\n    \"tmux\": {\"x\": 1}\n  }}",
+			"{\"a\": {\"b\": 2\n  }}",
+		},
+		{
+			"only member",
+			"{\"a\": {\n    \"tmux\": {\"x\": [1, 2]}\n  }}",
+			"{\"a\": {}}",
+		},
+		{
+			"a trailing comma",
+			"{\"a\": {\"b\": 2, \"tmux\": {},}}",
+			"{\"a\": {\"b\": 2, }}",
+		},
+		{
+			"a comment on the previous member's line",
+			"{\"a\": {\n    \"b\": 1, // about b\n    \"tmux\": {\"x\": 1}\n  }}",
+			"{\"a\": {\n    \"b\": 1 // about b\n  }}",
+		},
+		{
+			"a comment above the last member",
+			"{\"a\": {\n    \"b\": 1,\n    // about tmux\n    \"tmux\": {\"x\": 1}\n  }}",
+			"{\"a\": {\n    \"b\": 1\n    // about tmux\n  }}",
+		},
+		{
+			"a line comment that would swallow the closing brace",
+			"{\"a\": {\"b\": 1, // note\n    \"tmux\": {\"x\": 1}}}",
+			"{\"a\": {\"b\": 1 // note\n}}",
+		},
+		{
+			"two line comments that would swallow the closing brace",
+			"{\"a\": {\"b\": 1, // one\n    // two\n    \"tmux\": {\"x\": 1}}}",
+			"{\"a\": {\"b\": 1 // one\n    // two\n}}",
+		},
+		{
+			"a url in a string is not a line comment",
+			"{\"a\": {\"b\": \"http://x\", \"tmux\": {\"x\": 1}}}",
+			"{\"a\": {\"b\": \"http://x\"}}",
+		},
+		{
+			"comments and strings that look like members",
+			"{\n  // keep\n  \"a\": {\n    // also keep\n    \"tmux\": {\"s\": \"\\\"tmux\\\": 1,\"},\n    \"b\": 2 // and this\n  }\n}\n",
+			"{\n  // keep\n  \"a\": {\n    // also keep\n    \"b\": 2 // and this\n  }\n}\n",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := removeJSONCMember([]byte(test.text), []string{"a", "tmux"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != test.want {
+				t.Errorf("removeJSONCMember = %q, want %q", got, test.want)
+			}
+			if _, err := readJSONC(got); err != nil {
+				t.Errorf("result is not JSONC: %v", err)
+			}
+		})
+	}
+	if got, err := removeJSONCMember([]byte(`{"a": 1, "tmux": {"x": 1}}`), []string{"tmux"}); err != nil ||
+		string(got) != `{"a": 1}` {
+		t.Errorf("removing a member of the root = (%q, %v), want {\"a\": 1}", got, err)
+	}
+	if _, err := removeJSONCMember([]byte(`{"a": {"b": 1}}`), []string{"a", "tmux"}); err == nil {
+		t.Error("removing a member that is not there reported success")
+	}
+	if _, err := removeJSONCMember([]byte(`{"b": {"tmux": {}}}`), []string{"a", "tmux"}); err == nil {
+		t.Error("removing from an object that is not there reported success")
+	}
+}
+
+func TestRestoreTOMLTableUndoesWhatRenderEntryChangeAppended(t *testing.T) {
+	target := client{name: "codex", key: "mcp_servers", format: formatTOML}
+	for name, original := range map[string]string{
+		"final newline":      "[mcp_servers.keep]\ncommand = \"keep\"\n",
+		"no final newline":   "[mcp_servers.keep]\ncommand = \"keep\"",
+		"blank lines at end": "[mcp_servers.keep]\ncommand = \"keep\"\n\n\n",
+		"empty file":         "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			swapped, err := renderEntryChange(target, []byte(original), devEntry())
+			if err != nil {
+				t.Fatal(err)
+			}
+			restored, err := restoreTOMLTable(swapped, []byte(original), "mcp_servers.tmux")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(restored) != original {
+				t.Errorf("restored = %q, want %q", restored, original)
+			}
+		})
+	}
+}
+
+func TestRestoreTOMLTableReplacesAndRemovesInPlace(t *testing.T) {
+	table := "mcp_servers.tmux"
+	current := "# top\n[mcp_servers.tmux]\ncommand = \"new\"\n\n[mcp_servers.tmux.env]\nA = \"1\"\n\n[other]\nkeep = true\n"
+	backup := "[mcp_servers.tmux]\ncommand = \"old\"\nargs = [\"a\"]\n"
+	got, err := restoreTOMLTable([]byte(current), []byte(backup), table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# top\n[mcp_servers.tmux]\ncommand = \"old\"\nargs = [\"a\"]\n[other]\nkeep = true\n"
+	if string(got) != want {
+		t.Errorf("replaced = %q, want %q", got, want)
+	}
+	got, err = restoreTOMLTable([]byte(current), []byte("[other]\nkeep = true\n"), table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "# top\n[other]\nkeep = true\n"; string(got) != want {
+		t.Errorf("removed = %q, want %q", got, want)
+	}
+	got, err = restoreTOMLTable(
+		[]byte("[mcp_servers.tmux]\ncommand = \"new\"\n[other]\nx = 1\n"),
+		[]byte("[mcp_servers.tmux]\ncommand = \"old\""), table,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "[mcp_servers.tmux]\ncommand = \"old\"\n[other]\nx = 1\n"; string(got) != want {
+		t.Errorf("a replacement without a final newline = %q, want %q", got, want)
+	}
+	if _, err := restoreTOMLTable([]byte("[other]\n"), []byte(backup), table); err == nil {
+		t.Error("restoring a table that is not there reported success")
+	}
+}
+
+func TestRestoreEntryChangeRefusesWhatItCannotReproduce(t *testing.T) {
+	target := client{name: "codex", key: "mcp_servers", format: formatTOML}
+	live := "[mcp_servers.tmux]\ncommand = \"new\"\n"
+	for name, backup := range map[string]string{
+		"a header it cannot find": "[mcp_servers.\"tmux\"]\ncommand = \"old\"\n",
+		"a table split by another": "[mcp_servers.tmux]\ncommand = \"old\"\n\n[other]\nx = 1\n\n" +
+			"[mcp_servers.tmux.env]\nA = \"1\"\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := restoreEntryChange(target, []byte(live), []byte(backup)); err == nil {
+				t.Fatal("restoreEntryChange reported success with an entry the backup does not hold")
+			}
+		})
+	}
+}

@@ -252,6 +252,105 @@ func setJSONCMember(text []byte, path []string, value any, indent string) ([]byt
 	return out.Bytes(), nil
 }
 
+// removeJSONCMember deletes the member at path with the comma that joined it
+// to a neighbour, preserving every other byte.
+func removeJSONCMember(text []byte, path []string) ([]byte, error) {
+	blanked := blankComments(text)
+	object, ok := jsoncObjectAt(blanked, path[:len(path)-1])
+	if !ok {
+		return nil, fmt.Errorf("no %q object to remove from", strings.Join(path[:len(path)-1], "."))
+	}
+	key := path[len(path)-1]
+	previousComma := -1
+	cursor := skipSpace(blanked, object+1)
+	for cursor < len(blanked) && blanked[cursor] == '"' {
+		nameEnd := endOfString(blanked, cursor)
+		colon := skipSpace(blanked, nameEnd)
+		if colon >= len(blanked) || blanked[colon] != ':' {
+			break
+		}
+		valueEnd := endOfValue(blanked, skipSpace(blanked, colon+1))
+		after := skipSpace(blanked, valueEnd)
+		comma := -1
+		if after < len(blanked) && blanked[after] == ',' {
+			comma = after
+		}
+		if string(blanked[cursor+1:nameEnd-1]) == key {
+			return cutJSONCMember(text, object, cursor, valueEnd, comma, previousComma), nil
+		}
+		if comma < 0 {
+			break
+		}
+		previousComma = comma
+		cursor = skipSpace(blanked, comma+1)
+	}
+	return nil, fmt.Errorf("no %q member to remove", strings.Join(path, "."))
+}
+
+// cutJSONCMember removes the member between keyStart and valueEnd. A member
+// with a comma after it takes that comma and the space behind it; the last
+// one takes the comma before it and the space ahead of it, leaving any
+// comment between; an only member leaves the object empty.
+func cutJSONCMember(text []byte, object, keyStart, valueEnd, comma, previousComma int) []byte {
+	switch {
+	case comma >= 0:
+		return append(append([]byte{}, text[:keyStart]...), text[skipSpace(text, comma+1):]...)
+	case previousComma >= 0:
+		from := keyStart
+		for from > previousComma+1 && strings.IndexByte(" \t\r\n", text[from-1]) >= 0 {
+			from--
+		}
+		kept := append(append([]byte{}, text[:previousComma]...), text[previousComma+1:from]...)
+		if endsInLineComment(kept) && !startsWithNewline(text[valueEnd:]) {
+			kept = append(kept, '\n')
+		}
+		return append(kept, text[valueEnd:]...)
+	}
+	closing := skipSpace(text, valueEnd)
+	if closing < len(text) && text[closing] == '}' && len(bytes.TrimSpace(text[object+1:keyStart])) == 0 {
+		return append(append([]byte{}, text[:object+1]...), text[closing:]...)
+	}
+	return append(append([]byte{}, text[:keyStart]...), text[valueEnd:]...)
+}
+
+// endsInLineComment reports whether text ends inside a // comment.
+func endsInLineComment(text []byte) bool {
+	blanked := blankComments(text)
+	line := bytes.LastIndexByte(text, '\n') + 1
+	for index := line; index+1 < len(text); index++ {
+		if text[index] == '/' && text[index+1] == '/' && blanked[index] == ' ' {
+			return true
+		}
+	}
+	return false
+}
+
+func startsWithNewline(text []byte) bool {
+	text = bytes.TrimLeft(text, " \t")
+	return len(text) != 0 && (text[0] == '\n' || text[0] == '\r')
+}
+
+// jsoncObjectAt reports the offset of the object a path of keys names; an
+// empty path names the root.
+func jsoncObjectAt(blanked []byte, path []string) (int, bool) {
+	offset := skipSpace(blanked, 0)
+	if offset >= len(blanked) || blanked[offset] != '{' {
+		return 0, false
+	}
+	if len(path) == 0 {
+		return offset, true
+	}
+	span, ok := findJSONCMember(blanked, path)
+	if !ok || !span.present {
+		return 0, false
+	}
+	offset = skipSpace(blanked, span.valueStart)
+	if offset >= len(blanked) || blanked[offset] != '{' {
+		return 0, false
+	}
+	return offset, true
+}
+
 func endOfValueAfterMember(blanked []byte, offset int) int {
 	cursor := skipSpace(blanked, offset)
 	if cursor >= len(blanked) || blanked[cursor] != '"' {
