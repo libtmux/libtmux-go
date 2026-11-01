@@ -242,6 +242,9 @@ func planNativeUse(
 		if err != nil {
 			return nil, fmt.Errorf("%s: rendered server entry: %w", target.name, err)
 		}
+		if err := refuseCarriedEmptyToolsets(before, configured, finalEntry); err != nil {
+			return nil, fmt.Errorf("%s: %w", target.name, err)
+		}
 		key := nativeStateKey(target.name, target.scope)
 		existing, exists := ledger.Entries[key]
 		sequence := next

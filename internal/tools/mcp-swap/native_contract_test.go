@@ -1281,3 +1281,195 @@ func TestNativeRevertSaysWhenItPutsBackOnlyTheEntry(t *testing.T) {
 		t.Errorf("dry run of an entry-only revert said %q", output)
 	}
 }
+
+// A foreign server's empty LIBTMUX_TOOLSETS means something else there. The Go
+// server reads a set, empty value as no toolsets, so carrying it over leaves a
+// client with only the tools LIBTMUX_TOOLS names.
+
+func foreignEntryWithEmptyToolsets(t *testing.T, target client) {
+	t.Helper()
+	foreign := map[string]any{
+		"command": "npx", "args": []any{"-y", "libtmux-mcp-ts"},
+		"env": map[string]any{"LIBTMUX_TOOLSETS": "", "LIBTMUX_TOOLS": "run_shell_command"},
+	}
+	base := "{\"" + target.key + "\": {}}\n"
+	if target.format == formatTOML {
+		base = ""
+	}
+	contents, err := renderEntryChange(target, []byte(base), foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(target.path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target.path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func installedPlan(t *testing.T, repository string, environment map[string]string) (entryPlan, *bool) {
+	t.Helper()
+	entry, err := buildEntry(options{mode: modeInstalled, environment: environment}, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisioned := false
+	return entryPlan{
+		configured: entry, cleanup: func() {},
+		install: func() error { provisioned = true; return nil },
+	}, &provisioned
+}
+
+func swappedEnvironment(t *testing.T, target client) map[string]string {
+	t.Helper()
+	entry, present, err := entryOf(target)
+	if err != nil || !present {
+		t.Fatalf("%s entry: present %t, err %v", target.name, present, err)
+	}
+	spec, err := processSpecFromEntry(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return spec.env
+}
+
+func TestNativeUseRefusesACarriedEmptyToolsetsBeforeWritingAnything(t *testing.T) {
+	for _, name := range []string{"claude", "codex", "opencode"} {
+		for _, dryRun := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s dry-run %t", name, dryRun), func(t *testing.T) {
+				rig := newNativeRig(t)
+				target := rig.client(t, name, scopeUser)
+				foreignEntryWithEmptyToolsets(t, target)
+				before := readFile(t, target.path)
+				plan, provisioned := installedPlan(t, rig.repository, nil)
+				err := nativeUse([]client{target}, []client{target}, plan,
+					options{scope: scopeUser, noPreflight: true, dryRun: dryRun}, rig.repository)
+				if err == nil {
+					t.Fatal("use carried an empty LIBTMUX_TOOLSETS into the entry it wrote")
+				}
+				message := err.Error()
+				if !strings.Contains(message, "LIBTMUX_TOOLSETS") ||
+					!strings.Contains(message, "--env LIBTMUX_TOOLSETS=inspect,manage,execute") ||
+					strings.Count(message, "--env LIBTMUX_TOOLSETS=") != 2 {
+					t.Errorf("refusal does not name the variable and both ways forward: %s", message)
+				}
+				if strings.Contains(message, "run_shell_command") {
+					t.Error("refusal printed an environment value")
+				}
+				if readFile(t, target.path) != before {
+					t.Error("a refused swap changed the configuration")
+				}
+				if !dryRun && *provisioned {
+					t.Error("a refused swap provisioned the server first")
+				}
+				if _, err := os.Stat(nativeStatePath()); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("a refused swap created recovery state: %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestNativeUseKeepsAnEmptyToolsetsTheUserAskedFor(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeUser)
+	foreignEntryWithEmptyToolsets(t, target)
+	plan, _ := installedPlan(t, rig.repository, map[string]string{"LIBTMUX_TOOLSETS": ""})
+	if err := nativeUse([]client{target}, []client{target}, plan,
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatalf("use refused an empty LIBTMUX_TOOLSETS that --env asked for: %v", err)
+	}
+	environment := swappedEnvironment(t, target)
+	if value, set := environment["LIBTMUX_TOOLSETS"]; !set || value != "" {
+		t.Errorf("LIBTMUX_TOOLSETS set %t, empty %t, want set and empty", set, value == "")
+	}
+	if environment["LIBTMUX_TOOLS"] != "run_shell_command" {
+		t.Error("use dropped LIBTMUX_TOOLS")
+	}
+
+	again, _ := installedPlan(t, rig.repository, nil)
+	if err := nativeUse([]client{target}, []client{target}, again,
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatalf("use asked again about a value an earlier swap already kept: %v", err)
+	}
+	if value, set := swappedEnvironment(t, target)["LIBTMUX_TOOLSETS"]; !set || value != "" {
+		t.Errorf("a later swap changed LIBTMUX_TOOLSETS: set %t, empty %t", set, value == "")
+	}
+}
+
+func TestNativeUseTakesTheToolsetsTheUserNames(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeUser)
+	foreignEntryWithEmptyToolsets(t, target)
+	plan, _ := installedPlan(t, rig.repository,
+		map[string]string{"LIBTMUX_TOOLSETS": "inspect,manage,execute"})
+	if err := nativeUse([]client{target}, []client{target}, plan,
+		options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+		t.Fatal(err)
+	}
+	if swappedEnvironment(t, target)["LIBTMUX_TOOLSETS"] != "inspect,manage,execute" {
+		t.Error("--env did not replace the carried empty LIBTMUX_TOOLSETS")
+	}
+}
+
+func TestNativeUseCarriesToolsetsThatAreNotEmpty(t *testing.T) {
+	for name, test := range map[string]struct {
+		environment map[string]any
+		toolsets    string
+		set         bool
+	}{
+		"named":  {map[string]any{"LIBTMUX_TOOLSETS": "inspect"}, "inspect", true},
+		"unset":  {map[string]any{"LIBTMUX_TOOLS": "run_shell_command"}, "", false},
+		"no env": {nil, "", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig := newNativeRig(t)
+			target := rig.client(t, "claude", scopeUser)
+			entry := map[string]any{"command": "npx"}
+			if test.environment != nil {
+				entry["env"] = test.environment
+			}
+			contents, err := renderEntryChange(target, []byte("{}\n"), entry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target.path, contents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			plan, _ := installedPlan(t, rig.repository, nil)
+			if err := nativeUse([]client{target}, []client{target}, plan,
+				options{scope: scopeUser, noPreflight: true}, rig.repository); err != nil {
+				t.Fatalf("use refused an entry whose LIBTMUX_TOOLSETS is not empty: %v", err)
+			}
+			got, set := swappedEnvironment(t, target)["LIBTMUX_TOOLSETS"]
+			if set != test.set || got != test.toolsets {
+				t.Errorf("LIBTMUX_TOOLSETS set %t, matches %t; want set %t, matches %t",
+					set, got == test.toolsets, test.set, true)
+			}
+		})
+	}
+}
+
+func TestExecuteNamesTheWayForwardForACarriedEmptyToolsets(t *testing.T) {
+	rig := newNativeRig(t)
+	target := rig.client(t, "claude", scopeUser)
+	foreignEntryWithEmptyToolsets(t, target)
+	arguments := []string{
+		"use", "--scope", "user", "--client", "claude", "--mode", "installed", "--no-preflight",
+	}
+	var stdout, stderr bytes.Buffer
+	if status := execute(arguments, &stdout, &stderr); status != 1 ||
+		!strings.Contains(stderr.String(), "--env LIBTMUX_TOOLSETS=inspect,manage,execute") {
+		t.Fatalf("use exited %d without naming the way forward", status)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	keep := append(slices.Clone(arguments), "--env", "LIBTMUX_TOOLSETS=")
+	if status := execute(keep, &stdout, &stderr); status != 0 {
+		t.Fatalf("use --env LIBTMUX_TOOLSETS= exited %d", status)
+	}
+	if value, set := swappedEnvironment(t, target)["LIBTMUX_TOOLSETS"]; !set || value != "" {
+		t.Errorf("LIBTMUX_TOOLSETS set %t, empty %t, want set and empty", set, value == "")
+	}
+}

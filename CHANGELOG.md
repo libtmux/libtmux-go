@@ -46,6 +46,10 @@ Modules are tagged per directory, so each carries its own version: the core as
   entry, or removes it when the file had none, and keeps the client's changes
   and the file's mode. A file still as the swapper left it is restored whole.
   (#111)
+- `mcp-swap use` now refuses to copy an empty `LIBTMUX_TOOLSETS` out of an
+  entry it did not write, which the Go server reads as no toolsets. The error
+  names `--env LIBTMUX_TOOLSETS=inspect,manage,execute` for the default
+  toolsets and `--env LIBTMUX_TOOLSETS=` to keep the empty value. (#112)
 
 ## v0.1.1, workspace/v0.1.1, mcp/v0.1.1
 

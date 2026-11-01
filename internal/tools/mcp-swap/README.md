@@ -169,6 +169,26 @@ then replaces the retired setting while leaving unrelated environment values
 alone. Without that explicit migration, normal preflight lets the current MCP
 server reject the retired setting instead of silently widening authority.
 
+The Go server reads a set, empty `LIBTMUX_TOOLSETS` as no toolsets, while
+another server may use the same empty value for something else. `use` stops
+before writing when it would copy an empty `LIBTMUX_TOOLSETS` out of an entry
+it did not write, because the client would be left with only the tools
+`LIBTMUX_TOOLS` names. Take the default toolsets:
+
+```console
+$ go run ./internal/tools/mcp-swap use \
+    --env LIBTMUX_TOOLSETS=inspect,manage,execute
+```
+
+Or keep the empty value on purpose:
+
+```console
+$ go run ./internal/tools/mcp-swap use \
+    --env LIBTMUX_TOOLSETS=
+```
+
+An entry the swapper wrote earlier keeps its value without asking again.
+
 ## Server sources
 
 The existing `--mode` interface remains available:

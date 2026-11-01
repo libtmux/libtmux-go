@@ -79,6 +79,14 @@ func TestParseArgumentsReadsCommandsAndFlagsInAnyOrder(t *testing.T) {
 			},
 		},
 		{
+			"an empty environment value",
+			[]string{"use", "--env", "LIBTMUX_TOOLSETS="},
+			options{
+				command: "use-local", mode: modeDev,
+				environment: map[string]string{"LIBTMUX_TOOLSETS": ""},
+			},
+		},
+		{
 			"the attended input setting",
 			[]string{"use", "--env", "LIBTMUX_ALLOW_ATTENDED_INPUT=1"},
 			options{
