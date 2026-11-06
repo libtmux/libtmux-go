@@ -25,7 +25,7 @@ func (p *Plan) SetOption(target Ref, request SetPlanOptionRequest) {
 	p.add(Op{
 		name:      "set-option",
 		target:    target,
-		untargets: request.Global && target == Ref{},
+		untargets: request.Global && target.addressesServer(),
 		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return setOptionArguments(resolved, request)
 		}),
@@ -99,7 +99,7 @@ func (p *Plan) SetHook(target Ref, name, command string, global bool) {
 	p.add(Op{
 		name:      "set-hook",
 		target:    target,
-		untargets: global && target == Ref{},
+		untargets: global && target.addressesServer(),
 		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if name == "" {
 				return nil, invalidServerCommandRequest(

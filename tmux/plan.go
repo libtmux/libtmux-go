@@ -31,9 +31,8 @@ func (e *PlanError) Error() string {
 // Unwrap makes PlanError compatible with ErrPlan.
 func (e *PlanError) Unwrap() error { return ErrPlan }
 
-// Ref addresses an existing object or one an earlier [Plan] step will create.
-// This permits forward construction without tmux I/O. The zero Ref addresses
-// nothing and makes a targeted operation fail validation.
+// Ref addresses an existing object, the tmux server, or an object an earlier
+// [Plan] step will create. This permits forward construction without tmux I/O.
 //
 // A Ref to an existing object, such as [Window.Ref] or [PaneRef], is reusable
 // in any number of plans. A Ref a plan method returns for a step is bound to
@@ -48,6 +47,11 @@ func (e *PlanError) Unwrap() error { return ErrPlan }
 // is not followed, so build the plan from fresh records. A record that cannot
 // name its placement still yields a Ref; an operation that needs the placement
 // then refuses with a [PlanError] instead of falling back to the bare ID.
+//
+// [ServerRef] addresses the server for the operations that document a server
+// scope. The zero Ref is kept as a second spelling of it for those same
+// operations, such as [Plan.Cmd] and [Plan.SetEnvironment]; any operation that
+// needs an object refuses both with a [PlanError].
 type Ref struct {
 	// target is a concrete tmux target for an object that already exists.
 	target string
@@ -58,6 +62,8 @@ type Ref struct {
 	// operation that needs the placement refuses with it rather than address
 	// the object by id, which would act on a different link or object.
 	placementProblem string
+	// scope says whether the Ref addresses the server rather than an object.
+	scope refScope
 	// step is the one-based index of the step that creates the object, and is
 	// zero when target names one that already exists. It is one-based so that
 	// the zero Ref is not silently a reference to the first step.
@@ -109,6 +115,23 @@ func refFor(target string, daemon *snapshotServerIdentity) Ref {
 	return ref
 }
 
+// refScope says what kind of thing a [Ref] without a step addresses.
+type refScope uint8
+
+const (
+	// refServer addresses the tmux server itself. The zero scope addresses the
+	// object target names, or nothing when it is empty.
+	refServer refScope = iota + 1
+)
+
+// ServerRef returns a [Ref] addressing the tmux server, for the operations that
+// document a server scope, such as [Plan.SetEnvironment] and [Plan.Cmd].
+func ServerRef() Ref { return Ref{scope: refServer} }
+
+// addressesServer reports whether the Ref names the server, by [ServerRef] or
+// as the zero Ref.
+func (r Ref) addressesServer() bool { return r == Ref{} || r.scope == refServer }
+
 // SessionRef returns a selector-relative [Ref] addressing a session by ID, for
 // a caller holding an identifier rather than a materialized record.
 func SessionRef(id SessionID) Ref { return Ref{target: id.String()} }
@@ -124,6 +147,9 @@ func PaneRef(id PaneID) Ref { return Ref{target: id.String()} }
 // String returns the target a Ref resolves to, or a placeholder naming the step
 // that will produce it.
 func (r Ref) String() string {
+	if r.scope == refServer {
+		return "{server}"
+	}
 	if r.step == 0 {
 		if r.target == "" {
 			return "{no target}"
@@ -930,7 +956,7 @@ func rawOp(target Ref, captures bool, args []string) Op {
 		name:      name,
 		target:    target,
 		captures:  captures,
-		untargets: target == Ref{},
+		untargets: target.addressesServer(),
 		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if len(arguments) == 0 {
 				return nil, ErrMissingSubcommand

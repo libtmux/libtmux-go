@@ -116,11 +116,12 @@ func (p *Plan) DetachClients(target Ref) {
 }
 
 // SetEnvironment records a variable set in the session target names, or in the
-// server when target is the zero [Ref].
+// server's global environment when target is [ServerRef] or the zero [Ref].
 func (p *Plan) SetEnvironment(target Ref, name, value string) {
 	p.add(Op{
-		name:   "set-environment",
-		target: target,
+		name:      "set-environment",
+		target:    target,
+		untargets: target.addressesServer(),
 		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
@@ -128,20 +129,28 @@ func (p *Plan) SetEnvironment(target Ref, name, value string) {
 			if err := validateEnvironmentValue(value); err != nil {
 				return nil, err
 			}
+			if resolved == "" {
+				return untargetedArguments("set-environment", "-g", "--", name, value)
+			}
 			return targetedArguments("set-environment", resolved, "--", name, value)
 		}),
 	})
 }
 
 // UnsetEnvironment records a variable removed from the session target names, or
-// from the server when target is the zero [Ref].
+// from the server's global environment when target is [ServerRef] or the zero
+// [Ref].
 func (p *Plan) UnsetEnvironment(target Ref, name string) {
 	p.add(Op{
-		name:   "set-environment",
-		target: target,
+		name:      "set-environment",
+		target:    target,
+		untargets: target.addressesServer(),
 		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
+			}
+			if resolved == "" {
+				return untargetedArguments("set-environment", "-g", "-u", "--", name)
 			}
 			return targetedArguments("set-environment", resolved, "-u", "--", name)
 		}),
