@@ -270,6 +270,39 @@ The filter is a tmux format, written the way the FORMATS section of the tmux
 manual describes, and tmux evaluates it while it lists. [`tmuxq/`](tmuxq/) has
 the filters that run in Go and the helpers that apply them.
 
+### [`Session.Refresh`][tmux-session-refresh]: read a held record again
+
+A [`Session`][tmux-session], [`Window`][tmux-window] or [`Pane`][tmux-pane] you
+hold is what tmux said when it was read, and a change to tmux does not reach
+it. Python libtmux's `.refresh()` updates the object in place; here `Refresh`
+asks tmux again and returns a replacement, and the record you called it on
+stays as it was. [`Window.Refresh`][tmux-window-refresh] and
+[`Pane.Refresh`][tmux-pane-refresh] work the same way:
+
+<!-- docs:refresh -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+// session was renamed above, so it still says "old". Refresh asks tmux
+// again and returns a replacement; session itself does not change.
+fresh, err := session.Refresh(ctx)
+if err != nil {
+	return fmt.Errorf("refresh session: %w", err)
+}
+name, _ := fresh.Name()
+fmt.Println("refreshed record:", name)
+```
+
+<!-- docs:end -->
+
+[`examples/object-model`](examples/object-model) renames a session first, so
+the held record still has the old name when `Refresh` returns the new one:
+
+<!-- docs:checked examples/object-model/output.txt -->
+It prints `held record: old`, then `returned record: new`, then
+`refreshed record: new`.
+<!-- docs:end -->
+
 ## Type into a pane and wait
 
 ### [`Pane.WaitForText`][tmux-pane-waitfortext]: wait for text on every release
@@ -874,6 +907,7 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-pane-openobservation]: https://libtmux.org/en/go/latest/reference/tmux-pane-openobservation/
 [tmux-pane-waitfortext]: https://libtmux.org/en/go/latest/reference/tmux-pane-waitfortext/
 [tmux-pane-writer]: https://libtmux.org/en/go/latest/reference/tmux-pane-writer/
+[tmux-pane-refresh]: https://libtmux.org/en/go/latest/reference/tmux-pane-refresh/
 [tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
 [tmux-paneendederror]: https://libtmux.org/en/go/latest/reference/tmux-paneendederror/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
@@ -891,9 +925,11 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-serveroptions]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions/
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
 [tmux-session-opennotifications]: https://libtmux.org/en/go/latest/reference/tmux-session-opennotifications/
+[tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
 [tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
 [tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
+[tmux-window-refresh]: https://libtmux.org/en/go/latest/reference/tmux-window-refresh/
 [tmux-window]: https://libtmux.org/en/go/latest/reference/tmux-window/
 [tmux]: https://github.com/tmux/tmux
 [tmuxq-first]: https://libtmux.org/en/go/latest/reference/tmuxq-first/

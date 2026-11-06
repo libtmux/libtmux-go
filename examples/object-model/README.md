@@ -16,6 +16,7 @@ It prints:
 ```text
 held record: old
 returned record: new
+refreshed record: new
 the record holds no windows
 tmux reports windows: 1
 session $999: not found
@@ -77,6 +78,15 @@ func run(ctx context.Context) (err error) {
 	current, _ := renamed.Name()
 	fmt.Println("held record:", held)
 	fmt.Println("returned record:", current)
+
+	// session was renamed above, so it still says "old". Refresh asks tmux
+	// again and returns a replacement; session itself does not change.
+	fresh, err := session.Refresh(ctx)
+	if err != nil {
+		return fmt.Errorf("refresh session: %w", err)
+	}
+	name, _ := fresh.Name()
+	fmt.Println("refreshed record:", name)
 
 	// Windows reads the record and takes no context. A session that came
 	// from a call about the session carries no windows, and says so.
