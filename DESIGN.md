@@ -438,9 +438,14 @@ degradation into a silent one. The switch keeps the behavior available and
 makes choosing it deliberate.
 
 A `Plan` applies the policy of the server it runs on, so a recorded step
-refuses exactly what the same request refuses when issued directly.
-`Plan.Preview` renders without a server and so refuses, which is what a preview
-that exists to catch what tmux would reject is for.
+refuses exactly what the same request refuses when issued directly. `Plan.Run`
+applies it to every step before it dispatches the first, rendering a step that
+targets a not-yet-created object against a placeholder, so a plan does not
+refuse after it has changed tmux. Under degrade each warning reaches the handler
+once, when its step is rendered to be sent. `Plan.Preview` renders without a
+server and so refuses, which is what a preview that exists to catch what tmux
+would reject is for; it checks the deferred-target steps the same way and leaves
+only their arguments out.
 
 `ServerOptions.WarningHandler` receives concrete warning values. The default
 handler is silent. A configured `log/slog` logger may receive structured
@@ -801,12 +806,14 @@ independent of the binding: the same plan means the same thing over a tmux
 process and over a control connection, and the switch matrix asserts that on
 every supported tmux rather than claiming it.
 
-Identity is a `Ref`, addressing either an object that exists or the one a
-recorded step will create. A step's ref carries its one-based index, so the
-zero `Ref` is not silently a reference to the first step, and a plan holding
-one is refused rather than guessed at. This is what lets a build be written in
-one pass: a split is recorded and keys sent to its pane before tmux has been
-asked for anything.
+Identity is a `Ref`, addressing an object that exists or the one a recorded step
+will create. A step's ref carries its one-based index, so the zero `Ref` is not
+silently a reference to the first step, and a plan holding one is refused rather
+than guessed at. Every operation describes its tmux command and warnings once,
+and the immediate method and the plan apply the unsupported-capability policy to
+that description in one place. This is what lets a build be written in one pass:
+a split is recorded and keys sent to its pane before tmux has been asked for
+anything.
 
 Batching is a `Planner`, and planners are values rather than names in a
 registry, so selecting one is a compiler-checked expression and a caller can
@@ -816,8 +823,9 @@ results are identical through both; only the invocation count differs.
 
 `Plan.Preview` renders without a server, and separates the two reasons an
 operation cannot render there. A step naming an object an earlier step has yet
-to create is nil, because that ID does not exist until the plan runs. Everything
-else is an error naming the step: a plan is not atomic, so an argument tmux
+to create is nil, because that ID does not exist until the plan runs, though it
+is still checked against a placeholder. Everything else is an error naming the
+step: a plan is not atomic, so an argument tmux
 would refuse at the last step is refused after every step before it has changed
 something, and a preview reporting both the same way would hide the one that is
 a defect.

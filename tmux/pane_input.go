@@ -154,11 +154,12 @@ func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	if err != nil {
 		return err
 	}
-	arguments, warnings, err := sendKeysArguments(target, request, current)
+	command, err := sendKeysCommand(target, request, current)
 	if err != nil {
 		return err
 	}
-	if err := p.server.reportUnsupported(warnings); err != nil {
+	arguments, err := command.apply(p.server.policy())
+	if err != nil {
 		return err
 	}
 	result, err := p.server.literalCmd(ctx, arguments...)
@@ -186,6 +187,27 @@ func sendKeysRequiresVersion(request SendKeysRequest) bool {
 // [Plan] step.
 func sendKeysNeedsEnter(request SendKeysRequest) bool {
 	return request.CopyModeCommand == nil && request.Command != nil && !request.SkipEnter
+}
+
+// sendKeysCommand describes a send-keys for [Pane.SendKeys] and [Plan.SendKeys]
+// alike, so both apply one policy to the same warnings.
+func sendKeysCommand(
+	target string,
+	request SendKeysRequest,
+	version Version,
+) (renderedCommand, error) {
+	arguments, warnings, err := sendKeysArguments(target, request, version)
+	return renderedCommand{arguments: arguments, warnings: warnings}, err
+}
+
+// clearHistoryCommand is the clear-history counterpart of [sendKeysCommand].
+func clearHistoryCommand(
+	target string,
+	request ClearHistoryRequest,
+	version Version,
+) (renderedCommand, error) {
+	arguments, warnings, err := clearHistoryArguments(target, request, version)
+	return renderedCommand{arguments: arguments, warnings: warnings}, err
 }
 
 // sendKeysArguments renders without I/O and returns compatibility warnings.
@@ -416,11 +438,12 @@ func (p Pane) ClearHistory(ctx context.Context, request ClearHistoryRequest) err
 	if err != nil {
 		return err
 	}
-	arguments, warnings, err := clearHistoryArguments(target, request, current)
+	command, err := clearHistoryCommand(target, request, current)
 	if err != nil {
 		return err
 	}
-	if err := p.server.reportUnsupported(warnings); err != nil {
+	arguments, err := command.apply(p.server.policy())
+	if err != nil {
 		return err
 	}
 	result, err := p.server.literalCmd(ctx, arguments...)

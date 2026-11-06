@@ -189,6 +189,8 @@
 // [Plan] records commands and groups those whose results tmux can still
 // attribute safely. A [Ref] can target an object that an earlier plan step will
 // create. [Plan.Preview] performs no I/O, and [Plan.Explain] reports grouping.
+// [Plan.Run] checks every step, including the unsupported-feature policy,
+// before it sends the first.
 //
 // Plans are not transactions. tmux stops a command list at its first failure,
 // after earlier commands may have changed state. Commands that print caller-used

@@ -130,6 +130,9 @@ func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 	}
 }
 
+// Run checks every step before it sends the first, so a request this package
+// refuses stops the plan with nothing created.
+//
 //libtmux:real-tmux
 func TestPlanKeepsAnUnsentRenderFailureSkipped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -144,12 +147,11 @@ func TestPlanKeepsAnUnsentRenderFailureSkipped(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run() accepted an invalid forward-referenced request")
 	}
-	if result.Ops[0].Status != tmux.OpComplete {
-		t.Errorf("creation status = %v, want complete", result.Ops[0].Status)
-	}
-	if result.Ops[1].Status != tmux.OpSkipped || result.Ops[1].Err != nil {
-		t.Errorf("unsent rename = (%v, %v), want skipped without an operation error",
-			result.Ops[1].Status, result.Ops[1].Err)
+	for index, op := range result.Ops {
+		if op.Status != tmux.OpSkipped || op.Err != nil {
+			t.Errorf("step %d = (%v, %v), want skipped without an operation error",
+				index, op.Status, op.Err)
+		}
 	}
 }
 

@@ -9,9 +9,9 @@ func (p *Plan) StartServer() {
 	p.add(Op{
 		name:      "start-server",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("start-server")
-		},
+		}),
 	})
 }
 
@@ -24,9 +24,9 @@ func (p *Plan) SetOption(target Ref, request SetPlanOptionRequest) {
 		name:      "set-option",
 		target:    target,
 		untargets: request.Global && target == Ref{},
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return setOptionArguments(resolved, request)
-		},
+		}),
 	})
 }
 
@@ -98,7 +98,7 @@ func (p *Plan) SetHook(target Ref, name, command string, global bool) {
 		name:      "set-hook",
 		target:    target,
 		untargets: global && target == Ref{},
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if name == "" {
 				return nil, invalidServerCommandRequest(
 					"set-hook", "Name", "", "must not be empty")
@@ -111,7 +111,7 @@ func (p *Plan) SetHook(target Ref, name, command string, global bool) {
 				arguments = append(arguments, "-t", resolved)
 			}
 			return append(arguments, "--", name, command), nil
-		},
+		}),
 	})
 }
 
@@ -120,12 +120,12 @@ func (p *Plan) SetBuffer(name, data string) {
 	p.add(Op{
 		name:      "set-buffer",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			if name == "" {
 				return untargetedArguments("set-buffer", "--", data)
 			}
 			return untargetedArguments("set-buffer", "-b", name, "--", data)
-		},
+		}),
 	})
 }
 
@@ -135,12 +135,12 @@ func (p *Plan) DeleteBuffer(name string) {
 	p.add(Op{
 		name:      "delete-buffer",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			if name == "" {
 				return untargetedArguments("delete-buffer")
 			}
 			return untargetedArguments("delete-buffer", "-b", name)
-		},
+		}),
 	})
 }
 
@@ -150,9 +150,9 @@ func (p *Plan) DetachClient(client ClientName) {
 	p.add(Op{
 		name:      "detach-client",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("detach-client", "-t", client.String())
-		},
+		}),
 	})
 }
 
@@ -161,9 +161,9 @@ func (p *Plan) SuspendClient(client ClientName) {
 	p.add(Op{
 		name:      "suspend-client",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("suspend-client", "-t", client.String())
-		},
+		}),
 	})
 }
 
@@ -172,9 +172,9 @@ func (p *Plan) RefreshClient(client ClientName) {
 	p.add(Op{
 		name:      "refresh-client",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("refresh-client", "-t", client.String())
-		},
+		}),
 	})
 }
 
@@ -184,9 +184,9 @@ func (p *Plan) SwitchClient(target Ref, client ClientName) {
 	p.add(Op{
 		name:   "switch-client",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("switch-client", resolved, "-c", client.String())
-		},
+		}),
 	})
 }
 
@@ -195,8 +195,8 @@ func (p *Plan) LockServer() {
 	p.add(Op{
 		name:      "lock-server",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("lock-server")
-		},
+		}),
 	})
 }

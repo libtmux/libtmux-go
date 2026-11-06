@@ -96,7 +96,9 @@ type Op struct {
 	// source is a command's optional -s object.
 	source Ref
 	// build renders without I/O from resolved targets and the run-local context.
-	build func(target, source string, render planRenderContext) ([]string, error)
+	// It describes the command and its warnings; [Plan.render] applies the run's
+	// unsupported-feature policy to them, so no builder applies or skips it.
+	build func(target, source string, render planRenderContext) (renderedCommand, error)
 	// creates means stdout contains an ID for later Refs.
 	creates   bool
 	captures  bool
@@ -104,6 +106,34 @@ type Op struct {
 	// needsVersion requests the otherwise-avoided version probe.
 	needsVersion bool
 	layout       *SelectLayoutRequest
+}
+
+// renderedCommand is one tmux command's description: the argument vector and
+// the compatibility warnings its renderer produced. The immediate methods and
+// the [Plan] operations share it, and apply is the only way either turns it
+// into arguments to send.
+type renderedCommand struct {
+	arguments []string
+	warnings  []Warning
+}
+
+// apply returns the arguments after applying policy to the warnings: it refuses
+// under [FailUnsupported], and reports to the handler under [DegradeUnsupported].
+func (c renderedCommand) apply(policy planRenderContext) ([]string, error) {
+	if err := policy.reportUnsupported(c.warnings); err != nil {
+		return nil, err
+	}
+	return c.arguments, nil
+}
+
+// plainBuild adapts a renderer that has no compatibility warnings.
+func plainBuild(
+	build func(target, source string, render planRenderContext) ([]string, error),
+) func(string, string, planRenderContext) (renderedCommand, error) {
+	return func(target, source string, render planRenderContext) (renderedCommand, error) {
+		arguments, err := build(target, source, render)
+		return renderedCommand{arguments: arguments}, err
+	}
 }
 
 // Chainable reports whether the operation may share a tmux invocation with
@@ -205,12 +235,15 @@ func (p *Plan) render(
 		}
 		source = resolved
 	}
-	argv, err := op.build(target, source, render)
+	command, err := op.build(target, source, render)
+	if err == nil {
+		command.arguments, err = command.apply(render)
+	}
 	if err != nil {
 		// Add the step here while preserving the request builder's typed error.
 		return nil, fmt.Errorf("step %d: %s: %w", index, op.name, err)
 	}
-	return argv, nil
+	return command.arguments, nil
 }
 
 func targetedArguments(command, target string, rest ...string) ([]string, error) {
@@ -340,14 +373,21 @@ func (p *Plan) ExplainWith(planner Planner) []Dispatch {
 // anything, for the tmux version given.
 //
 // An entry is nil when it references an object an earlier step has not created.
+// Such an operation is still rendered against a placeholder target and checked,
+// so a request tmux of that version would refuse, or an unsupported flag under
+// the default fail policy, is an error here too; only its arguments are left
+// out, because they depend on an ID that does not exist yet.
 //
-// Other render failures return the entries completed before the error. Preview
+// Render failures return the entries completed before the error. Preview
 // catches them before a non-atomic run can partially mutate tmux.
 func (p *Plan) Preview(version Version) ([][]string, error) {
 	render := planRenderContext{version: version, layoutVersion: version}
 	rendered := make([][]string, len(p.ops))
 	for index := range p.ops {
 		if p.awaitsEarlierStep(index) {
+			if _, err := p.render(index, p.placeholders(), render); err != nil {
+				return rendered, err
+			}
 			continue
 		}
 		argv, err := p.render(index, nil, render)
@@ -357,6 +397,34 @@ func (p *Plan) Preview(version Version) ([][]string, error) {
 		rendered[index] = argv
 	}
 	return rendered, nil
+}
+
+// placeholders names every step's would-be object, so an operation that targets
+// a step can be rendered and checked before the step has run. The names are
+// never sent.
+func (p *Plan) placeholders() map[int]string {
+	created := make(map[int]string, len(p.ops))
+	for index := range p.ops {
+		created[index] = "{step " + strconv.Itoa(index) + "}"
+	}
+	return created
+}
+
+// checkBeforeDispatch renders every operation once, against placeholder targets
+// for the steps that create them, with the run's unsupported policy but no
+// warning handler. Everything this package can refuse before tmux has run is
+// refused here, so a plan never fails after it has already changed tmux; each
+// warning then reaches the handler once, when its operation is rendered to be
+// sent.
+func (p *Plan) checkBeforeDispatch(render planRenderContext) error {
+	render.warningHandler = nil
+	created := p.placeholders()
+	for index := range p.ops {
+		if _, err := p.render(index, created, render); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (p *Plan) awaitsEarlierStep(index int) bool {
@@ -504,6 +572,10 @@ func (p *Plan) RunWith(
 
 	dispatches := planner.Plan(p.Ops())
 	if err := p.checkGrouping(dispatches); err != nil {
+		return PlanResult{Ops: results}, err
+	}
+
+	if err := p.checkBeforeDispatch(render); err != nil {
 		return PlanResult{Ops: results}, err
 	}
 
@@ -752,7 +824,7 @@ func rawOp(target Ref, captures bool, args []string) Op {
 		target:    target,
 		captures:  captures,
 		untargets: target == Ref{},
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if len(arguments) == 0 {
 				return nil, ErrMissingSubcommand
 			}
@@ -760,6 +832,6 @@ func rawOp(target Ref, captures bool, args []string) Op {
 				return untargetedArguments(arguments[0], arguments[1:]...)
 			}
 			return targetedArguments(arguments[0], resolved, arguments[1:]...)
-		},
+		}),
 	}
 }
