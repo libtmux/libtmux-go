@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -86,5 +87,29 @@ func TestPlanPolicyPassReportsEachWarningOnce(t *testing.T) {
 	}
 	if len(warnings) != 1 {
 		t.Fatalf("warnings = %#v, want exactly one", warnings)
+	}
+}
+
+// A Plan returned or copied by value keeps its own step refs, while another
+// plan's refs stay refused. The owner is a token the copy shares.
+func TestPlanCopyKeepsItsOwnStepRefs(t *testing.T) {
+	t.Parallel()
+
+	original := NewPlan()
+	created := original.NewSession(NewSessionRequest{})
+	original.RenameSession(created, "ok")
+	copied := *original
+	if _, err := copied.Preview(mustParseVersion(t, "3.6")); err != nil {
+		t.Fatalf("copy Preview() error = %v, want its own refs accepted", err)
+	}
+
+	other := NewPlan()
+	other.RenameSession(created, "foreign")
+	_, err := other.Preview(mustParseVersion(t, "3.6"))
+	if _, ok := errors.AsType[*PlanError](err); !ok {
+		t.Fatalf("other plan Preview() error = %v, want PlanError", err)
+	}
+	if !strings.Contains(err.Error(), "another plan") {
+		t.Fatalf("error = %v, want it to name another plan", err)
 	}
 }

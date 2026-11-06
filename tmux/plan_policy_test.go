@@ -212,3 +212,87 @@ func TestPlanSplitPaneStillAppliesPolicy(t *testing.T) {
 		t.Fatalf("Run() error = %v, want VersionTooLowError", err)
 	}
 }
+
+func TestPlanRefusesDeferredRefFromAnotherPlanBeforeDispatch(t *testing.T) {
+	t.Parallel()
+
+	first := NewPlan()
+	foreign := first.NewSession(NewSessionRequest{})
+	second := NewPlan()
+	second.NewSession(NewSessionRequest{})
+	second.RenameSession(foreign, "renamed")
+
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{Stdout: []string{"$99"}}},
+		{result: tmuxcmd.Result{}},
+	}}
+	result, err := second.Run(context.Background(), serverWithRunner(runner))
+	var planErr *PlanError
+	if !errors.As(err, &planErr) || planErr.Step != 1 {
+		t.Fatalf("Run() error = %v, want PlanError at step 1", err)
+	}
+	if got := runner.recordedRequests(); len(got) != 0 {
+		t.Fatalf("dispatched %d requests, want none", len(got))
+	}
+	if result.OK() {
+		t.Fatalf("Run() result = %#v, want nothing complete", result)
+	}
+	if _, err := second.Preview(mustParseVersion(t, "3.6")); !errors.As(err, &planErr) {
+		t.Fatalf("Preview() error = %v, want PlanError", err)
+	}
+}
+
+func TestPlanKeepsMaterializedRefsReusableAcrossPlans(t *testing.T) {
+	t.Parallel()
+
+	window := Window{sessionID: "$2", windowID: "@7", windowIndex: 3}
+	ref := window.Ref()
+	for range 2 {
+		plan := NewPlan()
+		plan.SplitPane(ref, SplitPaneRequest{})
+		plan.KillWindow(ref)
+		if _, err := plan.Preview(mustParseVersion(t, "3.6")); err != nil {
+			t.Fatalf("Preview() error = %v", err)
+		}
+	}
+	own := NewPlan()
+	created := own.NewSession(NewSessionRequest{})
+	own.RenameSession(created, "ok")
+	if _, err := own.Preview(mustParseVersion(t, "3.6")); err != nil {
+		t.Fatalf("Preview() own deferred ref error = %v", err)
+	}
+}
+
+// A deferred Ref belongs to the plan that returned it, through a token the Plan
+// carries, so a plan returned by value (q := *p) keeps accepting its own refs
+// while a different plan still refuses them (TestPlanCopyKeepsItsOwnStepRefs
+// and the foreign-ref test above). A zero-value Plan owns the refs it hands
+// out.
+func TestPlanDeferredRefBelongsToTheValueThatCreatedIt(t *testing.T) {
+	t.Parallel()
+
+	original := NewPlan()
+	created := original.NewSession(NewSessionRequest{})
+	original.RenameSession(created, "ok")
+	copied := *original
+	runner := &versionQueueRunner{}
+	server := serverWithOptionsAndRunner(ServerOptions{}, runner)
+	if _, err := copied.Preview(mustParseVersion(t, "3.6")); err != nil {
+		t.Fatalf("copy Preview() error = %v, want its own refs accepted", err)
+	}
+	foreign := NewPlan()
+	foreign.RenameSession(created, "foreign")
+	if _, err := foreign.Run(context.Background(), server); err == nil {
+		t.Fatal("foreign Run() error = nil, want the ref refused")
+	}
+	if len(runner.recordedRequests()) != 0 {
+		t.Fatalf("foreign plan dispatched %v, want nothing before the refusal", runner.recordedRequests())
+	}
+
+	var zero Plan
+	own := zero.NewSession(NewSessionRequest{})
+	zero.RenameSession(own, "ok")
+	if _, err := zero.Preview(mustParseVersion(t, "3.6")); err != nil {
+		t.Fatalf("zero-value Plan Preview() error = %v, want its own refs accepted", err)
+	}
+}
