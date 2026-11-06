@@ -348,11 +348,12 @@ func splitPane(
 		}
 		version = probed
 	}
-	arguments, warnings, err := splitPaneArguments(target, request, version)
+	command, err := splitPaneCommand(target, request, version)
 	if err != nil {
 		return Pane{}, err
 	}
-	if err := server.reportUnsupported(warnings); err != nil {
+	arguments, err := command.apply(server.policy())
+	if err != nil {
 		return Pane{}, err
 	}
 	result, err := server.literalCmd(ctx, arguments...)
@@ -365,6 +366,17 @@ func splitPane(
 // it costs a tmux process of its own the first time.
 func splitPaneRequiresVersion(request SplitPaneRequest) bool {
 	return request.Empty || splitPaneStylingRequested(request)
+}
+
+// splitPaneCommand describes a split for [splitPane] and [Plan.SplitPane]
+// alike, so both apply one policy to the same warnings.
+func splitPaneCommand(
+	target string,
+	request SplitPaneRequest,
+	version Version,
+) (renderedCommand, error) {
+	arguments, warnings, err := splitPaneArguments(target, request, version)
+	return renderedCommand{arguments: arguments, warnings: warnings}, err
 }
 
 // splitPaneArguments renders a split's argument vector and the warnings that
