@@ -110,8 +110,10 @@ type CapturePaneRequest struct {
 }
 
 // Capture captures printed content from the receiver's exact linked pane.
-// It returns a caller-owned slice. A completed nonzero exit or stderr becomes
-// a [CommandError]; any stdout tmux still printed is returned alongside it.
+// It returns a caller-owned slice. Completed stderr becomes a [CommandError];
+// any stdout tmux still printed is returned alongside it. A nonzero exit with
+// empty stderr is not an error, as for every command (see the package
+// documentation), and its stdout is returned.
 //
 // This is a point-in-time capture rather than a stream; the zero request reads
 // the visible screen. It may include a shell's echo of [Pane.SendKeys] input.
@@ -144,8 +146,8 @@ func (p Pane) CaptureBytes(
 
 // CaptureToBuffer captures content from the receiver's exact linked pane
 // into the nonempty named tmux buffer. The buffer is owned by tmux and no
-// printed output is returned. A completed nonzero exit or stderr becomes a
-// [CommandError].
+// printed output is returned. Completed stderr becomes a [CommandError]; a
+// nonzero exit with empty stderr is not an error.
 //
 // Invalid requests fail before execution. Transport and context errors are
 // delivery-ambiguous: the buffer may already have changed.
@@ -379,8 +381,9 @@ func (p Pane) captureArguments(
 // following it; the zero request reads the visible screen and version-gated
 // fields follow [UnsupportedPolicy].
 //
-// A completed nonzero exit becomes a redacted command error, because CaptureTo
-// returns no bytes for the caller to inspect. Cancellation does not prove
+// Completed stderr becomes a redacted command error, because CaptureTo
+// returns no bytes for the caller to inspect; a nonzero exit with empty stderr
+// is not an error, as for every command. Cancellation does not prove
 // destination received the complete screen, and a copy failure takes
 // precedence over a completed command's exit status because it means
 // destination never saw everything tmux sent. Printed captures always use a

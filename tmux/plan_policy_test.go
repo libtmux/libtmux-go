@@ -309,6 +309,23 @@ func TestPlanEnvironmentAtServerScope(t *testing.T) {
 	}
 }
 
+func TestPaneEnterIgnoresSilentNonzeroExit(t *testing.T) {
+	t.Parallel()
+
+	runner := &versionQueueRunner{responses: []versionResponse{
+		{result: tmuxcmd.Result{ExitCode: 1}},
+		{result: tmuxcmd.Result{ExitCode: 1, Stderr: []string{"boom"}}},
+	}}
+	pane := paneWithExactTestTarget(serverWithRunner(runner))
+	if err := pane.Enter(context.Background()); err != nil {
+		t.Fatalf("Enter() with exit 1 and empty stderr = %v, want nil", err)
+	}
+	var commandErr *CommandError
+	if err := pane.Enter(context.Background()); !errors.As(err, &commandErr) {
+		t.Fatalf("Enter() with stderr = %v, want CommandError", err)
+	}
+}
+
 func TestPlanServerRefIsRefusedWhereAnObjectIsNeeded(t *testing.T) {
 	t.Parallel()
 
