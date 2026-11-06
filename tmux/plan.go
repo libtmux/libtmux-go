@@ -34,6 +34,14 @@ func (e *PlanError) Unwrap() error { return ErrPlan }
 // Ref addresses an existing object or one an earlier [Plan] step will create.
 // This permits forward construction without tmux I/O. The zero Ref addresses
 // nothing and makes a targeted operation fail validation.
+//
+// A Ref to an existing object, such as [Window.Ref] or [PaneRef], is reusable
+// in any number of plans. A Ref a plan method returns for a step is bound to
+// the plan that returned it: a different plan refuses it before it sends
+// anything. The binding is a token the Plan carries, so a copy of a Plan
+// (a plan returned by value) keeps recognizing its own refs. Do not record
+// steps on both a plan and its copy, though: they would number the same steps
+// differently.
 type Ref struct {
 	// target is a concrete tmux target for an object that already exists.
 	target string
@@ -41,6 +49,9 @@ type Ref struct {
 	// zero when target names one that already exists. It is one-based so that
 	// the zero Ref is not silently a reference to the first step.
 	step int
+	// owner identifies the plan whose step the Ref names, and is nil when step is
+	// zero. A copy of a Plan shares it.
+	owner *planOwner
 	// daemon is present only on refs derived from materialized records. Raw ID
 	// constructors remain selector-relative.
 	daemon *snapshotServerIdentity
@@ -153,10 +164,20 @@ func (o Op) chainable() bool { return !o.captures && !o.creates }
 // [Plan.Explain] says how it would be grouped, both without a server;
 // [Plan.Run] is the only method that reaches tmux.
 //
-// A Plan is not safe for concurrent use.
+// A Plan is not safe for concurrent use. A copy made by assignment shares the
+// owner token its Refs carry, so it accepts them; do not record steps on both,
+// since each would number its steps from the same count. [Plan.Ops] returns a
+// read-only view, not a way to rebuild a plan, so it carries no owner.
 type Plan struct {
 	ops []Op
+	// owner is the token the step Refs this plan returns carry. It is allocated
+	// with the first operation and shared by copies.
+	owner *planOwner
 }
+
+// planOwner is the identity of a plan's step refs. It holds a byte so that
+// distinct tokens have distinct addresses.
+type planOwner struct{ _ byte }
 
 // planRenderContext freezes the inputs that may change how an operation is
 // rendered. Passing it by value keeps one run's policy out of the recorded plan.
@@ -186,8 +207,28 @@ func (p *Plan) Len() int { return len(p.ops) }
 func (p *Plan) Ops() []Op { return slices.Clone(p.ops) }
 
 func (p *Plan) add(op Op) Ref {
+	if p.owner == nil {
+		p.owner = &planOwner{}
+	}
 	p.ops = append(p.ops, op)
-	return Ref{step: len(p.ops)}
+	return Ref{step: len(p.ops), owner: p.owner}
+}
+
+// checkRefs refuses a deferred Ref that another plan returned, before anything
+// is rendered or sent: its step index would otherwise resolve against this
+// plan's own steps.
+func (p *Plan) checkRefs() error {
+	for index, op := range p.ops {
+		for _, ref := range []Ref{op.target, op.source} {
+			if ref.step != 0 && ref.owner != p.owner {
+				return &PlanError{
+					Step:   index,
+					Reason: "references a step recorded by another plan",
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (p *Plan) resolve(ref Ref, created map[int]string, step int) (string, error) {
@@ -196,6 +237,12 @@ func (p *Plan) resolve(ref Ref, created map[int]string, step int) (string, error
 			return "", &PlanError{Step: step, Reason: "operation has no target"}
 		}
 		return ref.target, nil
+	}
+	if ref.owner != p.owner {
+		return "", &PlanError{
+			Step:   step,
+			Reason: "references a step recorded by another plan",
+		}
 	}
 	target, ok := created[ref.step-1]
 	if !ok {
@@ -381,6 +428,9 @@ func (p *Plan) ExplainWith(planner Planner) []Dispatch {
 // Render failures return the entries completed before the error. Preview
 // catches them before a non-atomic run can partially mutate tmux.
 func (p *Plan) Preview(version Version) ([][]string, error) {
+	if err := p.checkRefs(); err != nil {
+		return nil, err
+	}
 	render := planRenderContext{version: version, layoutVersion: version}
 	rendered := make([][]string, len(p.ops))
 	for index := range p.ops {
@@ -542,6 +592,9 @@ func (p *Plan) RunWith(
 	}
 	if len(p.ops) == 0 {
 		return PlanResult{Ops: results}, nil
+	}
+	if err := p.checkRefs(); err != nil {
+		return PlanResult{Ops: results}, err
 	}
 	expected, err := p.expectedDaemon()
 	if err != nil {

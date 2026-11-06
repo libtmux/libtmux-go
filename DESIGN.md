@@ -807,13 +807,14 @@ process and over a control connection, and the switch matrix asserts that on
 every supported tmux rather than claiming it.
 
 Identity is a `Ref`, addressing an object that exists or the one a recorded step
-will create. A step's ref carries its one-based index, so the zero `Ref` is not
-silently a reference to the first step, and a plan holding one is refused rather
-than guessed at. Every operation describes its tmux command and warnings once,
-and the immediate method and the plan apply the unsupported-capability policy to
-that description in one place. This is what lets a build be written in one pass:
-a split is recorded and keys sent to its pane before tmux has been asked for
-anything.
+will create. A step's ref carries its one-based index and the token of the plan
+that recorded it, which a copy of the plan shares, so the zero `Ref` is not
+silently a reference to the first step and another plan's ref is refused before
+anything is sent, while a ref to an existing object works in any plan. Every
+operation describes its tmux command and warnings once, and the immediate method
+and the plan apply the unsupported-capability policy to that description in one
+place. This is what lets a build be written in one pass: a split is recorded and
+keys sent to its pane before tmux has been asked for anything.
 
 Batching is a `Planner`, and planners are values rather than names in a
 registry, so selecting one is a compiler-checked expression and a caller can
