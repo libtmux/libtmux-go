@@ -18,7 +18,9 @@ func (p *Plan) StartServer() {
 // SetOption records a tmux option written on the object target names, or on the
 // server when target is the zero [Ref] and Global is set.
 //
-// It takes the option's tmux name because typed accessors read values back.
+// It takes the option's tmux name because typed accessors read values back. A
+// window is named by its ID, as [Window.SetOption] does without format
+// expansion, which a plan cannot request.
 func (p *Plan) SetOption(target Ref, request SetPlanOptionRequest) {
 	p.add(Op{
 		name:      "set-option",

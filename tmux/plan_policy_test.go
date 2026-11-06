@@ -263,6 +263,119 @@ func TestPlanKeepsMaterializedRefsReusableAcrossPlans(t *testing.T) {
 	}
 }
 
+func TestPlanUnlinkWindowNamesTheLinkedView(t *testing.T) {
+	t.Parallel()
+
+	linkedTwice := Window{
+		formats: formatValues{values: map[string]string{
+			"session_name": "work", "window_linked_sessions_list": "other,work,work",
+		}},
+		sessionID: "$2", windowID: "@7", windowIndex: 3,
+	}
+	plan := NewPlan()
+	plan.UnlinkWindow(linkedTwice.Ref(), UnlinkWindowRequest{KillIfLast: true})
+	argv, err := plan.Preview(mustParseVersion(t, "3.6"))
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+	want := []string{"unlink-window", "-k", "-t", "$2:3"}
+	if !slices.Equal(argv[0], want) {
+		t.Fatalf("Preview() = %v, want %v", argv[0], want)
+	}
+}
+
+func TestPlanPlacementOperationsNameTheLinkedView(t *testing.T) {
+	t.Parallel()
+
+	twice := Window{
+		formats: formatValues{values: map[string]string{
+			"session_name": "work", "window_linked_sessions_list": "work,work",
+		}},
+		sessionID: "$2", windowID: "@7", windowIndex: 3,
+	}
+	plan := NewPlan()
+	plan.LinkWindow(SessionRef("$4"), twice.Ref(), LinkWindowRequest{})
+	plan.MoveWindow(SessionRef("$4"), twice.Ref(), MoveWindowRequest{})
+	plan.SwapWindow(twice.Ref(), twice.Ref(), false)
+	plan.KillWindow(twice.Ref())
+	argv, err := plan.Preview(mustParseVersion(t, "3.6"))
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+	for index, want := range []string{"$2:3", "$2:3", "$2:3", "@7"} {
+		if !slices.Contains(argv[index], want) {
+			t.Errorf("step %d argv = %v, want it to name %s", index, argv[index], want)
+		}
+	}
+}
+
+// A plan operation addresses a linked window the way the matching Window
+// method does: by the exact winlink where the method uses one, and by the
+// window id where the method does (Window.Kill removes every link).
+func TestPlanWindowOperationsMatchTheirMethodsTargets(t *testing.T) {
+	t.Parallel()
+
+	twice := Window{
+		formats: formatValues{values: map[string]string{
+			"session_name": "work", "window_linked_sessions_list": "work,work",
+		}},
+		sessionID: "$2", windowID: "@7", windowIndex: 3,
+	}
+	once := Window{
+		formats: formatValues{values: map[string]string{
+			"session_name": "work", "window_linked_sessions_list": "work",
+		}},
+		sessionID: "$2", windowID: "@7", windowIndex: 3,
+	}
+	layout := SelectLayoutRequest{Layout: "tiled"}
+	cases := []struct {
+		name string
+		want string
+		plan func(*Plan, Ref)
+	}{
+		{"KillWindow", "@7", func(p *Plan, ref Ref) { p.KillWindow(ref) }},
+		{"KillOtherWindows", "$2:3", func(p *Plan, ref Ref) { p.KillOtherWindows(ref) }},
+		{"RenameWindow", "$2:3", func(p *Plan, ref Ref) { p.RenameWindow(ref, "n") }},
+		{"SelectWindow", "$2:3", func(p *Plan, ref Ref) { p.SelectWindow(ref) }},
+		{"SelectLayout", "$2:3", func(p *Plan, ref Ref) { p.SelectLayout(ref, layout) }},
+		{"NextLayout", "$2:3", func(p *Plan, ref Ref) { p.NextLayout(ref) }},
+		{"PreviousLayout", "$2:3", func(p *Plan, ref Ref) { p.PreviousLayout(ref) }},
+		{"ResizeWindow", "$2:3", func(p *Plan, ref Ref) {
+			p.ResizeWindow(ref, ResizeWindowRequest{Width: 80})
+		}},
+		{"RotateWindow", "$2:3", func(p *Plan, ref Ref) { p.RotateWindow(ref, RotateWindowRequest{}) }},
+		{"RespawnWindow", "$2:3", func(p *Plan, ref Ref) { p.RespawnWindow(ref, RespawnRequest{}) }},
+		{"LastPane", "$2:3", func(p *Plan, ref Ref) { p.LastPane(ref) }},
+		{"NewWindow", "$2:3", func(p *Plan, ref Ref) { p.NewWindow(ref, NewWindowRequest{}) }},
+		{"SplitPane", "$2:3", func(p *Plan, ref Ref) { p.SplitPane(ref, SplitPaneRequest{}) }},
+		{"DisplayMessage", "$2:3", func(p *Plan, ref Ref) { p.DisplayMessage(ref, "x") }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := NewPlan()
+			test.plan(plan, twice.Ref())
+			argv, err := plan.Preview(mustParseVersion(t, "3.6"))
+			if err != nil {
+				t.Fatalf("Preview() error = %v", err)
+			}
+			if !slices.Contains(argv[0], test.want) {
+				t.Errorf("linked twice: argv = %v, want it to name %s", argv[0], test.want)
+			}
+			single := NewPlan()
+			test.plan(single, once.Ref())
+			argv, err = single.Preview(mustParseVersion(t, "3.6"))
+			if err != nil {
+				t.Fatalf("Preview() error = %v", err)
+			}
+			if !slices.Contains(argv[0], "@7") {
+				t.Errorf("linked once: argv = %v, want the window id", argv[0])
+			}
+		})
+	}
+}
+
 // A deferred Ref belongs to the plan that returned it, through a token the Plan
 // carries, so a plan returned by value (q := *p) keeps accepting its own refs
 // while a different plan still refuses them (TestPlanCopyKeepsItsOwnStepRefs
