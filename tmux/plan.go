@@ -42,9 +42,22 @@ func (e *PlanError) Unwrap() error { return ErrPlan }
 // (a plan returned by value) keeps recognizing its own refs. Do not record
 // steps on both a plan and its copy, though: they would number the same steps
 // differently.
+//
+// A Ref from [Window.Ref] or [Pane.Ref] names the winlink or linked pane the
+// record viewed when Ref was called. A later renumbering or move of that window
+// is not followed, so build the plan from fresh records. A record that cannot
+// name its placement still yields a Ref; an operation that needs the placement
+// then refuses with a [PlanError] instead of falling back to the bare ID.
 type Ref struct {
 	// target is a concrete tmux target for an object that already exists.
 	target string
+	// placement is the exact winlink target of a [Window] record, which
+	// operations that address one linked view use in place of target.
+	placement string
+	// placementProblem is why a record could not name its placement. An
+	// operation that needs the placement refuses with it rather than address
+	// the object by id, which would act on a different link or object.
+	placementProblem string
 	// step is the one-based index of the step that creates the object, and is
 	// zero when target names one that already exists. It is one-based so that
 	// the zero Ref is not silently a reference to the first step.
@@ -60,11 +73,32 @@ type Ref struct {
 // Ref returns a [Ref] addressing the receiver.
 func (s Session) Ref() Ref { return refFor(s.sessionID.String(), s.server.daemon) }
 
-// Ref returns a [Ref] addressing the receiver.
-func (w Window) Ref() Ref { return refFor(w.windowID.String(), w.server.daemon) }
+// Ref returns a [Ref] addressing the receiver. The ref also carries the exact
+// winlink the record views, as of this call, which operations that address one linked view, such
+// as [Plan.UnlinkWindow], use.
+func (w Window) Ref() Ref {
+	ref := refFor(w.windowID.String(), w.server.daemon)
+	if placement, err := exactWindowTarget(w); err == nil {
+		ref.placement = placement
+	} else {
+		ref.placementProblem = err.Error()
+	}
+	return ref
+}
 
-// Ref returns a [Ref] addressing the receiver.
-func (p Pane) Ref() Ref { return refFor(p.paneID.String(), p.server.daemon) }
+// Ref returns a [Ref] addressing the receiver. The ref also carries the exact
+// pane target the record views, which the pane operations use as the matching
+// [Pane] methods do, so a pane in a window linked more than once is the one
+// meant.
+func (p Pane) Ref() Ref {
+	ref := refFor(p.paneID.String(), p.server.daemon)
+	if placement, err := exactPaneTarget(p); err == nil {
+		ref.placement = placement
+	} else {
+		ref.placementProblem = err.Error()
+	}
+	return ref
+}
 
 func refFor(target string, daemon *snapshotServerIdentity) Ref {
 	ref := Ref{target: target}
@@ -110,6 +144,10 @@ type Op struct {
 	// It describes the command and its warnings; [Plan.render] applies the run's
 	// unsupported-feature policy to them, so no builder applies or skips it.
 	build func(target, source string, render planRenderContext) (renderedCommand, error)
+	// placementTarget and placementSource ask for the exact winlink of a
+	// [Window.Ref] rather than its window ID.
+	placementTarget bool
+	placementSource bool
 	// creates means stdout contains an ID for later Refs.
 	creates   bool
 	captures  bool
@@ -231,10 +269,26 @@ func (p *Plan) checkRefs() error {
 	return nil
 }
 
-func (p *Plan) resolve(ref Ref, created map[int]string, step int) (string, error) {
+func (p *Plan) resolve(
+	ref Ref,
+	placement bool,
+	created map[int]string,
+	step int,
+) (string, error) {
 	if ref.step == 0 {
 		if ref.target == "" {
 			return "", &PlanError{Step: step, Reason: "operation has no target"}
+		}
+		if placement && ref.placementProblem != "" {
+			return "", &PlanError{
+				Step: step,
+				Reason: fmt.Sprintf(
+					"%s names no exact placement: %s", ref.target, ref.placementProblem,
+				),
+			}
+		}
+		if placement && ref.placement != "" {
+			return ref.placement, nil
 		}
 		return ref.target, nil
 	}
@@ -268,7 +322,7 @@ func (p *Plan) render(
 	}
 	target := ""
 	if !op.untargets {
-		resolved, err := p.resolve(op.target, created, index)
+		resolved, err := p.resolve(op.target, op.placementTarget, created, index)
 		if err != nil {
 			return nil, err
 		}
@@ -276,7 +330,7 @@ func (p *Plan) render(
 	}
 	source := ""
 	if op.source != (Ref{}) {
-		resolved, err := p.resolve(op.source, created, index)
+		resolved, err := p.resolve(op.source, op.placementSource, created, index)
 		if err != nil {
 			return nil, err
 		}
