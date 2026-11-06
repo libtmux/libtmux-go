@@ -38,8 +38,13 @@ This document defines the architecture of the Go module.
   said, and a decoded one would carry no server to act through.
 - Every tmux command a server runs is offered to an optional observer,
   carrying neither the arguments nor the output, which may hold secrets.
-- Server handles and derived values are safe for concurrent method calls and
-  concurrent reads. Optional warning handlers are invoked concurrently and must
+- Server handles and derived values are safe for concurrent method calls: a
+  Server is immutable and the state its copies share, the version cache and the
+  last checked daemon identity, is mutex-guarded, and records are immutable.
+  The package does not order concurrent changes to one tmux object or make
+  multi-command operations atomic; callers serialize those. Request values must
+  not be mutated during a call, and a `Plan` is not safe for concurrent use.
+  Optional warning handlers and observers are invoked concurrently and must
   provide their own synchronization.
 
 Each module carries its own semantic version, tagged per directory: the core

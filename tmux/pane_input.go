@@ -132,10 +132,11 @@ func validateSendKeySequenceRequest(p Pane, request SendKeySequenceRequest) erro
 //
 // KeyName and TargetClient require tmux 3.4 and follow [UnsupportedPolicy].
 //
-// A completed nonzero exit or stderr, from either the Command send or the
-// separate Enter, becomes a redacted [CommandError]: Command may carry a
-// caller's secret, so only tmux's exit code is retained. Transport and
-// context errors are delivery-ambiguous, including between Command and Enter.
+// Stderr from either the Command send or the separate Enter becomes a redacted
+// [CommandError]: Command may carry a caller's secret, so only tmux's exit code
+// is retained. A nonzero exit with empty stderr is success, as for every
+// mutation (see the package documentation). Transport and context errors are
+// delivery-ambiguous, including between Command and Enter.
 func (p Pane) SendKeys(ctx context.Context, request SendKeysRequest) error {
 	request = captureSendKeysRequest(request)
 	if err := validateSendKeysRequest(p, request); err != nil {
@@ -338,9 +339,9 @@ func (w paneWriter) typeLine(line string, enter bool) (int, error) {
 	return typed, w.pane.Enter(w.ctx)
 }
 
-// Enter sends the Enter key to the receiver's exact linked pane. A completed
-// nonzero exit or stderr becomes a redacted [CommandError]; transport errors
-// are delivery-ambiguous.
+// Enter sends the Enter key to the receiver's exact linked pane. Stderr becomes
+// a redacted [CommandError]; a nonzero exit with empty stderr is success, as
+// for every mutation. Transport errors are delivery-ambiguous.
 func (p Pane) Enter(ctx context.Context) error {
 	result, err := p.literalCmd(ctx, "send-keys", "--", "Enter")
 	return requireRedactedServerCommandNoStderr("send-keys", result, err)

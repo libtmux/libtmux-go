@@ -477,6 +477,30 @@ func TestCapturePaneSurfacesCompletedRawFailures(t *testing.T) {
 	})
 }
 
+// The documented policy for every command: stderr is the error, and a bare
+// nonzero exit is not, so the printed output is still returned.
+func TestCapturePaneIgnoresNonzeroExitWithoutStderr(t *testing.T) {
+	t.Parallel()
+
+	runner := &captureQueueRunner{responses: []captureResponse{
+		{result: tmuxcmd.Result{Stdout: []string{"kept"}, RawStdout: []byte("kept\n"), ExitCode: 1}},
+		{result: tmuxcmd.Result{RawStdout: []byte("kept\n"), ExitCode: 1}},
+		{result: tmuxcmd.Result{ExitCode: 1}},
+	}}
+	pane := newCaptureTestPane(runner, nil)
+	lines, err := pane.Capture(context.Background(), CapturePaneRequest{})
+	if err != nil || !slices.Equal(lines, []string{"kept"}) {
+		t.Fatalf("Capture() = %#v, %v, want the printed line and no error", lines, err)
+	}
+	raw, err := pane.CaptureBytes(context.Background(), CapturePaneRequest{})
+	if err != nil || string(raw) != "kept\n" {
+		t.Fatalf("CaptureBytes() = %q, %v, want the printed bytes and no error", raw, err)
+	}
+	if err := pane.CaptureToBuffer(context.Background(), "b", CapturePaneRequest{}); err != nil {
+		t.Fatalf("CaptureToBuffer() error = %v, want nil for a bare nonzero exit", err)
+	}
+}
+
 func TestCapturePaneSurfacesTransportErrors(t *testing.T) {
 	t.Parallel()
 
