@@ -284,6 +284,48 @@ func TestPlanUnlinkWindowNamesTheLinkedView(t *testing.T) {
 	}
 }
 
+func TestPlanEnvironmentAtServerScope(t *testing.T) {
+	t.Parallel()
+
+	for name, scope := range map[string]Ref{"zero": {}, "explicit": ServerRef()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := NewPlan()
+			plan.SetEnvironment(scope, "FOO", "bar")
+			plan.UnsetEnvironment(scope, "FOO")
+			argv, err := plan.Preview(mustParseVersion(t, "3.6"))
+			if err != nil {
+				t.Fatalf("Preview() error = %v", err)
+			}
+			want := [][]string{
+				{"set-environment", "-g", "--", "FOO", "bar"},
+				{"set-environment", "-g", "-u", "--", "FOO"},
+			}
+			if !slices.EqualFunc(argv, want, slices.Equal[[]string]) {
+				t.Fatalf("Preview() = %v, want %v", argv, want)
+			}
+		})
+	}
+}
+
+func TestPlanServerRefIsRefusedWhereAnObjectIsNeeded(t *testing.T) {
+	t.Parallel()
+
+	for name, scope := range map[string]Ref{"zero": {}, "explicit": ServerRef()} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := NewPlan()
+			plan.KillSession(scope)
+			_, err := plan.Preview(mustParseVersion(t, "3.6"))
+			if _, ok := errors.AsType[*PlanError](err); !ok {
+				t.Fatalf("Preview() error = %v, want PlanError", err)
+			}
+		})
+	}
+}
+
 func TestPlanPlacementOperationsNameTheLinkedView(t *testing.T) {
 	t.Parallel()
 

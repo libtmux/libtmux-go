@@ -67,7 +67,7 @@ func (p *Plan) DisplayMessage(target Ref, format string) {
 		target:          target,
 		placementTarget: true,
 		captures:        true,
-		untargets:       target == Ref{},
+		untargets:       target.addressesServer(),
 		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if resolved == "" {
 				return untargetedArguments("display-message", "-p", "--", format)
