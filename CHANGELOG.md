@@ -67,6 +67,12 @@ span modules, such as documentation, CI and release tooling, are listed here.
 - `Pane.SendKeys`, `Pane.Enter` and the capture methods document that a nonzero
   exit with empty stderr is success, matching their behavior and the package's
   rule for mutations. The attach family is the documented exception. (#131)
+- `Pane.WaitForText` returns a `*PaneEndedError` with `ServerGone`, which
+  matches `ErrNoServer`, when the server is killed while it polls. Before, a
+  poll that met the kill could come back with exit 0 and no error line, or
+  only `no current target`, and the wait returned an unclassified error. A
+  reply it cannot read now makes the wait ask the server whether it is
+  running. (#156)
 
 ### Documentation
 

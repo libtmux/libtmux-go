@@ -140,7 +140,9 @@ type PaneTextWait struct {
 //
 // The text is matched before the pane's liveness is acted on, so a complete
 // read of a pane that has since died still matches. A pane or server that
-// ends first returns a [*PaneEndedError]. A deadline or cancel returns
+// ends first returns a [*PaneEndedError]. A read that answers with neither
+// the pane's report nor a recognised error asks the server whether it is
+// still running, and a server that is not returns [ServerGone]. A deadline or cancel returns
 // ctx.Err, with the text of the last complete read. An empty req.Text or a
 // negative interval fails before any tmux command runs with
 // [ErrInvalidWaitForText].
@@ -246,6 +248,13 @@ func (p Pane) readScreen(ctx context.Context) (screenRead, error) {
 			line == "lost server":
 			return read, &PaneEndedError{Reason: ServerGone, cause: waitCommandError(result, true)}
 		}
+	}
+	// A poll that meets kill-server can come back with exit 0 and either no
+	// stderr or only "no current target". Neither names the server, so ask it.
+	if aliveErr := p.server.requireProcess().CheckAlive(ctx); errors.Is(aliveErr, ErrNoServer) {
+		return read, &PaneEndedError{Reason: ServerGone, cause: aliveErr}
+	} else if ctxErr := ctx.Err(); ctxErr != nil {
+		return read, ctxErr
 	}
 	return read, fmt.Errorf("pane %s text wait read answered %q", p.paneID, result.Stderr)
 }
