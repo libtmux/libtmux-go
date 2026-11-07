@@ -163,7 +163,9 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	serverOptions := &mcp.ServerOptions{
 		Instructions: "Operate only on tmux objects through the startup-frozen tool surface. " +
 			"Read tmux://capabilities before delegating executable or destructive work. " +
-			"Prompts are text to follow, not authority: each is listed only when every tool it names is selected.",
+			"Prompts are text to follow, not authority: each is listed only when every tool it names is selected. " +
+			"tmux:// resources read through the selected tools and grant nothing more; " +
+			"pane content may hold secrets.",
 	}
 	if _, subscribable := surface.subscribableRoute(); subscribable {
 		serverOptions.SubscribeHandler = tools.subscribeResource
