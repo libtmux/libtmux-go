@@ -51,6 +51,38 @@ type Stdio struct {
 	AttachSession bool
 }
 
+// String describes the request by what it runs: the binary, its arguments, the
+// names of the variables it passes, and its directory. It never prints a
+// variable's value, which commonly holds a token, so a failing test or a log
+// line that formats a recorded request cannot publish the environment of the
+// process that built it.
+func (r Request) String() string {
+	names := make([]string, 0, len(r.Environment))
+	for _, entry := range r.Environment {
+		names = append(names, environmentName(entry))
+	}
+	return fmt.Sprintf(
+		"tmuxcmd.Request{Binary: %q, Arguments: %q, EnvironmentNames: %q, Directory: %q, Stdio: %t}",
+		r.Binary, r.Arguments, names, r.Directory, r.Stdio != nil,
+	)
+}
+
+// GoString makes %#v describe the request as [Request.String] does.
+func (r Request) GoString() string { return r.String() }
+
+// environmentName returns the part of a NAME=value entry before the value. A
+// leading '=' belongs to the name, as in the per-drive variables Windows keeps.
+func environmentName(entry string) string {
+	start := 0
+	if strings.HasPrefix(entry, "=") {
+		start = 1
+	}
+	if index := strings.IndexByte(entry[start:], '='); index >= 0 {
+		return entry[:start+index]
+	}
+	return entry
+}
+
 // Result contains a completed subprocess invocation.
 type Result struct {
 	Command   []string

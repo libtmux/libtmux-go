@@ -1306,12 +1306,11 @@ func TestMutationReturnsReceiverWhenRefreshFails(t *testing.T) {
 
 func TestNewSessionScrubsTMUXFromOnlyTheChildEnvironment(t *testing.T) {
 	t.Setenv("TMUX", "/tmp/foreign,123,0")
-	t.Setenv("LIBTMUX_LIFECYCLE_KEEP", "present")
 	runner := &versionQueueRunner{responses: []versionResponse{{result: tmuxcmd.Result{
 		Stderr: []string{"stop after environment capture"}, ExitCode: 7,
 	}}}}
 
-	_, err := serverWithRunner(runner).NewSession(context.Background(), NewSessionRequest{})
+	_, err := serverWithLifecycleParentEnvironment(runner).NewSession(context.Background(), NewSessionRequest{})
 	if !errors.Is(err, ErrCommand) {
 		t.Fatalf("NewSession() error = %v, want ErrCommand", err)
 	}
@@ -1355,7 +1354,6 @@ func TestNewSessionScrubsTMUXFromExplicitEnvironment(t *testing.T) {
 
 func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 	t.Setenv("TMUX", "/tmp/foreign,123,0")
-	t.Setenv("LIBTMUX_LIFECYCLE_KEEP", "present")
 	version := mustParseVersion(t, "3.7")
 	runner := &versionQueueRunner{responses: append(
 		[]versionResponse{
@@ -1367,7 +1365,7 @@ func TestNewSessionUsesOneScrubbedHandleAcrossTheLifecycle(t *testing.T) {
 			"session_id": "$7", "session_name": "alpha",
 		})...,
 	)}
-	original := serverWithRunner(runner)
+	original := serverWithLifecycleParentEnvironment(runner)
 
 	session, err := original.NewSession(context.Background(), NewSessionRequest{
 		Name: "alpha", KillExisting: true,
@@ -1605,4 +1603,13 @@ func assertRequestArguments(t *testing.T, request tmuxcmd.Request, want []string
 	if !slices.Equal(request.Arguments, want) {
 		t.Fatalf("request arguments = %#v, want %#v", request.Arguments, want)
 	}
+}
+
+// serverWithLifecycleParentEnvironment builds a server whose parent environment
+// holds a foreign TMUX and one variable the child must keep, so the scrub tests
+// need neither the real environment nor a variable set on the test process.
+func serverWithLifecycleParentEnvironment(runner commandRunner) Server {
+	return serverWithParentEnvironmentAndRunner(ServerOptions{}, func() []string {
+		return append(fakeParentEnvironment(), "TMUX=/tmp/foreign,123,0", "LIBTMUX_LIFECYCLE_KEEP=present")
+	}, runner)
 }
