@@ -321,6 +321,7 @@ func (surface toolSurface) capabilityReport() map[string]any {
 		"toolsets":                toolsets,
 		"includedTools":           slices.Clone(surface.included),
 		"excludedTools":           slices.Clone(surface.excluded),
+		"prompts":                 surface.promptReport(),
 		"toolCount":               len(surface.tools),
 		"effectiveTools":          effective,
 		"tools":                   rows,

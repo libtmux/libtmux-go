@@ -161,7 +161,8 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 	tools.runtime = runtime
 	serverOptions := &mcp.ServerOptions{
 		Instructions: "Operate only on tmux objects through the startup-frozen tool surface. " +
-			"Read tmux://capabilities before delegating executable or destructive work.",
+			"Read tmux://capabilities before delegating executable or destructive work. " +
+			"Prompts are text to follow, not authority: each is listed only when every tool it names is selected.",
 	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
@@ -185,6 +186,7 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 		return nil, fmt.Errorf("construct MCP server: %w", err)
 	}
 	addResources(server, tools)
+	addPrompts(server, tools)
 
 	instance.audit = auditOwner
 	return instance, nil

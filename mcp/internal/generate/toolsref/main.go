@@ -64,7 +64,11 @@ func run(output, index string, check bool) error {
 	if err != nil {
 		return err
 	}
-	if err := write(output, openMarker, closeMarker, render(tools), len(tools), check); err != nil {
+	prompts, err := tmuxmcp.AdvertisedPrompts()
+	if err != nil {
+		return err
+	}
+	if err := write(output, openMarker, closeMarker, render(tools, prompts), len(tools), check); err != nil {
 		return err
 	}
 	if index == "" {
@@ -140,7 +144,7 @@ type property struct {
 	values                  []string
 }
 
-func render(tools []*sdk.Tool) string {
+func render(tools []*sdk.Tool, prompts []*sdk.Prompt) string {
 	var out bytes.Buffer
 	fmt.Fprintf(&out, "%d tools. Generated from the schemas by "+
 		"`go generate ./...`; edit the tools, not this.\n", len(tools))
@@ -159,7 +163,35 @@ func render(tools []*sdk.Tool) string {
 		writeTable(&out, "Argument", propertiesOf(tool.InputSchema))
 		writeTable(&out, "Returns", propertiesOf(tool.OutputSchema))
 	}
+	writePrompts(&out, prompts)
 	return out.String()
+}
+
+// writePrompts renders each prompt with the tools it names, read from the same
+// metadata a client receives. A prompt grants no authority; the server lists
+// it only when every tool it names is in the startup selection.
+func writePrompts(out *bytes.Buffer, prompts []*sdk.Prompt) {
+	if len(prompts) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "\n## Prompts\n\n%d prompts. Each is listed only when every tool it names "+
+		"is in the startup selection, and calls nothing itself.\n", len(prompts))
+	for _, prompt := range prompts {
+		fmt.Fprintf(out, "\n### `%s`\n\n%s\n", prompt.Name, prompt.Description)
+		row, _ := prompt.Meta[tmuxmcp.PromptMetaKey].(map[string]any)
+		fmt.Fprintf(out, "\nNames %s.\n", codeList(stringsOf(row["requiresTools"])))
+		if len(prompt.Arguments) == 0 {
+			continue
+		}
+		fmt.Fprint(out, "\n| Argument | Type | |\n| --- | --- | --- |\n")
+		for _, argument := range prompt.Arguments {
+			name := "`" + argument.Name + "`"
+			if argument.Required {
+				name += " **required**"
+			}
+			fmt.Fprintf(out, "| %s | string | %s |\n", name, cmp.Or(argument.Description, "—"))
+		}
+	}
 }
 
 // writeCapability renders the security-relevant manifest row next to the

@@ -2062,4 +2062,51 @@ Reads only (effect `observe`). Repeating it changes nothing.
 | `truncatedBytes` | integer |
 | `truncatedLines` | integer |
 
+## Prompts
+
+4 prompts. Each is listed only when every tool it names is in the startup selection, and calls nothing itself.
+
+### `run_and_wait`
+
+Run one shell command in a pane, wait for it to finish, and read its exit status.
+
+Names `run_shell_command`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` **required** | string | the shell command to run |
+| `pane_id` **required** | string | the target pane, such as %1 |
+| `timeout` | string | seconds to wait for completion; defaults to 60 |
+
+### `diagnose_failing_pane`
+
+Gather pane context and propose a root-cause hypothesis without running anything.
+
+Names `snapshot_pane`, `capture_since`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `pane_id` **required** | string | the pane to diagnose, such as %1 |
+
+### `interrupt_gracefully`
+
+Send C-c to a pane and verify the shell prompt came back.
+
+Names `get_pane_info`, `send_keys`, `wait_for_text`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `pane_id` **required** | string | the target pane, such as %1 |
+
+### `build_dev_workspace`
+
+Create a three-pane session: editor on top, shell bottom-left, logs bottom-right.
+
+Names `create_session`, `list_panes`, `split_window`, `send_keys`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `session_name` **required** | string | name for the new session |
+| `log_command` | string | command for the logs pane; defaults to watch -n 1 date |
+
 <!-- toolsref:end -->

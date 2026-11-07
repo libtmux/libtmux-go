@@ -29,6 +29,19 @@ documentation, CI and release tooling, are in the core changelog.
 - Ask every caller-pane question of `send_keys_batch` in one input-required
   result on protocol 2026-07-28, before the first operation runs. Each
   operation was refused with "input required" and the person was never asked.
+- Add four MCP prompts: `run_and_wait`, `diagnose_failing_pane`,
+  `interrupt_gracefully`, and `build_dev_workspace`. A prompt is text a client
+  offers for a person to pick; it calls nothing and grants no authority. The
+  server lists a prompt only when every tool it names is in the startup
+  selection, so `LIBTMUX_TOOLSETS=inspect` lists `diagnose_failing_pane` alone.
+  The handshake now declares prompts.
+- Return JSON-RPC `-32602` from `prompts/get` for an unknown prompt, a missing
+  or blank required argument, an undeclared argument, or a `timeout` that is not
+  a positive number.
+- Add `prompts` to `tmux://capabilities`, and a Prompts section to `TOOLS.md`,
+  both generated from the same manifest rows as the tools.
+- Add `AdvertisedPrompts` and `PromptMetaKey`. `libtmux-mcp -tools` lists the
+  prompts under the tools. `LIBTMUX_MCP_PROMPTS_AS_TOOLS` still stops startup.
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 

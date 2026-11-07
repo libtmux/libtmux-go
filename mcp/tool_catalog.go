@@ -17,14 +17,20 @@ import (
 // It describes a server that leaves the choice of tmux server to tmux.
 // [AdvertisedToolsFor] answers for a specific target.
 func AdvertisedTools(ctx context.Context) ([]*sdk.Tool, error) {
-	return advertisedToolsFor(ctx, socketProfile{
+	return advertisedToolsFor(ctx, unknownSocketProfile())
+}
+
+// unknownSocketProfile describes tmux's own socket choice before any server
+// has been asked.
+func unknownSocketProfile() socketProfile {
+	return socketProfile{
 		Selector:                "default",
 		SelectionProvenance:     string(tmux.SocketSourceTmux),
 		ServerState:             "unknown",
 		ConfigurationProvenance: "unknown",
 		NamespaceBoundary:       "tmux-objects-only",
 		AttachCommand:           "tmux -N attach",
-	})
+	}
 }
 
 // AdvertisedToolsFor returns the tools a server started now against target
