@@ -12,7 +12,8 @@ client, which the Go tests do not provide.
 ## Getting set up
 
 You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else — the
-core module has no runtime dependencies.
+core module has no third-party Go dependencies, and tmux is required at
+runtime.
 
 The test harness gives each suite a temporary directory of its own and clears
 `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable from the test process.
@@ -417,7 +418,7 @@ The other modules are separate module graphs, so `./...` in the tmux module
 reaches none of them. Each has to be named explicitly or it rots unchecked.
 `examples/` is one of them: it is a module of its own so that an example
 reaching for a dependency can never put that dependency in the tmux module's
-`go.mod`, which is what keeps the core free of runtime dependencies.
+`go.mod`, which is what keeps the core free of third-party Go dependencies.
 
 ## Flaky, or broken?
 

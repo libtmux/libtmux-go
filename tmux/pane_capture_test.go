@@ -335,8 +335,6 @@ func TestCaptureToFileUsesOnlyCommandsThatPrintNothing(t *testing.T) {
 
 	runner := &captureQueueRunner{responses: []captureResponse{
 		{result: tmuxcmd.Result{}},
-		{result: tmuxcmd.Result{}},
-		{result: tmuxcmd.Result{}},
 	}}
 	pane := newCaptureTestPane(runner, nil)
 	path := filepath.Join(t.TempDir(), "pane.txt")
@@ -357,23 +355,23 @@ func TestCaptureToFileUsesOnlyCommandsThatPrintNothing(t *testing.T) {
 	}
 
 	requests := runner.recordedRequests()
-	if len(requests) != 3 {
-		t.Fatalf("runner requests = %#v, want capture, save, and delete", requests)
+	if len(requests) != 1 {
+		t.Fatalf("runner requests = %d, want one command list", len(requests))
 	}
 	// tmux prints a reply for none of these three, which lets a control
-	// connection carry them where a printed capture-pane cannot go.
+	// connection carry them where a printed capture-pane cannot go. They go as
+	// one list so a cancellation cannot land between them.
 	buffer := requests[0].Arguments[4]
 	if !strings.HasPrefix(buffer, "libtmux-go-capture-") {
 		t.Fatalf("capture buffer = %q, want a name owned by this package", buffer)
 	}
-	for index, want := range [][]string{
-		{"capture-pane", "-t", "$5:.%7", "-b", buffer, "-S", "-"},
-		{"save-buffer", "-b", buffer, "--", path},
-		{"delete-buffer", "-b", buffer},
-	} {
-		if !slices.Equal(requests[index].Arguments, want) {
-			t.Fatalf("request %d = %#v, want %#v", index, requests[index].Arguments, want)
-		}
+	want := []string{
+		"capture-pane", "-t", "$5:.%7", "-b", buffer, "-S", "-", ";",
+		"save-buffer", "-b", buffer, "--", path, ";",
+		"delete-buffer", "-b", buffer,
+	}
+	if !slices.Equal(requests[0].Arguments, want) {
+		t.Fatalf("request = %#v, want %#v", requests[0].Arguments, want)
 	}
 }
 
@@ -381,10 +379,6 @@ func TestCaptureToFileNamesEachCallsBufferApart(t *testing.T) {
 	t.Parallel()
 
 	runner := &captureQueueRunner{responses: []captureResponse{
-		{result: tmuxcmd.Result{}},
-		{result: tmuxcmd.Result{}},
-		{result: tmuxcmd.Result{}},
-		{result: tmuxcmd.Result{}},
 		{result: tmuxcmd.Result{}},
 		{result: tmuxcmd.Result{}},
 	}}
@@ -400,12 +394,12 @@ func TestCaptureToFileNamesEachCallsBufferApart(t *testing.T) {
 		}
 	}
 	requests := runner.recordedRequests()
-	if len(requests) != 6 {
-		t.Fatalf("runner requests = %d, want six", len(requests))
+	if len(requests) != 2 {
+		t.Fatalf("runner requests = %d, want two", len(requests))
 	}
 	// Two captures of one pane can ask for different lines, so a shared buffer
 	// name would let one call save the other call's screen.
-	if requests[0].Arguments[4] == requests[3].Arguments[4] {
+	if requests[0].Arguments[4] == requests[1].Arguments[4] {
 		t.Fatalf("both calls used the buffer %q", requests[0].Arguments[4])
 	}
 }
@@ -572,4 +566,166 @@ func newCaptureTestPane(runner commandRunner, handler WarningHandler) Pane {
 		WarningHandler: handler,
 	}, runner)
 	return Pane{server: server, sessionID: "$5", windowID: "@6", paneID: "%7"}
+}
+
+// scratchModelRunner models the tmux server's buffers and a context-aware
+// transport: a call on a done context has no effect, and a list stops at its
+// first failing command.
+type scratchModelRunner struct {
+	mu          sync.Mutex
+	buffers     map[string]bool
+	cancel      context.CancelFunc
+	reportAfter error
+	failSave    bool
+}
+
+func (r *scratchModelRunner) Run(
+	ctx context.Context,
+	request tmuxcmd.Request,
+) (tmuxcmd.Result, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return tmuxcmd.Result{}, err
+	}
+	if r.buffers == nil {
+		r.buffers = map[string]bool{}
+	}
+	args := withoutGlobalFlags([]tmuxcmd.Request{{Arguments: slices.Clone(request.Arguments)}})[0].Arguments
+	var commands [][]string
+	var current []string
+	for _, argument := range args {
+		if argument == ";" {
+			commands = append(commands, current)
+			current = nil
+			continue
+		}
+		current = append(current, argument)
+	}
+	commands = append(commands, current)
+	ranCapture := false
+	for _, command := range commands {
+		buffer := ""
+		for index, argument := range command {
+			if argument == "-b" && index+1 < len(command) {
+				buffer = command[index+1]
+			}
+		}
+		switch command[0] {
+		case "capture-pane":
+			r.buffers[buffer] = true
+			ranCapture = true
+		case "save-buffer":
+			if r.failSave || !r.buffers[buffer] {
+				return tmuxcmd.Result{Stderr: []string{"save failed"}, ExitCode: 1}, nil
+			}
+			if err := os.WriteFile(command[len(command)-1], []byte("screen\n"), 0o600); err != nil {
+				return tmuxcmd.Result{}, err
+			}
+		case "delete-buffer":
+			if !r.buffers[buffer] {
+				return tmuxcmd.Result{Stderr: []string{"no buffer " + buffer}, ExitCode: 1}, nil
+			}
+			delete(r.buffers, buffer)
+		}
+	}
+	if ranCapture && r.cancel != nil {
+		r.cancel()
+		return tmuxcmd.Result{}, r.reportAfter
+	}
+	return tmuxcmd.Result{}, nil
+}
+
+func (r *scratchModelRunner) left() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var names []string
+	for name := range r.buffers {
+		names = append(names, name)
+	}
+	return names
+}
+
+func TestCaptureToFileLeavesNoScratchBufferAfterCancellation(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		reportAfter error
+		failSave    bool
+		suffix      string
+	}{
+		{name: "cancelled after the list ran"},
+		{name: "list ran but reports the cancellation", reportAfter: context.Canceled},
+		{name: "save fails part-way", failSave: true},
+		{name: "path that cannot ride in a list", suffix: ";"},
+		{name: "path that cannot ride in a list, reporting", suffix: ";", reportAfter: context.Canceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			runner := &scratchModelRunner{
+				cancel:      cancel,
+				reportAfter: test.reportAfter,
+				failSave:    test.failSave,
+			}
+			if test.failSave {
+				runner.cancel = nil
+			}
+			pane := newCaptureTestPane(runner, nil)
+			path := filepath.Join(t.TempDir(), "pane.txt"+test.suffix)
+			_, err := pane.CaptureToFile(ctx, path, CapturePaneRequest{})
+			if left := runner.left(); len(left) != 0 {
+				t.Fatalf("scratch buffers left on the server = %q (CaptureToFile error = %v)", left, err)
+			}
+		})
+	}
+}
+
+func TestCaptureToFileReturnsLinesWhenCancelledAfterTheListRan(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := &scratchModelRunner{cancel: cancel}
+	pane := newCaptureTestPane(runner, nil)
+	path := filepath.Join(t.TempDir(), "pane.txt")
+	lines, err := pane.CaptureToFile(ctx, path, CapturePaneRequest{})
+	if err != nil || !slices.Equal(lines, []string{"screen"}) {
+		t.Fatalf("CaptureToFile() = (%q, %v), want the lines the list wrote and no error", lines, err)
+	}
+	if left := runner.left(); len(left) != 0 {
+		t.Fatalf("scratch buffers left = %q", left)
+	}
+}
+
+func TestCaptureToFileRefusedByVersionGateReportsNoCleanupFailure(t *testing.T) {
+	t.Parallel()
+
+	for _, suffix := range []string{"", ";"} {
+		t.Run("path suffix "+suffix, func(t *testing.T) {
+			t.Parallel()
+			runner := &captureQueueRunner{}
+			pane := newCaptureTestPane(runner, nil)
+			old, err := ParseVersion("3.3a")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pane.server = pane.server.withDaemon(snapshotServerIdentity{version: old})
+			path := filepath.Join(t.TempDir(), "pane.txt"+suffix)
+			_, err = pane.CaptureToFile(context.Background(), path, CapturePaneRequest{})
+			if _, ok := errors.AsType[*VersionTooLowError](err); !ok {
+				t.Fatalf("CaptureToFile() error = %v, want *VersionTooLowError", err)
+			}
+			// The gate refused the staging command before dispatch, so no buffer
+			// exists and no cleanup failure is true to report.
+			if strings.Contains(err.Error(), "clean scratch buffer") {
+				t.Fatalf("error %q reports a cleanup failure for a buffer never staged", err)
+			}
+			if n := runner.callCount(); n != 0 {
+				t.Fatalf("runner received %d requests, want none", n)
+			}
+		})
+	}
 }

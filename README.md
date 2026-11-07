@@ -245,7 +245,8 @@ the example goes on to print `active panes: 1`.
 
 ### [`Server.SearchSessions`][tmux-server-searchsessions]: let tmux filter
 
-One command goes out and only the matches come back:
+tmux filters the listing, so only the matches come back; the call also adds
+the identity probes that detect a replaced daemon:
 
 <!-- docs:query-in-tmux -->
 
@@ -790,8 +791,8 @@ module is a command that prints what each way of reaching tmux costs.
 Any release may change or remove exported identifiers without a deprecation
 period, so pin an exact version. Not recommended for production.
 
-- **No runtime dependencies.** The core module imports only the standard
-  library.
+- **No third-party Go dependencies.** The core module imports only the
+  standard library; tmux is required at runtime.
 - **Go 1.26+**, rising with Go's own support window, about twice a year.
   tmux **3.3a through 3.8** across the core, workspace, and MCP modules,
   tested on releases spanning that range.

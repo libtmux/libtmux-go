@@ -346,7 +346,8 @@ func (c *ControlClient) observePane(
 		_ = os.Remove(directory)
 	}()
 
-	buffer := "libtmux-go-observe-" + rand.Text()
+	scratch := newScratchBuffer(c.server, "observe", rand.Text())
+	buffer := scratch.name
 	results, err := c.cmd(
 		ctx,
 		true,
@@ -359,7 +360,7 @@ func (c *ControlClient) observePane(
 	if err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("stage pane observation: %w", err),
-			c.cleanupObservationBuffer(buffer),
+			scratch.delete(ctx),
 		)
 	}
 	actions := []string{
@@ -377,14 +378,14 @@ func (c *ControlClient) observePane(
 			}
 			return nil, errors.Join(
 				failure,
-				c.cleanupObservationBuffer(buffer),
+				scratch.delete(ctx),
 			)
 		}
 	}
 	if len(results) != len(actions) {
 		var cleanupErr error
 		if len(results) > 2 && !results[2].Failed {
-			cleanupErr = c.cleanupObservationBuffer(buffer)
+			cleanupErr = scratch.delete(ctx)
 		}
 		return nil, errors.Join(
 			fmt.Errorf(
@@ -418,18 +419,6 @@ func (c *ControlClient) observePane(
 		baseline:  tmuxcmd.SplitStdout(contents),
 		state:     newPaneObservationState(),
 	}, nil
-}
-
-func (c *ControlClient) cleanupObservationBuffer(buffer string) error {
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		controlClientStopGrace,
-	)
-	defer cancel()
-	if err := c.server.DeleteBuffer(ctx, &buffer); err != nil {
-		return fmt.Errorf("clean pane observation buffer: %w", err)
-	}
-	return nil
 }
 
 func failedPaneObservationCommand(

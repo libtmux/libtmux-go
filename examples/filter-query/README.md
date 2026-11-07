@@ -28,8 +28,8 @@ live matches: 1
 
 ## What to look at
 
-**Let tmux filter.** One command goes out and only matches come back. tmux
-evaluates the format itself, so nothing that failed to match is ever sent:
+**Let tmux filter.** tmux evaluates the format itself and returns only the
+matches; the call also adds the identity probes that detect a replaced daemon:
 
 <!-- docs:query-in-tmux -->
 

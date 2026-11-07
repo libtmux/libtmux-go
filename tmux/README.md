@@ -11,7 +11,7 @@
 
 # tmux
 
-The library. A typed, context-aware tmux API with no runtime dependencies.
+The library. A typed, context-aware tmux API with no third-party Go dependencies. tmux is required at runtime.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 [![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/)
@@ -564,7 +564,8 @@ $ libtmux-mcp -doctor
 
 ## Support and status
 
-- **No runtime dependencies.** The module imports only the standard library.
+- **No third-party Go dependencies.** The module imports only the standard
+  library; tmux is required at runtime.
 - **Go 1.26+ and tmux 3.3a or newer.** An older tmux gets
   [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] before the requested
   operation; a read-only version probe may run first. CI runs tmux 3.3a and
