@@ -77,6 +77,9 @@ span modules, such as documentation, CI and release tooling, are listed here.
 - The concurrency contract in `DESIGN.md` and the package documentation now
   agrees: a `Server` and its derived values are safe for concurrent method
   calls. (#131)
+- The README shows `Session.Refresh` asking tmux again and returning a
+  replacement, leaving the record it was called on unchanged; `Window.Refresh`
+  and `Pane.Refresh` work the same way. (#130)
 
 ### Development
 
