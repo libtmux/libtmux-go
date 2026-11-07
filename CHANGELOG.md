@@ -18,6 +18,24 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ## Unreleased
 
+### tmux
+
+- `Pane.CaptureToFile` no longer leaves its scratch buffer, which holds the
+  pane's screen, on the server when the caller's context is cancelled or its
+  deadline passes. Capture, save, and delete reach tmux as one command list; a
+  list that fails part-way is cleaned up on a 2-second context the caller
+  cannot cancel, and a cleanup failure is joined into the returned error.
+  (#133)
+- `Session.Run` on a `Connection` no longer leaves that buffer when its finish
+  limit expires while it reads the final screen. (#133)
+
+### Documentation
+
+- The READMEs say the core module has no third-party Go dependencies and needs
+  tmux at runtime.
+- `Server.SearchSessions` is described as tmux filtering the listing, plus the
+  identity probes that detect a replaced daemon.
+
 ### Development
 
 - CI rebuilds incompatible cached tmux installations before running tests.
