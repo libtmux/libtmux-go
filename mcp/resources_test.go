@@ -146,7 +146,10 @@ func TestResourceReadsAnswerWhatTheirToolsAnswer(t *testing.T) {
 		t.Run(version, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
-			request := tmux.NewSessionRequest{Name: "res"}
+			// A named window has automatic-rename off. Unnamed, tmux renames it
+			// from the process it forked to the shell soon after creation, and
+			// a read and a call either side of that rename would differ.
+			request := tmux.NewSessionRequest{Name: "res", WindowName: "res"}
 			target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 				FixedShell: true, InitialSession: &request,
 			})
