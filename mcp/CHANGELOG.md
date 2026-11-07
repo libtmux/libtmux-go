@@ -17,6 +17,16 @@ documentation, CI and release tooling, are in the core changelog.
 
 ## Unreleased
 
+### mcp
+
+- Require `go-sdk` v1.8.0, which serves protocol 2026-07-28 and keeps each
+  request's log level to that request.
+- Ask before a caller-pane write or teardown through an input-required result
+  on protocol 2026-07-28, where a server may not send `elicitation/create`.
+  Earlier protocols are still asked with `elicitation/create`. The question's
+  key no longer carries the socket path, server pid, or start time. A client
+  that did not declare elicitation is still refused.
+
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
 ### mcp
