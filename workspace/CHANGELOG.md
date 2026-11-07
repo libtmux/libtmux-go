@@ -17,6 +17,16 @@ documentation, CI and release tooling, are in the core changelog.
 
 ## Unreleased
 
+### workspace
+
+- Require `golang.org/x/sys` v0.49.0, which fixes GO-2026-5024, along with
+  `golang.org/x/term` v0.47.0, `go-isatty` v0.0.24, `go-runewidth` v0.0.31,
+  `go-shellwords` v1.0.16, `spf13/pflag` v1.1.0 and `go.yaml.in/yaml/v3`
+  v3.0.6. A module that imports `workspace` picks up these minimums. (#152)
+- `before_script` and `$EDITOR` values now fail to parse when they hold an
+  unquoted `)`, and a `\t` in them parses as a tab, following `go-shellwords`
+  v1.0.16. (#152)
+
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
 No entries for `workspace`.
