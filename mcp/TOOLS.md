@@ -205,6 +205,9 @@ fail closed when the client cannot ask. `confirm_self` never bypasses a missing
 teardown selection; it only confirms the target after the tool exists.
 
 Splitting beside the caller pane is not blocked because it preserves the pane.
+`move_pane` and `break_pane` are not blocked for the same reason: the process
+and the pane id survive the move, though the pane may land in a window nobody
+is watching.
 The MCP does not enter or cancel pane modes; an attached person's modal state
 stays under that person's control.
 
@@ -597,7 +600,7 @@ through `get_recipe`.
 | `display_message` | `get_tmux_variables` for validated variable names; no free-form tmux-format interpreter |
 | `capture_pane styles` / colored output | `styles: true` on `capture_pane` or `snapshot_pane`; the lines then carry raw escape sequences. `capture_since` stays plain |
 | `build_workspace` | compose `create_session`, `create_window`, `split_window`, and layout tools |
-| `move_pane` | compose the retained layout operations; no direct public MCP replacement |
+| `move_pane` | `move_pane` for a pane that leaves a window with others; `break_pane` for a new window; a window's only pane is refused, use `break_pane` to rename it or `kill_window` to remove it |
 | `load_buffer` / `paste_buffer` | `paste_text` stages an ephemeral private buffer internally |
 | `show_buffer` / `delete_buffer` | no public buffer namespace |
 | `pipe_pane` | no shell-command pipe route; use bounded capture/wait tools |
@@ -616,7 +619,38 @@ metadata sent over MCP. Edit the native definitions, not this generated region.
 
 <!-- toolsref -->
 
-45 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
+47 tools. Generated from the schemas by `go generate ./...`; edit the tools, not this.
+
+### `break_pane`
+
+Change tmux state; no client-supplied executable input. Moves a pane into a new window of its own session, keeping its process; tmux 3.7 needs a name.
+
+Belongs to the `manage` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `pane_id` **required** | string | the pane id to move into a new window, such as %1 |
+| `attach` | boolean | make the new window current |
+| `name` | string | the new window's literal name; required on tmux 3.7 |
+
+| Returns | Type |
+| --- | --- |
+| `sessionId` **required** | string |
+| `windowId` **required** | string |
 
 ### `call_read_tools_batch`
 
@@ -1192,6 +1226,40 @@ Reads only (effect `observe`). Repeating it changes nothing.
 | `windows` **required** | array |
 | `serverNote` | string |
 | `skipped` | integer |
+
+### `move_pane`
+
+Change tmux state; no client-supplied executable input. Moves a pane beside another pane or into another window, keeping its process and id, even for the caller's pane; refuses a window's only pane.
+
+Belongs to the `manage` toolset.
+
+| Capability | Manifest value |
+| --- | --- |
+| `processReach` | `none` |
+| `tmuxEffects` | `observe`, `change` |
+| `outputClasses` | `tmux-metadata` |
+| `mayExposeSecrets` | `false` |
+| `mayReturnUntrustedContent` | `true` |
+| `amplifiesFutureInput` | `false` |
+| `inputLiteralization` | none |
+| `nestedAuthority` | none |
+| `annotations` | `readOnlyHint=false`, `destructiveHint=true`, `idempotentHint=false`, `openWorldHint=true` |
+
+Changes tmux state.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `pane_id` **required** | string | the pane id to move, such as %1 |
+| `attach` | boolean | make the moved pane active in its new window |
+| `direction` | `""`, `below`, `above`, `right`, `left` | below, above, left, or right of the target |
+| `target_pane_id` | string | the pane id to place it beside; give this or target_window_id |
+| `target_window_id` | string | the window id to move it into; give this or target_pane_id |
+
+| Returns | Type |
+| --- | --- |
+| `paneId` **required** | string |
+| `sessionId` **required** | string |
+| `windowId` **required** | string |
 
 ### `move_window`
 

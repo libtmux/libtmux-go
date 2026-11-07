@@ -36,7 +36,7 @@ var expectedToolsBySet = map[string][]string{
 	},
 	"manage": {
 		"rename_session", "rename_window", "select_window", "select_pane",
-		"select_layout", "resize_window", "resize_pane", "move_window", "swap_pane",
+		"select_layout", "resize_window", "resize_pane", "move_window", "swap_pane", "move_pane", "break_pane",
 		"set_pane_title", "wait_for_channel", "signal_channel", "set_mouse_enabled",
 		"set_history_limit",
 	},
@@ -60,7 +60,7 @@ func TestCapabilityManifestDefinesTheExactPublicSurface(t *testing.T) {
 	want := toolsForSets("inspect", "manage", "execute", "teardown")
 	got := toolNames(tools)
 	if !slices.Equal(got, want) {
-		t.Fatalf("tools = %v, want exact 45-tool inventory %v", got, want)
+		t.Fatalf("tools = %v, want exact inventory %v", got, want)
 	}
 
 	validReach := setOf("none", "configured-process", "pane-input", "pane-command")
@@ -802,9 +802,11 @@ func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
 	if payload.SchemaVersion != 1 || !payload.Frozen {
 		t.Errorf("capability report version/frozen = (%d, %t)", payload.SchemaVersion, payload.Frozen)
 	}
-	if payload.ToolCount != 45 || len(payload.Tools) != 45 ||
-		len(payload.EffectiveTools) != 45 || payload.HostCommandTools != 0 {
-		t.Errorf("capability inventory = count %d, rows %d, host commands %d", payload.ToolCount, len(payload.Tools), payload.HostCommandTools)
+	wantTools := len(toolsForSets("inspect", "manage", "execute", "teardown"))
+	if payload.ToolCount != wantTools || len(payload.Tools) != wantTools ||
+		len(payload.EffectiveTools) != wantTools || payload.HostCommandTools != 0 {
+		t.Errorf("capability inventory = count %d, rows %d, effective %d, host commands %d, want %d tools",
+			payload.ToolCount, len(payload.Tools), len(payload.EffectiveTools), payload.HostCommandTools, wantTools)
 	}
 	if payload.ToolFilteringBoundary != "interface-shaping-not-authorization" {
 		t.Errorf("tool filtering boundary = %q", payload.ToolFilteringBoundary)
@@ -884,8 +886,8 @@ func TestCapabilityManifestReportsWhatChoseTheSocket(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if len(surface.tools) != 41 {
-					t.Errorf("default surface with %s server has %d tools, want teardown withheld", state, len(surface.tools))
+				if want := len(toolsForSets("inspect", "manage", "execute")); len(surface.tools) != want {
+					t.Errorf("default surface with %s server has %d tools, want %d with teardown withheld", state, len(surface.tools), want)
 				}
 			}
 		})

@@ -139,6 +139,20 @@ type swapPaneCapabilityInput struct {
 	OtherPaneID string `json:"other_pane_id" jsonschema:"the other pane id, such as %2"`
 }
 
+type movePaneCapabilityInput struct {
+	PaneID         string `json:"pane_id" jsonschema:"the pane id to move, such as %1"`
+	TargetPaneID   string `json:"target_pane_id,omitempty" jsonschema:"the pane id to place it beside; give this or target_window_id"`
+	TargetWindowID string `json:"target_window_id,omitempty" jsonschema:"the window id to move it into; give this or target_pane_id"`
+	Direction      string `json:"direction,omitempty" jsonschema:"below, above, left, or right of the target"`
+	Attach         bool   `json:"attach,omitempty" jsonschema:"make the moved pane active in its new window"`
+}
+
+type breakPaneCapabilityInput struct {
+	PaneID string `json:"pane_id" jsonschema:"the pane id to move into a new window, such as %1"`
+	Name   string `json:"name,omitempty" jsonschema:"the new window's literal name; required on tmux 3.7"`
+	Attach bool   `json:"attach,omitempty" jsonschema:"make the new window current"`
+}
+
 type setPaneTitleCapabilityInput struct {
 	PaneID string `json:"pane_id" jsonschema:"the pane id, such as %1"`
 	Title  string `json:"title" jsonschema:"the literal title"`
@@ -544,6 +558,17 @@ func (t *tools) catalogMoveWindow(ctx context.Context, request *sdk.CallToolRequ
 
 func (t *tools) catalogSwapPane(ctx context.Context, request *sdk.CallToolRequest, input swapPaneCapabilityInput) (*sdk.CallToolResult, swapPaneOutput, error) {
 	return t.swapPane(ctx, request, swapPaneInput{PaneID: input.PaneID, WithPaneID: input.OtherPaneID})
+}
+
+func (t *tools) catalogMovePane(ctx context.Context, request *sdk.CallToolRequest, input movePaneCapabilityInput) (*sdk.CallToolResult, movePaneOutput, error) {
+	return t.movePane(ctx, request, movePaneInput{
+		PaneID: input.PaneID, TargetPaneID: input.TargetPaneID,
+		TargetWinID: input.TargetWindowID, Direction: input.Direction, Attach: input.Attach,
+	})
+}
+
+func (t *tools) catalogBreakPane(ctx context.Context, request *sdk.CallToolRequest, input breakPaneCapabilityInput) (*sdk.CallToolResult, breakPaneOutput, error) {
+	return t.breakPane(ctx, request, breakPaneInput{PaneID: input.PaneID, Name: literalizeTmuxFormat(input.Name), Attach: input.Attach})
 }
 
 func (t *tools) catalogSetPaneTitle(ctx context.Context, request *sdk.CallToolRequest, input setPaneTitleCapabilityInput) (*sdk.CallToolResult, setPaneTitleOutput, error) {

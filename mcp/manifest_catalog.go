@@ -401,6 +401,22 @@ func appendManageDefinitions(definitions []toolDefinition) []toolDefinition {
 			toolDefinition{},
 		), (*tools).catalogSwapPane),
 		defineTool(manage(
+			"move_pane", "Move a pane", "Moves a pane beside another pane or into another window, keeping its process and id, even for the caller's pane; refuses a window's only pane.",
+			sinkMap(
+				input("pane_id", sinkTmuxLookup), input("target_pane_id", sinkTmuxLookup),
+				input("target_window_id", sinkTmuxLookup), input("direction", sinkTmuxState),
+				input("attach", sinkTmuxState),
+			), toolDefinition{},
+		), (*tools).catalogMovePane),
+		defineTool(manage(
+			"break_pane", "Break a pane out", "Moves a pane into a new window of its own session, keeping its process; tmux 3.7 needs a name.",
+			sinkMap(
+				input("pane_id", sinkTmuxLookup), input("name", sinkTmuxState, sinkTmuxFormat),
+				input("attach", sinkTmuxState),
+			),
+			toolDefinition{inputLiteralization: map[string]string{"name": "double-hash-once"}},
+		), (*tools).catalogBreakPane),
+		defineTool(manage(
 			"set_pane_title", "Set pane title", "Replaces a pane's literal title.",
 			sinkMap(
 				input("pane_id", sinkTmuxLookup),

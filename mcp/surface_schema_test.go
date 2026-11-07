@@ -22,7 +22,7 @@ import (
 // annotations, and the schemas each tool publishes. None of them calls a tool
 // and reads what comes back, so a handler could answer with a shape its own
 // output schema rejects and every gate would stay green. This sweep closes
-// that: it calls all 45 advertised tools against a real tmux server and holds
+// that: it calls every advertised tool against a real tmux server and holds
 // each reply to the schema its tool published.
 
 // surfaceFixture is what the sweep addresses, filled in as it goes.
@@ -407,6 +407,12 @@ func surfaceSweep() []surfaceStep {
 		}},
 		{tool: "swap_pane", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"pane_id": f.pane, "other_pane_id": f.otherPane}
+		}},
+		{tool: "move_pane", arguments: func(f *surfaceFixture) map[string]any {
+			return map[string]any{"pane_id": f.otherPane, "target_window_id": f.otherWindow, "direction": "right"}
+		}},
+		{tool: "break_pane", arguments: func(f *surfaceFixture) map[string]any {
+			return map[string]any{"pane_id": f.otherPane, "name": "broke"}
 		}},
 		{tool: "set_pane_title", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"pane_id": f.pane, "title": "swept"}
