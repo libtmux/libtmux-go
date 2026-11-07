@@ -18,6 +18,11 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ## Unreleased
 
+### Development
+
+- CI rebuilds incompatible cached tmux installations before running tests.
+  Release downloads use checksum pins in `.github/tmux-releases.toml`. (#135)
+
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
 No entries for `tmux`.

@@ -353,6 +353,39 @@ $ gh workflow run tests.yml \
 lane that runs, so it needs a single `tmux-ref` and at most one `go-version`,
 and it connects only the account that started the run.
 
+### Native tmux in CI
+
+Every job that needs a tmux uses `.github/actions/build-tmux`. A release uses
+its official archive and the SHA256 pin in `.github/tmux-releases.toml`, and the
+pin is part of the cache identity. A tag, branch or commit resolves once to a
+commit, and that exact commit is fetched. The build follows tmux's
+[release and source-checkout instructions](https://github.com/tmux/tmux/blob/3.8/README#L23-L37).
+Only the installed prefix is cached, each build uses a fresh source tree, and
+it compiles with up to four available processors. To pin a new release,
+download its archive from `https://github.com/tmux/tmux/releases`, compute the
+SHA256, compare it with the release asset's `digest` where GitHub shows one,
+and add the entry to the toml; the script itself does not change.
+
+Cache keys include the actual runner image and image version, architecture,
+compiler and dependency versions, source identity, and build script. The
+dependencies are installed before validation on hits and misses. Every restored
+executable must match its recorded hash and version, start a private daemon,
+and report the same connected version. A failed check discards that job's
+prefix and rebuilds it.
+
+A validated installation is saved before the module suites run. GitHub caches
+are immutable: repairing an invalid exact hit fixes the current job but cannot
+overwrite that entry, and a change to the build script invalidates its key for
+later jobs. Never add a broad restore-key fallback for native binaries.
+
+The scripts need Python 3.11 or newer for the standard-library TOML reader.
+Run the cache regressions against an installed tmux from a virtual environment
+with pytest:
+
+```console
+$ python3 -m pytest .github/scripts/test_tmux_build.py
+```
+
 ## Where a test goes
 
 `tmux/internal/integration` holds the tests that drive a real tmux through the
