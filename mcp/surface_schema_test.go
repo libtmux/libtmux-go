@@ -22,7 +22,7 @@ import (
 // annotations, and the schemas each tool publishes. None of them calls a tool
 // and reads what comes back, so a handler could answer with a shape its own
 // output schema rejects and every gate would stay green. This sweep closes
-// that: it calls all 45 advertised tools against a real tmux server and holds
+// that: it calls every advertised tool against a real tmux server and holds
 // each reply to the schema its tool published.
 
 // surfaceFixture is what the sweep addresses, filled in as it goes.
