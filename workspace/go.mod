@@ -3,7 +3,7 @@ module github.com/libtmux/libtmux-go/workspace
 go 1.26.0
 
 require (
-	github.com/libtmux/libtmux-go v0.1.2
+	github.com/libtmux/libtmux-go v0.1.3
 	github.com/mattn/go-isatty v0.0.24
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/mattn/go-shellwords v1.0.16
