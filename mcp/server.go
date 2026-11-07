@@ -49,6 +49,7 @@ var closedArguments = map[string]map[string][]any{
 	"show_option":           {"scope": scopeValues},
 	"show_hooks":            {"scope": scopeValues},
 	"split_window":          {"direction": placementValues},
+	"move_pane":             {"direction": placementValues},
 	"call_read_tools_batch": {"on_error": {onErrorStop, onErrorContinue}},
 	"send_keys_batch":       {"on_error": {onErrorStop, onErrorContinue}},
 	"find_pane_by_position": {"position": {"top-left", "top-right", "bottom-left", "bottom-right"}},

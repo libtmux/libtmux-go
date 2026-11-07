@@ -312,3 +312,142 @@ func (t *tools) moveWindow(
 		WindowID: moved.ID().String(), Session: session, Index: index,
 	}, nil
 }
+
+type movePaneInput struct {
+	PaneID       string `json:"paneId" jsonschema:"the pane to move"`
+	TargetPaneID string `json:"targetPaneId,omitempty" jsonschema:"the pane to place it beside"`
+	TargetWinID  string `json:"targetWindowId,omitempty" jsonschema:"the window to move it into"`
+	Direction    string `json:"direction,omitempty" jsonschema:"below, above, right, or left of the target"`
+	Attach       bool   `json:"attach,omitempty" jsonschema:"make the moved pane active in its new window"`
+}
+
+type movePaneOutput struct {
+	PaneID    string `json:"paneId"`
+	WindowID  string `json:"windowId"`
+	SessionID string `json:"sessionId"`
+}
+
+// movePane relocates a pane with tmux's move-pane (join-pane is the same
+// command, so it gets no second name). Moving a window's only pane would
+// destroy the window, which is a teardown, so it is refused here. The check
+// and the move are separate tmux commands, so a client that removes a sibling
+// between them still gets the move.
+//
+// The caller's own pane needs no confirmation: its process and id survive.
+func (t *tools) movePane(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input movePaneInput,
+) (*mcp.CallToolResult, movePaneOutput, error) {
+	if strings.TrimSpace(input.PaneID) == "" {
+		return nil, movePaneOutput{}, errors.New("paneId is required")
+	}
+	hasPane := strings.TrimSpace(input.TargetPaneID) != ""
+	hasWindow := strings.TrimSpace(input.TargetWinID) != ""
+	if hasPane == hasWindow {
+		return nil, movePaneOutput{}, errors.New("exactly one of targetPaneId and targetWindowId is required")
+	}
+	direction, known := splitDirections[strings.ToLower(strings.TrimSpace(input.Direction))]
+	if !known {
+		return nil, movePaneOutput{}, fmt.Errorf(
+			"direction %q is not below, above, right, or left", input.Direction)
+	}
+	server := t.tmux(ctx)
+	pane, err := server.Pane(ctx, tmux.PaneID(input.PaneID))
+	if err != nil {
+		return nil, movePaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
+	}
+	request := tmux.MovePaneRequest{Attach: input.Attach, Direction: direction}
+	var destination tmux.WindowID
+	if hasPane {
+		target, err := server.Pane(ctx, tmux.PaneID(input.TargetPaneID))
+		if err != nil {
+			return nil, movePaneOutput{}, notFound(err, "pane", input.TargetPaneID, "list_panes")
+		}
+		request.TargetPane = target
+		destination = target.WindowID()
+	} else {
+		target, err := server.Window(ctx, tmux.WindowID(input.TargetWinID))
+		if err != nil {
+			return nil, movePaneOutput{}, notFound(err, "window", input.TargetWinID, "list_windows")
+		}
+		request.TargetWindow = target
+		destination = target.ID()
+	}
+	if destination == pane.WindowID() {
+		return nil, movePaneOutput{}, errors.New("the pane is already in the target window; use swap_pane or select_layout to rearrange it")
+	}
+	panes, err := server.Panes(ctx)
+	if err != nil {
+		return nil, movePaneOutput{}, err
+	}
+	siblings := 0
+	for _, other := range panes {
+		if other.WindowID() == pane.WindowID() {
+			siblings++
+		}
+	}
+	if siblings < 2 {
+		return nil, movePaneOutput{}, errors.New(
+			"the pane is the only one in its window; moving it would destroy the window, so use break_pane or kill_window instead")
+	}
+	moved, err := pane.Move(ctx, request)
+	if err != nil {
+		return nil, movePaneOutput{}, err
+	}
+	return nil, movePaneOutput{
+		PaneID: moved.ID().String(), WindowID: moved.WindowID().String(),
+		SessionID: moved.SessionID().String(),
+	}, nil
+}
+
+type breakPaneInput struct {
+	PaneID string `json:"paneId" jsonschema:"the pane to move into a new window"`
+	Name   string `json:"name,omitempty" jsonschema:"the new window's name"`
+	Attach bool   `json:"attach,omitempty" jsonschema:"make the new window current"`
+}
+
+type breakPaneOutput struct {
+	WindowID  string `json:"windowId"`
+	SessionID string `json:"sessionId"`
+}
+
+// breakPane moves a pane into a new window of its own session. A window's only
+// pane is allowed: tmux keeps the window and its id and only renumbers and
+// renames it, so nothing is destroyed. Exact tmux 3.7 misnames a window broken
+// out without a name, so the core refuses there and the refusal is reworded
+// for this tool's arguments.
+func (t *tools) breakPane(
+	ctx context.Context,
+	_ *mcp.CallToolRequest,
+	input breakPaneInput,
+) (*mcp.CallToolResult, breakPaneOutput, error) {
+	if strings.TrimSpace(input.PaneID) == "" {
+		return nil, breakPaneOutput{}, errors.New("paneId is required")
+	}
+	pane, err := t.tmux(ctx).Pane(ctx, tmux.PaneID(input.PaneID))
+	if err != nil {
+		return nil, breakPaneOutput{}, notFound(err, "pane", input.PaneID, "list_panes")
+	}
+	window, err := pane.BreakPane(ctx, tmux.BreakPaneRequest{Name: input.Name, Attach: input.Attach})
+	if err != nil {
+		return nil, breakPaneOutput{}, breakPaneNameRefusal(err)
+	}
+	return nil, breakPaneOutput{
+		WindowID: window.ID().String(), SessionID: window.SessionID().String(),
+	}, nil
+}
+
+// breakPaneNameRefusal words the core's refusal of an unnamed break-pane on
+// exact tmux 3.7 as a remedy for this tool's caller, and leaves any other
+// error alone.
+func breakPaneNameRefusal(err error) error {
+	refused, ok := errors.AsType[*tmux.VersionTooLowError](err)
+	if !ok || refused.Subcommand != "break-pane" || refused.Feature != "automatic_window_name" {
+		return err
+	}
+	return fmt.Errorf(
+		"break_pane needs name on tmux %s, which misnames a window broken out without one; "+
+			"give name, or run tmux %s or newer",
+		refused.Current, refused.Minimum)
+}

@@ -408,6 +408,12 @@ func surfaceSweep() []surfaceStep {
 		{tool: "swap_pane", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"pane_id": f.pane, "other_pane_id": f.otherPane}
 		}},
+		{tool: "move_pane", arguments: func(f *surfaceFixture) map[string]any {
+			return map[string]any{"pane_id": f.otherPane, "target_window_id": f.otherWindow, "direction": "right"}
+		}},
+		{tool: "break_pane", arguments: func(f *surfaceFixture) map[string]any {
+			return map[string]any{"pane_id": f.otherPane, "name": "broke"}
+		}},
 		{tool: "set_pane_title", arguments: func(f *surfaceFixture) map[string]any {
 			return map[string]any{"pane_id": f.pane, "title": "swept"}
 		}},

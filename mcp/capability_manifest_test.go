@@ -36,7 +36,7 @@ var expectedToolsBySet = map[string][]string{
 	},
 	"manage": {
 		"rename_session", "rename_window", "select_window", "select_pane",
-		"select_layout", "resize_window", "resize_pane", "move_window", "swap_pane",
+		"select_layout", "resize_window", "resize_pane", "move_window", "swap_pane", "move_pane", "break_pane",
 		"set_pane_title", "wait_for_channel", "signal_channel", "set_mouse_enabled",
 		"set_history_limit",
 	},
