@@ -165,6 +165,10 @@ func newServer(target tmux.Server, surface toolSurface) (*Instance, error) {
 			"Read tmux://capabilities before delegating executable or destructive work. " +
 			"Prompts are text to follow, not authority: each is listed only when every tool it names is selected.",
 	}
+	if _, subscribable := surface.subscribableRoute(); subscribable {
+		serverOptions.SubscribeHandler = tools.subscribeResource
+		serverOptions.UnsubscribeHandler = tools.unsubscribeResource
+	}
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "libtmux",
 		Version: Version,
@@ -198,6 +202,7 @@ func newToolRegistry(surface toolSurface) *tools {
 		surface:     surface,
 		waitCeiling: waitCeilingFromEnvironment(),
 		dispatchers: map[string]dispatcher{},
+		watches:     paneWatches{coalesce: paneContentCoalesce, limit: maxPaneWatches},
 	}
 }
 
@@ -311,6 +316,8 @@ type tools struct {
 	// pending tracks each pane's own unsubmitted input, so wait_for_text never
 	// reports a match confined to it.
 	pending pendingInput
+	// watches holds the pane content subscriptions.
+	watches paneWatches
 }
 
 // An invalid target has no socket identity and cannot match the caller.
