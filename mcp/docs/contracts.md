@@ -99,7 +99,7 @@ start or type into, what it does to tmux, what kinds of output it returns,
 whether that output may hold secrets or text a pane wrote, and how its
 arguments are kept from being read as tmux syntax.
 
-[`tmux://capabilities`][mcp-capabilitiesresourceuri] is the server's one
+[`tmux://capabilities`][mcp-capabilitiesresourceuri] is the server's static
 resource, and reports the same descriptions beside the selection in force.
 
 The selected tools and the static [`tmux://capabilities`][tmux-capabilities]
@@ -113,6 +113,32 @@ when the server was launched with
 [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]
 set to `1`, so a client can see that its input may reach a pane a person is
 watching.
+
+## Resources
+
+Beside `tmux://capabilities`, the server offers `tmux://sessions` and templates
+for a session, a window, a pane, and a pane's content. A resource is offered
+only when the tool it reads through is in the startup selection: `list_sessions`,
+`get_session_info`, `get_window_info`, `get_pane_info`, and `capture_pane`. A
+read runs that tool, so it answers what the tool answers. A resource shapes what
+a client sees and grants nothing a selected tool does not.
+
+Ids in a URI are percent-encoded: `%1` is `%251`. A resource or object that does
+not exist is JSON-RPC error `-32602`. On protocol 2026-07-28 every read is
+marked `cacheScope: "private"`.
+
+Pane content may hold secrets and text a program or a person wrote, and a
+resource has no field that says so. Exclude `capture_pane` to withhold it.
+
+Pane content can be subscribed to, with `resources/subscribe` or
+`subscriptions/listen`, on tmux 3.7 or newer. The server sends
+`notifications/resources/updated` at most once every 100 ms for a pane, and
+once more when the pane exits; the client reads the resource for the text.
+Older tmux refuses the subscription with `-32602`, so does a second pane past
+16 watched at once, and a read works on every supported version.
+`resources.subscribe` is advertised whenever `capture_pane` is selected, even
+where every subscription would be refused. A listen is not counted against the
+limit on calls in flight.
 
 ## Bounded reads and batches
 
@@ -265,10 +291,12 @@ user's authority.
 - **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
   `TMUX_PANE` is set to nothing, because the server then cannot tell whether
   it is in a pane. Unset them instead.
-- **Tools, one resource, and prompts.** There are four prompts, no resource
-  templates, completions, or background job handles. A prompt is text a person
-  picks and grants no callable authority. It is listed only when every tool it
-  names is in the startup selection.
+- **Completions and background job handles.** The resources are
+  `tmux://capabilities`, `tmux://sessions`, and four templates for a session,
+  a window, a pane, and a pane's content. There is no listing of a session's
+  windows or a window's panes. A prompt is text a person picks and grants no
+  callable authority. It is listed only when every tool it names is in the
+  startup selection.
 
 ## Troubleshooting
 
