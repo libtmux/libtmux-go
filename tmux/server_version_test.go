@@ -671,13 +671,32 @@ var fakeWorkingDirectory = sync.OnceValue(func() string {
 	return directory
 })
 
+// fakeParentEnvironment stands in for the environment of the process that
+// builds a test server over a fake runner. Those servers record every request,
+// and a failing assertion prints the recording, so the real environment of
+// whoever runs the tests must never reach it: a CI job's tokens would land in
+// the log.
+func fakeParentEnvironment() []string {
+	return []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "TERM=xterm"}
+}
+
 func serverWithOptionsAndRunner(options ServerOptions, runner commandRunner) Server {
+	return serverWithParentEnvironmentAndRunner(options, fakeParentEnvironment, runner)
+}
+
+// serverWithParentEnvironmentAndRunner is serverWithOptionsAndRunner for a test
+// that needs particular variables in the environment the server snapshots.
+func serverWithParentEnvironmentAndRunner(
+	options ServerOptions,
+	environ func() []string,
+	runner commandRunner,
+) Server {
 	executable, err := os.Executable()
 	if err != nil {
 		panic(fmt.Sprintf("resolve test executable: %v", err))
 	}
 	server, err := newServer(options, serverDependencies{
-		environ: os.Environ,
+		environ: environ,
 		getwd:   func() (string, error) { return fakeWorkingDirectory(), nil },
 		resolveExecutable: func(string, []string, string) (string, error) {
 			return executable, nil
@@ -737,4 +756,39 @@ func TestExecutableVersionAcceptsOnlyItsNativePrefix(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFakeRunnerServersNeverCarryTheProcessEnvironment(t *testing.T) {
+	t.Setenv("LIBTMUX_EXAMPLE_VAR", "example-value")
+	runner := &versionQueueRunner{responses: []versionResponse{{}}}
+	pane := Pane{server: serverWithRunner(runner), sessionID: "$1", windowID: "@2", paneID: "%3"}
+	_ = pane.ChooseBuffer(t.Context())
+
+	requests := runner.recordedRequests()
+	if len(requests) == 0 {
+		t.Fatal("the fake runner recorded no request")
+	}
+	for _, want := range fakeParentEnvironment() {
+		if !slices.Contains(requests[0].Environment, want) {
+			t.Errorf("recorded environment names = %q, want the fixed test entry %q",
+				environmentNames(requests[0].Environment), environmentNames([]string{want}))
+		}
+	}
+	if slices.Contains(environmentNames(requests[0].Environment), "LIBTMUX_EXAMPLE_VAR") {
+		t.Errorf("recorded environment names = %q, want none from the test process",
+			environmentNames(requests[0].Environment))
+	}
+	printed := fmt.Sprintf("%#v %+v", requests, requests)
+	if strings.Contains(printed, "example-value") || strings.Contains(printed, "/nonexistent") {
+		t.Errorf("formatting the recorded requests printed an environment value: %s", printed)
+	}
+}
+
+func environmentNames(environment []string) []string {
+	names := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, _ := strings.Cut(entry, "=")
+		names = append(names, name)
+	}
+	return names
 }
