@@ -28,6 +28,10 @@ span modules, such as documentation, CI and release tooling, are listed here.
   (#133)
 - `Session.Run` on a `Connection` no longer leaves that buffer when its finish
   limit expires while it reads the final screen. (#133)
+- `Pane.CaptureToFile` and `Server.SaveBuffer` create a new file with mode
+  0600 instead of the umask's mode, commonly 0644, which left a pane's screen
+  readable by every local user. A file that already exists keeps its mode, and
+  a failed call removes the file it created. (#137)
 
 ### Documentation
 
