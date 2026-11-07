@@ -31,16 +31,46 @@ func (e *PlanError) Error() string {
 // Unwrap makes PlanError compatible with ErrPlan.
 func (e *PlanError) Unwrap() error { return ErrPlan }
 
-// Ref addresses an existing object or one an earlier [Plan] step will create.
-// This permits forward construction without tmux I/O. The zero Ref addresses
-// nothing and makes a targeted operation fail validation.
+// Ref addresses an existing object, the tmux server, or an object an earlier
+// [Plan] step will create. This permits forward construction without tmux I/O.
+//
+// A Ref to an existing object, such as [Window.Ref] or [PaneRef], is reusable
+// in any number of plans. A Ref a plan method returns for a step is bound to
+// the plan that returned it: a different plan refuses it before it sends
+// anything. The binding is a token the Plan carries, so a copy of a Plan
+// (a plan returned by value) keeps recognizing its own refs. Do not record
+// steps on both a plan and its copy, though: they would number the same steps
+// differently.
+//
+// A Ref from [Window.Ref] or [Pane.Ref] names the winlink or linked pane the
+// record viewed when Ref was called. A later renumbering or move of that window
+// is not followed, so build the plan from fresh records. A record that cannot
+// name its placement still yields a Ref; an operation that needs the placement
+// then refuses with a [PlanError] instead of falling back to the bare ID.
+//
+// [ServerRef] addresses the server for the operations that document a server
+// scope. The zero Ref is kept as a second spelling of it for those same
+// operations, such as [Plan.Cmd] and [Plan.SetEnvironment]; any operation that
+// needs an object refuses both with a [PlanError].
 type Ref struct {
 	// target is a concrete tmux target for an object that already exists.
 	target string
+	// placement is the exact winlink target of a [Window] record, which
+	// operations that address one linked view use in place of target.
+	placement string
+	// placementProblem is why a record could not name its placement. An
+	// operation that needs the placement refuses with it rather than address
+	// the object by id, which would act on a different link or object.
+	placementProblem string
+	// scope says whether the Ref addresses the server rather than an object.
+	scope refScope
 	// step is the one-based index of the step that creates the object, and is
 	// zero when target names one that already exists. It is one-based so that
 	// the zero Ref is not silently a reference to the first step.
 	step int
+	// owner identifies the plan whose step the Ref names, and is nil when step is
+	// zero. A copy of a Plan shares it.
+	owner *planOwner
 	// daemon is present only on refs derived from materialized records. Raw ID
 	// constructors remain selector-relative.
 	daemon *snapshotServerIdentity
@@ -49,11 +79,32 @@ type Ref struct {
 // Ref returns a [Ref] addressing the receiver.
 func (s Session) Ref() Ref { return refFor(s.sessionID.String(), s.server.daemon) }
 
-// Ref returns a [Ref] addressing the receiver.
-func (w Window) Ref() Ref { return refFor(w.windowID.String(), w.server.daemon) }
+// Ref returns a [Ref] addressing the receiver. The ref also carries the exact
+// winlink the record views, as of this call, which operations that address one linked view, such
+// as [Plan.UnlinkWindow], use.
+func (w Window) Ref() Ref {
+	ref := refFor(w.windowID.String(), w.server.daemon)
+	if placement, err := exactWindowTarget(w); err == nil {
+		ref.placement = placement
+	} else {
+		ref.placementProblem = err.Error()
+	}
+	return ref
+}
 
-// Ref returns a [Ref] addressing the receiver.
-func (p Pane) Ref() Ref { return refFor(p.paneID.String(), p.server.daemon) }
+// Ref returns a [Ref] addressing the receiver. The ref also carries the exact
+// pane target the record views, which the pane operations use as the matching
+// [Pane] methods do, so a pane in a window linked more than once is the one
+// meant.
+func (p Pane) Ref() Ref {
+	ref := refFor(p.paneID.String(), p.server.daemon)
+	if placement, err := exactPaneTarget(p); err == nil {
+		ref.placement = placement
+	} else {
+		ref.placementProblem = err.Error()
+	}
+	return ref
+}
 
 func refFor(target string, daemon *snapshotServerIdentity) Ref {
 	ref := Ref{target: target}
@@ -63,6 +114,23 @@ func refFor(target string, daemon *snapshotServerIdentity) Ref {
 	}
 	return ref
 }
+
+// refScope says what kind of thing a [Ref] without a step addresses.
+type refScope uint8
+
+const (
+	// refServer addresses the tmux server itself. The zero scope addresses the
+	// object target names, or nothing when it is empty.
+	refServer refScope = iota + 1
+)
+
+// ServerRef returns a [Ref] addressing the tmux server, for the operations that
+// document a server scope, such as [Plan.SetEnvironment] and [Plan.Cmd].
+func ServerRef() Ref { return Ref{scope: refServer} }
+
+// addressesServer reports whether the Ref names the server, by [ServerRef] or
+// as the zero Ref.
+func (r Ref) addressesServer() bool { return r == Ref{} || r.scope == refServer }
 
 // SessionRef returns a selector-relative [Ref] addressing a session by ID, for
 // a caller holding an identifier rather than a materialized record.
@@ -79,6 +147,9 @@ func PaneRef(id PaneID) Ref { return Ref{target: id.String()} }
 // String returns the target a Ref resolves to, or a placeholder naming the step
 // that will produce it.
 func (r Ref) String() string {
+	if r.scope == refServer {
+		return "{server}"
+	}
 	if r.step == 0 {
 		if r.target == "" {
 			return "{no target}"
@@ -96,7 +167,13 @@ type Op struct {
 	// source is a command's optional -s object.
 	source Ref
 	// build renders without I/O from resolved targets and the run-local context.
-	build func(target, source string, render planRenderContext) ([]string, error)
+	// It describes the command and its warnings; [Plan.render] applies the run's
+	// unsupported-feature policy to them, so no builder applies or skips it.
+	build func(target, source string, render planRenderContext) (renderedCommand, error)
+	// placementTarget and placementSource ask for the exact winlink of a
+	// [Window.Ref] rather than its window ID.
+	placementTarget bool
+	placementSource bool
 	// creates means stdout contains an ID for later Refs.
 	creates   bool
 	captures  bool
@@ -104,6 +181,34 @@ type Op struct {
 	// needsVersion requests the otherwise-avoided version probe.
 	needsVersion bool
 	layout       *SelectLayoutRequest
+}
+
+// renderedCommand is one tmux command's description: the argument vector and
+// the compatibility warnings its renderer produced. The immediate methods and
+// the [Plan] operations share it, and apply is the only way either turns it
+// into arguments to send.
+type renderedCommand struct {
+	arguments []string
+	warnings  []Warning
+}
+
+// apply returns the arguments after applying policy to the warnings: it refuses
+// under [FailUnsupported], and reports to the handler under [DegradeUnsupported].
+func (c renderedCommand) apply(policy planRenderContext) ([]string, error) {
+	if err := policy.reportUnsupported(c.warnings); err != nil {
+		return nil, err
+	}
+	return c.arguments, nil
+}
+
+// plainBuild adapts a renderer that has no compatibility warnings.
+func plainBuild(
+	build func(target, source string, render planRenderContext) ([]string, error),
+) func(string, string, planRenderContext) (renderedCommand, error) {
+	return func(target, source string, render planRenderContext) (renderedCommand, error) {
+		arguments, err := build(target, source, render)
+		return renderedCommand{arguments: arguments}, err
+	}
 }
 
 // Chainable reports whether the operation may share a tmux invocation with
@@ -123,10 +228,20 @@ func (o Op) chainable() bool { return !o.captures && !o.creates }
 // [Plan.Explain] says how it would be grouped, both without a server;
 // [Plan.Run] is the only method that reaches tmux.
 //
-// A Plan is not safe for concurrent use.
+// A Plan is not safe for concurrent use. A copy made by assignment shares the
+// owner token its Refs carry, so it accepts them; do not record steps on both,
+// since each would number its steps from the same count. [Plan.Ops] returns a
+// read-only view, not a way to rebuild a plan, so it carries no owner.
 type Plan struct {
 	ops []Op
+	// owner is the token the step Refs this plan returns carry. It is allocated
+	// with the first operation and shared by copies.
+	owner *planOwner
 }
+
+// planOwner is the identity of a plan's step refs. It holds a byte so that
+// distinct tokens have distinct addresses.
+type planOwner struct{ _ byte }
 
 // planRenderContext freezes the inputs that may change how an operation is
 // rendered. Passing it by value keeps one run's policy out of the recorded plan.
@@ -156,16 +271,58 @@ func (p *Plan) Len() int { return len(p.ops) }
 func (p *Plan) Ops() []Op { return slices.Clone(p.ops) }
 
 func (p *Plan) add(op Op) Ref {
+	if p.owner == nil {
+		p.owner = &planOwner{}
+	}
 	p.ops = append(p.ops, op)
-	return Ref{step: len(p.ops)}
+	return Ref{step: len(p.ops), owner: p.owner}
 }
 
-func (p *Plan) resolve(ref Ref, created map[int]string, step int) (string, error) {
+// checkRefs refuses a deferred Ref that another plan returned, before anything
+// is rendered or sent: its step index would otherwise resolve against this
+// plan's own steps.
+func (p *Plan) checkRefs() error {
+	for index, op := range p.ops {
+		for _, ref := range []Ref{op.target, op.source} {
+			if ref.step != 0 && ref.owner != p.owner {
+				return &PlanError{
+					Step:   index,
+					Reason: "references a step recorded by another plan",
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (p *Plan) resolve(
+	ref Ref,
+	placement bool,
+	created map[int]string,
+	step int,
+) (string, error) {
 	if ref.step == 0 {
 		if ref.target == "" {
 			return "", &PlanError{Step: step, Reason: "operation has no target"}
 		}
+		if placement && ref.placementProblem != "" {
+			return "", &PlanError{
+				Step: step,
+				Reason: fmt.Sprintf(
+					"%s names no exact placement: %s", ref.target, ref.placementProblem,
+				),
+			}
+		}
+		if placement && ref.placement != "" {
+			return ref.placement, nil
+		}
 		return ref.target, nil
+	}
+	if ref.owner != p.owner {
+		return "", &PlanError{
+			Step:   step,
+			Reason: "references a step recorded by another plan",
+		}
 	}
 	target, ok := created[ref.step-1]
 	if !ok {
@@ -191,7 +348,7 @@ func (p *Plan) render(
 	}
 	target := ""
 	if !op.untargets {
-		resolved, err := p.resolve(op.target, created, index)
+		resolved, err := p.resolve(op.target, op.placementTarget, created, index)
 		if err != nil {
 			return nil, err
 		}
@@ -199,18 +356,21 @@ func (p *Plan) render(
 	}
 	source := ""
 	if op.source != (Ref{}) {
-		resolved, err := p.resolve(op.source, created, index)
+		resolved, err := p.resolve(op.source, op.placementSource, created, index)
 		if err != nil {
 			return nil, err
 		}
 		source = resolved
 	}
-	argv, err := op.build(target, source, render)
+	command, err := op.build(target, source, render)
+	if err == nil {
+		command.arguments, err = command.apply(render)
+	}
 	if err != nil {
 		// Add the step here while preserving the request builder's typed error.
 		return nil, fmt.Errorf("step %d: %s: %w", index, op.name, err)
 	}
-	return argv, nil
+	return command.arguments, nil
 }
 
 func targetedArguments(command, target string, rest ...string) ([]string, error) {
@@ -340,14 +500,24 @@ func (p *Plan) ExplainWith(planner Planner) []Dispatch {
 // anything, for the tmux version given.
 //
 // An entry is nil when it references an object an earlier step has not created.
+// Such an operation is still rendered against a placeholder target and checked,
+// so a request tmux of that version would refuse, or an unsupported flag under
+// the default fail policy, is an error here too; only its arguments are left
+// out, because they depend on an ID that does not exist yet.
 //
-// Other render failures return the entries completed before the error. Preview
+// Render failures return the entries completed before the error. Preview
 // catches them before a non-atomic run can partially mutate tmux.
 func (p *Plan) Preview(version Version) ([][]string, error) {
+	if err := p.checkRefs(); err != nil {
+		return nil, err
+	}
 	render := planRenderContext{version: version, layoutVersion: version}
 	rendered := make([][]string, len(p.ops))
 	for index := range p.ops {
 		if p.awaitsEarlierStep(index) {
+			if _, err := p.render(index, p.placeholders(), render); err != nil {
+				return rendered, err
+			}
 			continue
 		}
 		argv, err := p.render(index, nil, render)
@@ -357,6 +527,34 @@ func (p *Plan) Preview(version Version) ([][]string, error) {
 		rendered[index] = argv
 	}
 	return rendered, nil
+}
+
+// placeholders names every step's would-be object, so an operation that targets
+// a step can be rendered and checked before the step has run. The names are
+// never sent.
+func (p *Plan) placeholders() map[int]string {
+	created := make(map[int]string, len(p.ops))
+	for index := range p.ops {
+		created[index] = "{step " + strconv.Itoa(index) + "}"
+	}
+	return created
+}
+
+// checkBeforeDispatch renders every operation once, against placeholder targets
+// for the steps that create them, with the run's unsupported policy but no
+// warning handler. Everything this package can refuse before tmux has run is
+// refused here, so a plan never fails after it has already changed tmux; each
+// warning then reaches the handler once, when its operation is rendered to be
+// sent.
+func (p *Plan) checkBeforeDispatch(render planRenderContext) error {
+	render.warningHandler = nil
+	created := p.placeholders()
+	for index := range p.ops {
+		if _, err := p.render(index, created, render); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (p *Plan) awaitsEarlierStep(index int) bool {
@@ -475,6 +673,9 @@ func (p *Plan) RunWith(
 	if len(p.ops) == 0 {
 		return PlanResult{Ops: results}, nil
 	}
+	if err := p.checkRefs(); err != nil {
+		return PlanResult{Ops: results}, err
+	}
 	expected, err := p.expectedDaemon()
 	if err != nil {
 		return PlanResult{Ops: results}, err
@@ -504,6 +705,10 @@ func (p *Plan) RunWith(
 
 	dispatches := planner.Plan(p.Ops())
 	if err := p.checkGrouping(dispatches); err != nil {
+		return PlanResult{Ops: results}, err
+	}
+
+	if err := p.checkBeforeDispatch(render); err != nil {
 		return PlanResult{Ops: results}, err
 	}
 
@@ -751,8 +956,8 @@ func rawOp(target Ref, captures bool, args []string) Op {
 		name:      name,
 		target:    target,
 		captures:  captures,
-		untargets: target == Ref{},
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		untargets: target.addressesServer(),
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if len(arguments) == 0 {
 				return nil, ErrMissingSubcommand
 			}
@@ -760,6 +965,6 @@ func rawOp(target Ref, captures bool, args []string) Op {
 				return untargetedArguments(arguments[0], arguments[1:]...)
 			}
 			return targetedArguments(arguments[0], resolved, arguments[1:]...)
-		},
+		}),
 	}
 }

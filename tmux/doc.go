@@ -123,9 +123,12 @@
 //
 // A mutation reports a completed failure from what tmux wrote to stderr, not
 // from its exit status: tmux exits nonzero for a target that was already in
-// the state asked for, and saying nothing is how it says so. A command tmux
-// refused for a target it could not find matches [ErrNotFound], as does a
-// lookup that found nothing.
+// the state asked for, and saying nothing is how it says so. Commands that
+// print, such as [Pane.Capture], follow the same rule: stderr is the error and
+// a bare nonzero exit returns what was printed. The attach family, such as
+// [Server.AttachSession], is the exception: it reports a completed nonzero exit
+// as [CommandError]. A command tmux refused for a target it could not find
+// matches [ErrNotFound], as does a lookup that found nothing.
 //
 // Reads use a bool for legitimate absence. A materialized read returns
 // (T, bool). A live read of a setting that may be unset, [Server.RawOption]
@@ -189,6 +192,8 @@
 // [Plan] records commands and groups those whose results tmux can still
 // attribute safely. A [Ref] can target an object that an earlier plan step will
 // create. [Plan.Preview] performs no I/O, and [Plan.Explain] reports grouping.
+// [Plan.Run] checks every step, including the unsupported-feature policy,
+// before it sends the first.
 //
 // Plans are not transactions. tmux stops a command list at its first failure,
 // after earlier commands may have changed state. Commands that print caller-used
@@ -208,10 +213,21 @@
 // [SetArrayResult] with confirmed progress. Callers must serialize writes to
 // the same target and option.
 //
-// [WarningHandler] receives compatibility warnings synchronously and may be
-// called by concurrent server operations. Immutable values, snapshots, and
-// returned copies support concurrent reads; no broader goroutine-safety
-// guarantee is implied.
+// # Concurrency
+//
+// A [Server] and the values derived from it are safe for concurrent method
+// calls. A Server is immutable, and the state copies share, the version cache
+// and the last checked daemon identity, is guarded by a mutex; each command is
+// its own process or its own connection lane. Records, snapshots, and returned
+// copies are immutable. [WarningHandler] and the observer are called
+// synchronously by whichever operation produced the event, so concurrent
+// operations call them concurrently and they must synchronize shared state.
+//
+// The package does not order concurrent changes to one tmux object: tmux does,
+// and operations made of several commands, such as replacing an option array,
+// are not atomic, so callers must serialize those on the same target. Request
+// values with pointer or map fields must not be mutated while a call is using
+// them, and a [Plan] is not safe for concurrent use.
 //
 // # Compatibility and stability
 //

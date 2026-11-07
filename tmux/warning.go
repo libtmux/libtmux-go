@@ -113,6 +113,19 @@ func newCommandStderrWarning(subcommand string, stderr []string) Warning {
 	}
 }
 
+// policy returns the unsupported-feature policy this server applies, in the
+// form a [Plan] run carries, so the immediate methods and plans share one
+// implementation of it.
+func (s Server) policy() planRenderContext {
+	if s.state == nil {
+		return planRenderContext{unsupported: FailUnsupported}
+	}
+	return planRenderContext{
+		unsupported:    s.state.config.unsupported,
+		warningHandler: s.state.config.warningHandler,
+	}
+}
+
 // unsupportedFeature either refuses or warns before the caller omits its flag.
 func (s Server) unsupportedFeature(
 	subcommand string,
@@ -120,16 +133,9 @@ func (s Server) unsupportedFeature(
 	current Version,
 	required Version,
 ) error {
-	if s.state == nil || s.state.config.unsupported == FailUnsupported {
-		return &VersionTooLowError{
-			Current:    current,
-			Minimum:    required,
-			Subcommand: subcommand,
-			Feature:    feature,
-		}
-	}
-	s.warn(newUnsupportedFeatureWarning(subcommand, feature, current, required))
-	return nil
+	return s.reportUnsupported([]Warning{
+		newUnsupportedFeatureWarning(subcommand, feature, current, required),
+	})
 }
 
 func newUnsupportedFeatureWarning(
@@ -156,26 +162,12 @@ func newUnsupportedFeatureWarning(
 
 // reportUnsupported applies the server's policy to renderer warnings.
 func (s Server) reportUnsupported(warnings []Warning) error {
-	for _, warning := range warnings {
-		if warning.Kind != WarningUnsupportedFeature {
-			s.warn(warning)
-			continue
-		}
-		if err := s.unsupportedFeature(
-			warning.Subcommand,
-			warning.Feature,
-			warning.CurrentVersion,
-			warning.RequiredVersion,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.policy().reportUnsupported(warnings)
 }
 
-// reportUnsupported applies one run's policy to the warnings an operation's
-// renderer produced. It mirrors the [Server] method so a planned operation
-// refuses or reports exactly what the same request does when issued directly.
+// reportUnsupported applies one policy to the warnings an operation's renderer
+// produced. It is the only implementation: a [Server] method and a planned
+// operation refuse or report exactly the same way.
 func (c planRenderContext) reportUnsupported(warnings []Warning) error {
 	for _, warning := range warnings {
 		if warning.Kind != WarningUnsupportedFeature {

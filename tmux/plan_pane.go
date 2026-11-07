@@ -15,19 +15,13 @@ package tmux
 func (p *Plan) SplitPane(target Ref, request SplitPaneRequest) Ref {
 	request = captureSplitPaneRequest(request)
 	return p.add(Op{
-		name:         "split-window",
-		target:       target,
-		creates:      true,
-		needsVersion: splitPaneRequiresVersion(request),
-		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
-			arguments, warnings, err := splitPaneArguments(resolved, request, render.version)
-			if err != nil {
-				return nil, err
-			}
-			if err := render.reportUnsupported(warnings); err != nil {
-				return nil, err
-			}
-			return arguments, nil
+		name:            "split-window",
+		target:          target,
+		placementTarget: true,
+		creates:         true,
+		needsVersion:    splitPaneRequiresVersion(request),
+		build: func(resolved, _ string, render planRenderContext) (renderedCommand, error) {
+			return splitPaneCommand(resolved, request, render.version)
 		},
 	})
 }
@@ -42,21 +36,22 @@ func (p *Plan) SplitPane(target Ref, request SplitPaneRequest) Ref {
 func (p *Plan) SendKeys(target Ref, request SendKeysRequest) {
 	request = captureSendKeysRequest(request)
 	p.add(Op{
-		name:         "send-keys",
-		target:       target,
-		needsVersion: sendKeysRequiresVersion(request),
-		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
-			arguments, _, err := sendKeysArguments(resolved, request, render.version)
-			return arguments, err
+		name:            "send-keys",
+		target:          target,
+		placementTarget: true,
+		needsVersion:    sendKeysRequiresVersion(request),
+		build: func(resolved, _ string, render planRenderContext) (renderedCommand, error) {
+			return sendKeysCommand(resolved, request, render.version)
 		},
 	})
 	if sendKeysNeedsEnter(request) {
 		p.add(Op{
-			name:   "send-keys",
-			target: target,
-			build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+			name:            "send-keys",
+			target:          target,
+			placementTarget: true,
+			build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 				return enterArguments(resolved)
-			},
+			}),
 		})
 	}
 }
@@ -68,27 +63,29 @@ func (p *Plan) SendKeys(target Ref, request SendKeysRequest) {
 // It runs alone because command-list stdout has no operation boundaries.
 func (p *Plan) DisplayMessage(target Ref, format string) {
 	p.add(Op{
-		name:      "display-message",
-		target:    target,
-		captures:  true,
-		untargets: target == Ref{},
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "display-message",
+		target:          target,
+		placementTarget: true,
+		captures:        true,
+		untargets:       target.addressesServer(),
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if resolved == "" {
 				return untargetedArguments("display-message", "-p", "--", format)
 			}
 			return targetedArguments("display-message", resolved, "-p", "--", format)
-		},
+		}),
 	})
 }
 
 // KillPane records the destruction of the pane target names.
 func (p *Plan) KillPane(target Ref) {
 	p.add(Op{
-		name:   "kill-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "kill-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-pane", resolved)
-		},
+		}),
 	})
 }
 
@@ -96,56 +93,60 @@ func (p *Plan) KillPane(target Ref) {
 // the pane target names, except that pane.
 func (p *Plan) KillOtherPanes(target Ref) {
 	p.add(Op{
-		name:   "kill-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "kill-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-pane", resolved, "-a")
-		},
+		}),
 	})
 }
 
 // SelectPane records a selection or marking of the pane target names.
 func (p *Plan) SelectPane(target Ref, request PaneSelectRequest) {
 	p.add(Op{
-		name:   "select-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "select-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return paneSelectArguments(resolved, request)
-		},
+		}),
 	})
 }
 
 // ResizePane records a resize of the pane target names.
 func (p *Plan) ResizePane(target Ref, request ResizePaneRequest) {
 	p.add(Op{
-		name:   "resize-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "resize-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return resizePaneArguments(resolved, request)
-		},
+		}),
 	})
 }
 
 // SetPaneTitle records a title for the pane target names.
 func (p *Plan) SetPaneTitle(target Ref, title string) {
 	p.add(Op{
-		name:   "select-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "select-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("select-pane", resolved, "-T", title)
-		},
+		}),
 	})
 }
 
 // ClearHistory records the clearing of the scrollback of the pane target names.
 func (p *Plan) ClearHistory(target Ref, request ClearHistoryRequest) {
 	p.add(Op{
-		name:         "clear-history",
-		target:       target,
-		needsVersion: request.ResetHyperlinks,
-		build: func(resolved, _ string, render planRenderContext) ([]string, error) {
-			arguments, _, err := clearHistoryArguments(resolved, request, render.version)
-			return arguments, err
+		name:            "clear-history",
+		target:          target,
+		placementTarget: true,
+		needsVersion:    request.ResetHyperlinks,
+		build: func(resolved, _ string, render planRenderContext) (renderedCommand, error) {
+			return clearHistoryCommand(resolved, request, render.version)
 		},
 	})
 }
@@ -153,11 +154,12 @@ func (p *Plan) ClearHistory(target Ref, request ClearHistoryRequest) {
 // SendPrefix records tmux's prefix key sent to the pane target names.
 func (p *Plan) SendPrefix(target Ref, key PrefixKey) {
 	p.add(Op{
-		name:   "send-prefix",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "send-prefix",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return sendPrefixArguments(resolved, key)
-		},
+		}),
 	})
 }
 
@@ -165,22 +167,24 @@ func (p *Plan) SendPrefix(target Ref, key PrefixKey) {
 // command.
 func (p *Plan) PipePane(target Ref, request PipePaneRequest) {
 	p.add(Op{
-		name:   "pipe-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "pipe-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return pipePaneArguments(resolved, request)
-		},
+		}),
 	})
 }
 
 // RespawnPane records the pane target names being restarted with a new command.
 func (p *Plan) RespawnPane(target Ref, request RespawnRequest) {
 	p.add(Op{
-		name:   "respawn-pane",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:            "respawn-pane",
+		target:          target,
+		placementTarget: true,
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return respawnArguments("respawn-pane", resolved, request)
-		},
+		}),
 	})
 }
 
@@ -190,10 +194,12 @@ func (p *Plan) RespawnPane(target Ref, request RespawnRequest) {
 // active selection alone; KeepZoom preserves a zoomed window.
 func (p *Plan) SwapPane(target, source Ref, detach, keepZoom bool) {
 	p.add(Op{
-		name:   "swap-pane",
-		target: target,
-		source: source,
-		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
+		name:            "swap-pane",
+		target:          target,
+		placementTarget: true,
+		source:          source,
+		placementSource: true,
+		build: plainBuild(func(resolved, from string, _ planRenderContext) ([]string, error) {
 			arguments, err := targetedArguments("swap-pane", resolved, "-s", from)
 			if err != nil {
 				return nil, err
@@ -205,7 +211,7 @@ func (p *Plan) SwapPane(target, source Ref, detach, keepZoom bool) {
 				arguments = append(arguments, "-Z")
 			}
 			return arguments, nil
-		},
+		}),
 	})
 }
 
@@ -215,12 +221,14 @@ func (p *Plan) SwapPane(target, source Ref, detach, keepZoom bool) {
 // Horizontal splits left and right; Detach leaves active selection alone.
 func (p *Plan) JoinPane(target, source Ref, horizontal, detach bool) {
 	p.add(Op{
-		name:   "join-pane",
-		target: target,
-		source: source,
-		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
+		name:            "join-pane",
+		target:          target,
+		placementTarget: true,
+		source:          source,
+		placementSource: true,
+		build: plainBuild(func(resolved, from string, _ planRenderContext) ([]string, error) {
 			return joinPaneArguments("join-pane", resolved, from, horizontal, detach)
-		},
+		}),
 	})
 }
 
@@ -228,12 +236,14 @@ func (p *Plan) JoinPane(target, source Ref, horizontal, detach bool) {
 // names without joining it to that pane's layout.
 func (p *Plan) MovePane(target, source Ref, horizontal, detach bool) {
 	p.add(Op{
-		name:   "move-pane",
-		target: target,
-		source: source,
-		build: func(resolved, from string, _ planRenderContext) ([]string, error) {
+		name:            "move-pane",
+		target:          target,
+		placementTarget: true,
+		source:          source,
+		placementSource: true,
+		build: plainBuild(func(resolved, from string, _ planRenderContext) ([]string, error) {
 			return joinPaneArguments("move-pane", resolved, from, horizontal, detach)
-		},
+		}),
 	})
 }
 

@@ -12,8 +12,9 @@ import (
 
 // Server is an immutable handle to one tmux configuration. Its zero value
 // is invalid. Copying a configured Server preserves its configuration and
-// shares version-cache coordination; only the documented concurrent operations
-// are safe to share.
+// shares its mutex-guarded version cache and checked daemon identity, so a
+// Server and the values derived from it are safe for concurrent method calls
+// (see the package documentation).
 //
 // [NewServer] resolves the executable, socket, and environment once and does
 // not start tmux; creating the first session starts the daemon.

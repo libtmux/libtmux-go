@@ -303,3 +303,74 @@ func mustCaptureVersion(t *testing.T, raw string) Version {
 	}
 	return version
 }
+
+// The immediate unsupported-feature route is the plan route: a zero-state
+// Server refuses, FailUnsupported refuses, DegradeUnsupported reports once to
+// the handler (and is silent without one), and non-capability warnings pass to
+// the handler under either policy.
+func TestUnsupportedFeatureHonorsEveryPolicy(t *testing.T) {
+	t.Parallel()
+
+	current, required := mustParseVersion(t, "3.3"), mustParseVersion(t, "3.4")
+	call := func(server Server) error {
+		return server.unsupportedFeature("send-keys", "key_name", current, required)
+	}
+	wantRefusal := func(t *testing.T, err error) {
+		t.Helper()
+		tooLow, ok := errors.AsType[*VersionTooLowError](err)
+		if !ok || tooLow.Feature != "key_name" || tooLow.Subcommand != "send-keys" ||
+			tooLow.Current != current || tooLow.Minimum != required {
+			t.Fatalf("error = %v, want the VersionTooLowError for key_name", err)
+		}
+	}
+
+	t.Run("zero state refuses", func(t *testing.T) {
+		t.Parallel()
+
+		wantRefusal(t, call(Server{}))
+		if err := (Server{}).reportUnsupported([]Warning{{Kind: WarningCommandStderr}}); err != nil {
+			t.Fatalf("reportUnsupported() error = %v, want nil for a non-capability warning", err)
+		}
+	})
+	t.Run("fail refuses and stays silent", func(t *testing.T) {
+		t.Parallel()
+
+		var got []Warning
+		server := serverWithOptionsAndRunner(ServerOptions{
+			Unsupported:    FailUnsupported,
+			WarningHandler: func(w Warning) { got = append(got, w) },
+		}, &versionQueueRunner{})
+		wantRefusal(t, call(server))
+		if len(got) != 0 {
+			t.Fatalf("warnings = %#v, want none when refusing", got)
+		}
+	})
+	t.Run("degrade reports once", func(t *testing.T) {
+		t.Parallel()
+
+		var got []Warning
+		server := serverWithOptionsAndRunner(ServerOptions{
+			Unsupported:    DegradeUnsupported,
+			WarningHandler: func(w Warning) { got = append(got, w) },
+		}, &versionQueueRunner{})
+		if err := call(server); err != nil {
+			t.Fatalf("error = %v, want nil under degrade", err)
+		}
+		if len(got) != 1 || got[0].Kind != WarningUnsupportedFeature || got[0].Feature != "key_name" ||
+			got[0].CurrentVersion != current || got[0].RequiredVersion != required {
+			t.Fatalf("warnings = %#v, want one unsupported-feature warning", got)
+		}
+		stderr := Warning{Kind: WarningCommandStderr, Message: "x"}
+		if err := server.reportUnsupported([]Warning{stderr}); err != nil || len(got) != 2 || got[1] != stderr {
+			t.Fatalf("stderr warning not passed through: err=%v got=%#v", err, got)
+		}
+	})
+	t.Run("degrade without handler is silent", func(t *testing.T) {
+		t.Parallel()
+
+		server := serverWithOptionsAndRunner(ServerOptions{Unsupported: DegradeUnsupported}, &versionQueueRunner{})
+		if err := call(server); err != nil {
+			t.Fatalf("error = %v, want nil", err)
+		}
+	})
+}
