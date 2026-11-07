@@ -281,8 +281,10 @@ func TestShowBufferBytesFailureDoesNotReturnData(t *testing.T) {
 }
 
 func TestServerBufferPathsExpandAndRejectStdinBeforeExecution(t *testing.T) {
-	t.Parallel()
-
+	// SaveBuffer makes the file it saves to before tmux runs, so a "~" path
+	// must expand into a home directory the test owns.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
