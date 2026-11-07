@@ -3,7 +3,7 @@ module github.com/libtmux/libtmux-go/mcp
 go 1.26.0
 
 require (
-	github.com/libtmux/libtmux-go v0.1.2
+	github.com/libtmux/libtmux-go v0.1.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 )
 
