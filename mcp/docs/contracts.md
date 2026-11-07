@@ -107,7 +107,8 @@ resource come from one native manifest, so each tool carries the same
 capability row the resource reports.
 
 The resource also reports its schema version, frozen surface, effective names,
-connection provenance, and common trust boundary. `allowAttendedInput` is true
+the listed prompts with the tools each names, connection provenance, and common
+trust boundary. `allowAttendedInput` is true
 when the server was launched with
 [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]
 set to `1`, so a client can see that its input may reach a pane a person is
@@ -264,8 +265,10 @@ user's authority.
 - **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
   `TMUX_PANE` is set to nothing, because the server then cannot tell whether
   it is in a pane. Unset them instead.
-- **Nothing but tools.** There is one resource, and no prompts, resource
-  templates, completions, or background job handles.
+- **Tools, one resource, and prompts.** There are four prompts, no resource
+  templates, completions, or background job handles. A prompt is text a person
+  picks and grants no callable authority. It is listed only when every tool it
+  names is in the startup selection.
 
 ## Troubleshooting
 

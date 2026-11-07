@@ -11,7 +11,9 @@
 //
 // Every registered tool comes from one immutable native manifest that also
 // drives startup selection, schemas, annotations, disclosure metadata, and the
-// static tmux://capabilities resource.
+// static tmux://capabilities resource. Four prompts come from a manifest of
+// their own: a prompt is text a person picks, grants no callable authority, and
+// is listed only when every tool it names is in the startup selection.
 //
 // # Selection
 //

@@ -184,6 +184,16 @@ func reportTools(target tmux.Server) error {
 		fmt.Printf("  %-28s %-10s %-20s %s\n",
 			tool.Name, toolset, reach, firstSentence(summary))
 	}
+	prompts, err := tmuxmcp.AdvertisedPrompts()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n%d prompts, each listed because every tool it names is selected\n\n", len(prompts))
+	for _, prompt := range prompts {
+		row, _ := prompt.Meta[tmuxmcp.PromptMetaKey].(map[string]any)
+		required, _ := row["requiresTools"].([]string)
+		fmt.Printf("  %-28s %s\n", prompt.Name, strings.Join(required, ", "))
+	}
 	return nil
 }
 

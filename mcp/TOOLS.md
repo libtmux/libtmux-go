@@ -23,9 +23,16 @@ The same row appears on that tool at
 descriptions, annotations, nested batch authority, this reference, and the
 resource all come from the same native manifest.
 
-There are no dynamic resources, prompts, resource subscriptions, or completion
-routes. Topology and pane output are tools so the startup selection governs
-every callable operation in one place.
+There are no dynamic resources, resource subscriptions, or completion routes.
+Topology and pane output are tools so the startup selection governs every
+callable operation in one place.
+
+Four prompts (`run_and_wait`, `diagnose_failing_pane`, `interrupt_gracefully`,
+and `build_dev_workspace`) are text a client offers for a person to pick. A
+prompt calls nothing and grants no callable authority. The server lists it only
+when every tool it names is in the startup selection, and
+[Prompts](#prompts) below is generated from the same manifest rows that
+`tmux://capabilities` reports.
 
 ## Tools
 
@@ -596,10 +603,10 @@ through `get_recipe`.
 | `pipe_pane` | no shell-command pipe route; use bounded capture/wait tools |
 | `kill_server` | no server-wide teardown route; kill selected sessions explicitly or administer tmux outside MCP |
 
-The old prompt routes, dynamic resources, generic setters, background jobs,
+The `get_recipe` route, dynamic resources, generic setters, background jobs,
 buffer namespace, pipe route, and broad batch families remain absent from MCP
 registration and dispatch. The prompt workflows above remain available as
-typed-tool guidance. Internal helpers survive only where a retained tool uses
+typed-tool guidance, and the four native prompts are separate from that route. Internal helpers survive only where a retained tool uses
 them.
 
 ## Every tool
@@ -2061,5 +2068,52 @@ Reads only (effect `observe`). Repeating it changes nothing.
 | `timeoutClamped` | boolean |
 | `truncatedBytes` | integer |
 | `truncatedLines` | integer |
+
+## Prompts
+
+4 prompts. Each is listed only when every tool it names is in the startup selection, and calls nothing itself.
+
+### `run_and_wait`
+
+Run one shell command in a pane, wait for it to finish, and read its exit status.
+
+Names `run_shell_command`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `command` **required** | string | the shell command to run |
+| `pane_id` **required** | string | the target pane, such as %1 |
+| `timeout` | string | seconds to wait for completion; defaults to 60 |
+
+### `diagnose_failing_pane`
+
+Gather pane context and propose a root-cause hypothesis without running anything.
+
+Names `snapshot_pane`, `capture_since`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `pane_id` **required** | string | the pane to diagnose, such as %1 |
+
+### `interrupt_gracefully`
+
+Send C-c to a pane and verify the shell prompt came back.
+
+Names `get_pane_info`, `send_keys`, `wait_for_text`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `pane_id` **required** | string | the target pane, such as %1 |
+
+### `build_dev_workspace`
+
+Create a three-pane session: editor on top, shell bottom-left, logs bottom-right.
+
+Names `create_session`, `list_panes`, `split_window`, `send_keys`.
+
+| Argument | Type | |
+| --- | --- | --- |
+| `session_name` **required** | string | name for the new session |
+| `log_command` | string | command for the logs pane; defaults to watch -n 1 date |
 
 <!-- toolsref:end -->

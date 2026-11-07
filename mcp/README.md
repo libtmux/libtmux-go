@@ -399,7 +399,8 @@ $ libtmux-mcp -tools
 ```
 
 It prints the tools the server would advertise: each one's toolset, which
-processes it can reach, and a sentence on what it does. Give it the flags and
+processes it can reach, and a sentence on what it does. Below them it prints
+the prompts the same selection lists, each with the tools it names. Give it the flags and
 environment the client gives the server, because they decide the listing.
 
 ### [`tmux://capabilities`][mcp-capabilitiesresourceuri]: what each tool says about itself
@@ -631,8 +632,10 @@ It serves one tmux server over stdin and stdout. Reference:
 
 - **A second tmux server.** The server serves one tmux server for the life of
   the process, and a client cannot name another socket in a call.
-- **Anything but tools.** There is one resource, and no prompts, resource
-  templates, completions, or background job handles.
+- **Anything but tools, one resource, and four prompts.** There are no resource
+  templates, completions, or background job handles. A prompt is text a person
+  picks and grants no callable authority; the server lists it only when every
+  tool it names is selected.
 - **Confinement.** Toolsets shape what a client is offered. Every call runs
   with your user's authority, so a client holding [`send_keys`][send_keys] can
   run anything you can.
