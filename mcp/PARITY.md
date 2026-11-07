@@ -21,14 +21,15 @@ same raw client; invalid calls were sent rather than inferred from schemas.
 | Arguments published with `enum` | 7 | 3 |
 | Described argument fields | 103 | 287 |
 | Collections published as null-or-array | 0 | 0 |
-| Prompts | 0 | 4 |
+| Prompts | 4 | 4 |
 | Listed resources, and templates | 1 and 0 | 0 and 6 |
-| Server-instruction characters | 144 | 1,847 |
+| Server-instruction characters | 245 | 1,847 |
 
-The Go handshake declares logging, resources, and tools. The Python handshake
-also declares prompts, experimental data, and UI extensions. Both declare
-`listChanged` for tools. Go declares it for its one static resource; Python's
-resource capability reports neither subscriptions nor changing lists.
+The Go handshake declares logging, prompts, resources, and tools. The Python
+handshake also declares experimental data and UI extensions. Both declare
+`listChanged` for tools. Go declares it for its prompts and its one static
+resource; Python's resource capability reports neither subscriptions nor
+changing lists.
 
 The Go tool list is generated from one native manifest and grouped into the
 shared `inspect`, `manage`, `execute`, and `teardown` toolsets; [`TOOLS.md`](TOOLS.md)
@@ -202,10 +203,17 @@ Python publishes four prompts: `build_dev_workspace`,
 resource templates also make the tmux hierarchy discoverable through resource
 pickers, and its longer server instructions carry operating context.
 
-Go publishes no prompt or completion route. It keeps recipes in
-[TOOLS.md](TOOLS.md), whose generated reference comes from the same schemas and
-capability rows as `tools/list`. This trades protocol-level discovery helpers
-for a smaller startup surface and documentation that can be checked for drift.
+Go publishes the same four prompts under the same names, and no completion
+route. Python's `run_command` is `run_shell_command` here, and
+`build_dev_workspace` reads the new pane from `list_panes` because
+`create_session` returns no pane id. A prompt is text a person picks. It grants
+no callable authority, and the server lists it only when every tool it names is
+in the startup selection, so `LIBTMUX_TOOLSETS=inspect` lists
+`diagnose_failing_pane` alone. Prompt arguments keep Python's snake_case names.
+
+The recipes also stay in [TOOLS.md](TOOLS.md), whose generated reference comes
+from the same schemas and capability rows as `tools/list` and lists the prompts
+beside them, so the documentation can be checked for drift.
 
 The static capability resource gives a Go client the effective toolsets, socket
 boundary, provenance, selection inputs, and complete per-tool rows. It does not

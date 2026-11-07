@@ -23,9 +23,16 @@ The same row appears on that tool at
 descriptions, annotations, nested batch authority, this reference, and the
 resource all come from the same native manifest.
 
-There are no dynamic resources, prompts, resource subscriptions, or completion
-routes. Topology and pane output are tools so the startup selection governs
-every callable operation in one place.
+There are no dynamic resources, resource subscriptions, or completion routes.
+Topology and pane output are tools so the startup selection governs every
+callable operation in one place.
+
+Four prompts (`run_and_wait`, `diagnose_failing_pane`, `interrupt_gracefully`,
+and `build_dev_workspace`) are text a client offers for a person to pick. A
+prompt calls nothing and grants no callable authority. The server lists it only
+when every tool it names is in the startup selection, and
+[Prompts](#prompts) below is generated from the same manifest rows that
+`tmux://capabilities` reports.
 
 ## Tools
 
@@ -596,10 +603,10 @@ through `get_recipe`.
 | `pipe_pane` | no shell-command pipe route; use bounded capture/wait tools |
 | `kill_server` | no server-wide teardown route; kill selected sessions explicitly or administer tmux outside MCP |
 
-The old prompt routes, dynamic resources, generic setters, background jobs,
+The `get_recipe` route, dynamic resources, generic setters, background jobs,
 buffer namespace, pipe route, and broad batch families remain absent from MCP
 registration and dispatch. The prompt workflows above remain available as
-typed-tool guidance. Internal helpers survive only where a retained tool uses
+typed-tool guidance, and the four native prompts are separate from that route. Internal helpers survive only where a retained tool uses
 them.
 
 ## Every tool
