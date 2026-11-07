@@ -3,6 +3,8 @@ package tmux
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -171,6 +173,14 @@ func (s Server) DeleteBuffer(ctx context.Context, name *string) error {
 // changes that file. Exact "-" is rejected because it names tmux's stdout
 // rather than a path; [Server.SaveBufferTo] streams to an [io.Writer], and
 // this method is the one that runs over a [Connection].
+//
+// A file this call creates has mode 0600, whatever the umask: the buffer may
+// hold a pane's screen or other secrets. A file that already exists keeps its
+// mode and is truncated, or appended to when request.Append is set. A relative
+// Path is made, and written by tmux, in the working directory this Server was
+// built in. If the save fails, the file this call created is removed, except
+// when ctx ended first, because cancellation does not prove tmux did not write
+// it.
 func (s Server) SaveBuffer(ctx context.Context, request SaveBufferRequest) error {
 	if err := validateBufferName("save-buffer", request.Name); err != nil {
 		return err
@@ -187,8 +197,51 @@ func (s Server) SaveBuffer(ctx context.Context, request SaveBufferRequest) error
 		arguments = append(arguments, "-b", *request.Name)
 	}
 	arguments = append(arguments, "--", path)
+	created := s.createPrivateFile(path)
 	result, err := s.literalCmd(ctx, arguments...)
-	return requireServerCommandNoStderr("save-buffer", result, err)
+	err = requireServerCommandNoStderr("save-buffer", result, err)
+	if err != nil {
+		discardCreatedFile(ctx, created)
+	}
+	return err
+}
+
+// createPrivateFile makes the file tmux is about to write, with mode 0600, and
+// returns its path so the caller can remove it if the write fails. tmux creates
+// a missing file with the umask of the process that opens it, commonly 0644,
+// and keeps the mode of a file that exists, so making the file first is what
+// keeps a pane's screen from other users. It returns "" when the file already
+// exists, which keeps its mode, and when it cannot be made, which leaves tmux
+// to report its own error for the same path. A relative path is resolved
+// against the directory tmux is started in.
+func (s Server) createPrivateFile(path string) string {
+	if !filepath.IsAbs(path) {
+		if s.state == nil || s.state.config.directory == "" {
+			return ""
+		}
+		directory := s.state.config.directory
+		if !os.IsPathSeparator(directory[len(directory)-1]) {
+			directory += string(os.PathSeparator)
+		}
+		path = directory + path
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return ""
+	}
+	_ = file.Close()
+	return path
+}
+
+// discardCreatedFile removes a file createPrivateFile made once the write it was
+// made for failed. It leaves the file when ctx has ended, since tmux may yet
+// write it, and an empty file that only its owner can read is the safe thing to
+// leave.
+func discardCreatedFile(ctx context.Context, created string) {
+	if created == "" || ctx.Err() != nil {
+		return
+	}
+	_ = os.Remove(created)
 }
 
 // LoadBuffer reads a file into a named or newly allocated buffer. Path follows

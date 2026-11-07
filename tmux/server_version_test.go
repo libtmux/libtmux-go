@@ -659,6 +659,18 @@ func mustNewServer(options ServerOptions) Server {
 	return server
 }
 
+// fakeWorkingDirectory is where a test server over a fake runner believes it
+// runs. SaveBuffer and CaptureToFile create the file they are about to hand tmux
+// before the runner sees the command, so a relative path in such a test must land
+// in a directory the suite removes, not in the package directory.
+var fakeWorkingDirectory = sync.OnceValue(func() string {
+	directory, err := os.MkdirTemp("", "libtmux-go-fake-cwd-")
+	if err != nil {
+		panic(fmt.Sprintf("create fake working directory: %v", err))
+	}
+	return directory
+})
+
 func serverWithOptionsAndRunner(options ServerOptions, runner commandRunner) Server {
 	executable, err := os.Executable()
 	if err != nil {
@@ -666,7 +678,7 @@ func serverWithOptionsAndRunner(options ServerOptions, runner commandRunner) Ser
 	}
 	server, err := newServer(options, serverDependencies{
 		environ: os.Environ,
-		getwd:   os.Getwd,
+		getwd:   func() (string, error) { return fakeWorkingDirectory(), nil },
 		resolveExecutable: func(string, []string, string) (string, error) {
 			return executable, nil
 		},

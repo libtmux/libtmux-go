@@ -173,7 +173,11 @@ var captureFileSequence atomic.Uint64
 // connection's command lanes.
 //
 // path must name a file the tmux server can write and this process can read.
-// It is replaced and left for the caller. Concurrent calls must use distinct
+// It is replaced and left for the caller. A file this call creates has mode
+// 0600, whatever the umask, because the screen it holds may be secret; a file
+// that already exists keeps its mode. A relative path is made in the working
+// directory p's Server was built in. If the capture fails, the file this call
+// created is removed, except when ctx ended first. Concurrent calls must use distinct
 // paths. The scratch tmux buffer is staged, saved, and deleted in one tmux
 // command list, so a cancellation cannot land between those steps.
 //
@@ -196,7 +200,7 @@ func (p Pane) CaptureToFile(
 	ctx context.Context,
 	path string,
 	request CapturePaneRequest,
-) ([]string, error) {
+) (lines []string, err error) {
 	expanded, err := expandBufferPath("save-buffer", "Pane.CaptureTo", path)
 	if err != nil {
 		return nil, err
@@ -216,6 +220,14 @@ func (p Pane) CaptureToFile(
 	if err != nil {
 		return nil, err
 	}
+	// Made here, before either route below runs tmux, so that both leave the
+	// file private; SaveBuffer finds it present on the stepwise route.
+	created := p.server.createPrivateFile(expanded)
+	defer func() {
+		if err != nil {
+			discardCreatedFile(ctx, created)
+		}
+	}()
 	if strings.HasSuffix(expanded, ";") {
 		// tmux reads a final semicolon as a list separator, and escaping it
 		// would differ between the subprocess and the connection, so this path
