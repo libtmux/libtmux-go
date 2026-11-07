@@ -44,6 +44,9 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 - CI rebuilds incompatible cached tmux installations before running tests.
   Release downloads use checksum pins in `.github/tmux-releases.toml`. (#135)
+- A failing test no longer prints the environment of the process that ran it.
+  Test servers over a fake runner carry a fixed environment, and a recorded
+  request prints its variable names but not their values. (#139)
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
