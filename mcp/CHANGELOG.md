@@ -42,6 +42,11 @@ documentation, CI and release tooling, are in the core changelog.
   both generated from the same manifest rows as the tools.
 - Add `AdvertisedPrompts` and `PromptMetaKey`. `libtmux-mcp -tools` lists the
   prompts under the tools. `LIBTMUX_MCP_PROMPTS_AS_TOOLS` still stops startup.
+- Add `styles` to `capture_pane` and `snapshot_pane`. It is off by default;
+  set to `true`, the lines keep tmux's colour and attribute escape sequences
+  as raw ESC bytes, so a program that reports pass or fail in colour can be
+  read. The bytes count toward the output byte limit. `capture_since` does
+  not take it.
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
