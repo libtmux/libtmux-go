@@ -18,6 +18,8 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ## Unreleased
 
+## v0.1.3, workspace/v0.1.3, mcp/v0.1.3 (2026-11-07)
+
 ### tmux
 
 - `Pane.CaptureToFile` no longer leaves its scratch buffer, which holds the

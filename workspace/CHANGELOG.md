@@ -17,6 +17,8 @@ documentation, CI and release tooling, are in the core changelog.
 
 ## Unreleased
 
+## v0.1.3, workspace/v0.1.3, mcp/v0.1.3 (2026-11-07)
+
 ### workspace
 
 - Require `golang.org/x/sys` v0.49.0, which fixes GO-2026-5024, along with

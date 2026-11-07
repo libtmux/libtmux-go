@@ -17,6 +17,8 @@ documentation, CI and release tooling, are in the core changelog.
 
 ## Unreleased
 
+## v0.1.3, workspace/v0.1.3, mcp/v0.1.3 (2026-11-07)
+
 ### mcp
 
 - Require `go-sdk` v1.8.0, which serves protocol 2026-07-28 and keeps each
