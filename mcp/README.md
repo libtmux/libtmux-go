@@ -406,9 +406,10 @@ environment the client gives the server, because they decide the listing.
 ### [`tmux://capabilities`][mcp-capabilitiesresourceuri]: what each tool says about itself
 
 Each tool describes what it reaches and changes, under
-`_meta["com.git-pull.libtmux-mcp/capability"]`. The server's one resource,
-`tmux://capabilities`, reports the same descriptions beside the selection in
-force. [The contract][contract-capability-disclosure] lists them.
+`_meta["com.git-pull.libtmux-mcp/capability"]`. The resource
+`tmux://capabilities` reports the same descriptions beside the selection in
+force, and lists the resources that read the hierarchy.
+[The contract][contract-capability-disclosure] lists them.
 
 ## Settings
 
@@ -632,8 +633,9 @@ It serves one tmux server over stdin and stdout. Reference:
 
 - **A second tmux server.** The server serves one tmux server for the life of
   the process, and a client cannot name another socket in a call.
-- **Anything but tools, one resource, and four prompts.** There are no resource
-  templates, completions, or background job handles. A prompt is text a person
+- **Completions and background job handles.** The resources read sessions,
+  windows, panes, and pane content through the selected tools. There is no
+  listing of a session's windows or a window's panes. A prompt is text a person
   picks and grants no callable authority; the server lists it only when every
   tool it names is selected.
 - **Confinement.** Toolsets shape what a client is offered. Every call runs

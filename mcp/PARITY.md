@@ -22,14 +22,14 @@ same raw client; invalid calls were sent rather than inferred from schemas.
 | Described argument fields | 103 | 287 |
 | Collections published as null-or-array | 0 | 0 |
 | Prompts | 4 | 4 |
-| Listed resources, and templates | 1 and 0 | 0 and 6 |
-| Server-instruction characters | 245 | 1,847 |
+| Listed resources, and templates | 2 and 4 | 0 and 6 |
+| Server-instruction characters | 350 | 1,847 |
 
 The Go handshake declares logging, prompts, resources, and tools. The Python
 handshake also declares experimental data and UI extensions. Both declare
-`listChanged` for tools. Go declares it for its prompts and its one static
-resource; Python's resource capability reports neither subscriptions nor
-changing lists.
+`listChanged` for tools. Go declares it for its prompts and its resources and
+also declares `subscribe`; Python's resource capability reports neither
+subscriptions nor changing lists.
 
 The Go tool list is generated from one native manifest and grouped into the
 shared `inspect`, `manage`, `execute`, and `teardown` toolsets; [`TOOLS.md`](TOOLS.md)
@@ -110,7 +110,7 @@ map to the fixed tool surface:
 | `new_session` and `new_window` | `create_session` and `create_window` | Commandless configured-process creation |
 | generic option writers | named setters or `run_shell_command` | Typed common settings and explicit execution |
 | public buffer tools | `paste_text` | Literal target-only delivery through a private buffer |
-| dynamic pane resources | inspect tools | Startup-selected topology and content reads |
+| dynamic pane resources | resources and inspect tools | Startup-selected reads through the tools, and pane content updates on tmux 3.7 |
 | prompt recipes | documented call sequences | Workflows without another callable surface |
 
 See the [retired tool mapping](TOOLS.md#retired-tool-mapping) for every old
@@ -153,11 +153,15 @@ cursor, plus `wait_for_text` and `wait_for_channel`. A client can wait for
 output instead of polling. Go's cursor binds pane and process generation and
 reports `linesMissed` when tmux discarded required history.
 
-Neither measured handshake offers resource subscriptions. Python publishes six
-dynamic resource templates for hierarchy and content, which a client reads on
-demand. Go publishes no dynamic template: topology and terminal content are
-tools so one startup selection governs every operation. Its one listed resource,
-`tmux://capabilities`, is static disclosure of that selected surface.
+Python publishes six dynamic resource templates for hierarchy and content, and
+no subscriptions. Go publishes four templates and the static `tmux://sessions`,
+each present only when the tool it reads through is selected, and each read
+runs that tool, so one startup selection governs every operation. Go adds a
+subscription to pane content, pushed from tmux control mode and refused below
+tmux 3.7. It publishes no window or pane listing as a resource. A resource
+shapes what a client sees and grants nothing beyond the selected tools, and pane
+content may carry secrets. `tmux://capabilities` is static disclosure of the
+selected surface and lists these resources.
 
 Go bounds pattern size before regular-expression compilation. `search_panes`
 also caps aggregate panes, lines, bytes, and elapsed work. `wait_for_text` has a
@@ -210,14 +214,16 @@ route. Python's `run_command` is `run_shell_command` here, and
 no callable authority, and the server lists it only when every tool it names is
 in the startup selection, so `LIBTMUX_TOOLSETS=inspect` lists
 `diagnose_failing_pane` alone. Prompt arguments keep Python's snake_case names.
+Go's resource templates also make the hierarchy discoverable through resource
+pickers.
 
 The recipes also stay in [TOOLS.md](TOOLS.md), whose generated reference comes
 from the same schemas and capability rows as `tools/list` and lists the prompts
 beside them, so the documentation can be checked for drift.
 
 The static capability resource gives a Go client the effective toolsets, socket
-boundary, provenance, selection inputs, and complete per-tool rows. It does not
-bypass tool selection to expose pane contents.
+boundary, provenance, selection inputs, and complete per-tool rows. Pane
+content is a resource only when `capture_pane` is selected.
 
 ## Addressing the hierarchy
 

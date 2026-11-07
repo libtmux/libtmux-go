@@ -13,19 +13,15 @@ For installing the server and pointing a client at it, see
 
 ## Resources
 
-`tmux://capabilities` is the only MCP resource. It is a static disclosure of
-the startup-frozen effective surface, not another way to read or mutate tmux.
-It reports the selected socket boundary and provenance, the selection inputs,
-and one complete capability row for every advertised tool.
+`tmux://capabilities` is a static disclosure of the startup-frozen effective
+surface, not another way to read or mutate tmux. It reports the selected socket
+boundary and provenance, the selection inputs, one complete capability row for
+every advertised tool, and the resources below.
 
 The same row appears on that tool at
 `_meta["com.git-pull.libtmux-mcp/capability"]`. Registration, schemas,
 descriptions, annotations, nested batch authority, this reference, and the
 resource all come from the same native manifest.
-
-There are no dynamic resources, resource subscriptions, or completion routes.
-Topology and pane output are tools so the startup selection governs every
-callable operation in one place.
 
 Four prompts (`run_and_wait`, `diagnose_failing_pane`, `interrupt_gracefully`,
 and `build_dev_workspace`) are text a client offers for a person to pick. A
@@ -33,6 +29,64 @@ prompt calls nothing and grants no callable authority. The server lists it only
 when every tool it names is in the startup selection, and
 [Prompts](#prompts) below is generated from the same manifest rows that
 `tmux://capabilities` reports.
+
+### Reading the hierarchy
+
+Five more resources read the hierarchy. Each is offered only when its tool is in
+the startup selection, and a read runs through that tool, so its schema, bounds,
+and tmux version remedies apply. A resource shapes what a client sees and
+grants nothing a selected tool does not.
+
+| Resource | Read through |
+| --- | --- |
+| `tmux://sessions` | `list_sessions` |
+| `tmux://sessions/{session_id}` | `get_session_info` |
+| `tmux://windows/{window_id}` | `get_window_info` |
+| `tmux://panes/{pane_id}` | `get_pane_info` |
+| `tmux://panes/{pane_id}/content` | `capture_pane` |
+
+An id is percent-encoded, because a template variable matches only unreserved
+characters: `$1` is `%241`, `@1` is `%401`, and `%1` is `%251`. A resource that
+does not exist, or an id no object holds, is JSON-RPC error `-32602`.
+
+Pane content is terminal output. It may hold secrets and text a program or
+another person wrote, and a resource has no field to say so. A client that
+attaches resources to a model's context passes that text along as it would a
+`capture_pane` result. Exclude `capture_pane` to withhold it.
+
+Every read is marked `cacheScope: "private"` on protocol 2026-07-28: pane
+content can hold secrets, and session names, working directories, and running
+commands are no more public.
+
+### Subscribing to pane content
+
+`tmux://panes/{pane_id}/content` can be subscribed to, with `resources/subscribe`
+or, on protocol 2026-07-28, `subscriptions/listen`. The server sends
+`notifications/resources/updated` after the pane's output, and the client reads
+the resource for the text. Output within 100 ms of a notification rides on the
+next one, so a busy pane is announced at most ten times a second. One last
+update follows when the pane exits, and reading it then reports the pane gone.
+
+Subscribing needs tmux 3.7 or newer, which reports pane output over control
+mode. Older tmux refuses the subscription with `-32602` and names
+`wait_for_text`, which polls; reading works on every supported version. The
+refusal is made per subscription: `resources.subscribe` is advertised whenever
+`capture_pane` is selected, because the SDK derives it from the handler and
+cannot withdraw it for an older tmux.
+
+The server holds one control client for each subscribed pane, shared by every
+session, and at most 16 panes at once. A watch ends when its last session
+unsubscribes or disconnects. A `subscriptions/listen` request does not count
+against the limit on calls in flight.
+
+Two limits come from the SDK. A second listen for the same URI on one session
+silences the first ([go-sdk#1489][go-sdk-1489]), and an update reaches every
+session subscribed to the URI rather than one ([go-sdk#1265][go-sdk-1265]).
+
+Completions and a list of windows or panes are not resources.
+
+[go-sdk-1489]: https://github.com/modelcontextprotocol/go-sdk/issues/1489
+[go-sdk-1265]: https://github.com/modelcontextprotocol/go-sdk/issues/1265
 
 ## Tools
 
@@ -552,19 +606,20 @@ include/exclude variables described above. The migration table in the
 capability class, and profile.
 
 Per-call socket selection and `list_servers` are gone. Run another pinned
-server process for another socket. Dynamic resources migrate as follows:
+server process for another socket. The earlier dynamic resources migrate as
+follows:
 
 | Earlier resource | Current path |
 | --- | --- |
-| `tmux://sessions` | `list_sessions` |
-| `tmux://sessions/{session}` | `get_session_info` |
+| `tmux://sessions` | the same resource, or `list_sessions` |
+| `tmux://sessions/{session}` | `tmux://sessions/{session_id}`, which takes the id, or `get_session_info` |
 | `tmux://sessions/{session}/windows` | `list_windows` with that session |
-| `tmux://windows/{window}` | `get_window_info` |
+| `tmux://windows/{window}` | `tmux://windows/{window_id}`, or `get_window_info` |
 | `tmux://windows/{window}/panes` | `list_panes`, then select rows with that `windowId` |
-| `tmux://panes/{pane}` | `get_pane_info` |
-| `tmux://panes/{pane}/content` | `capture_pane` or `capture_since` |
+| `tmux://panes/{pane}` | the same resource, or `get_pane_info` |
+| `tmux://panes/{pane}/content` | the same resource, `capture_pane`, or `capture_since` |
 
-Subscriptions and completions have no replacement. Any present
+Completions have no replacement. Any present
 `LIBTMUX_MCP_PROMPTS_AS_TOOLS` value stops startup instead of exporting prompts
 through `get_recipe`.
 
@@ -606,11 +661,12 @@ through `get_recipe`.
 | `pipe_pane` | no shell-command pipe route; use bounded capture/wait tools |
 | `kill_server` | no server-wide teardown route; kill selected sessions explicitly or administer tmux outside MCP |
 
-The `get_recipe` route, dynamic resources, generic setters, background jobs,
-buffer namespace, pipe route, and broad batch families remain absent from MCP
-registration and dispatch. The prompt workflows above remain available as
-typed-tool guidance, and the four native prompts are separate from that route. Internal helpers survive only where a retained tool uses
-them.
+The `get_recipe` route, the window and pane listings as resources, generic
+setters, background jobs, buffer namespace, pipe route, and broad batch
+families remain absent from MCP registration and dispatch. The prompt
+workflows above remain available as typed-tool guidance, and the four native
+prompts are separate from that route. Internal helpers survive only where a
+retained tool uses them.
 
 ## Every tool
 

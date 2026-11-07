@@ -297,7 +297,7 @@ func (surface toolSurface) capabilityReport() map[string]any {
 		"oneSocketPerProcess":    true,
 		"perCallSocketSelection": false,
 		"hostCommandExecution":   false,
-		"dynamicResources":       false,
+		"dynamicResources":       len(surface.effectiveRoutes()) > 0,
 	}
 	connection := map[string]any{
 		"socketSelector":          surface.socket.Selector,
@@ -312,7 +312,15 @@ func (surface toolSurface) capabilityReport() map[string]any {
 		"includedTools": slices.Clone(surface.included),
 		"excludedTools": slices.Clone(surface.excluded),
 	}
+	resources := []map[string]any{}
+	for _, route := range surface.effectiveRoutes() {
+		resources = append(resources, map[string]any{
+			"uriTemplate": route.template, "tool": route.tool, "mimeType": route.mime,
+			"subscribable": route.subscribable,
+		})
+	}
 	return map[string]any{
+		"resources":               resources,
 		"schemaVersion":           1,
 		"frozen":                  true,
 		"socket":                  surface.socket,

@@ -726,7 +726,7 @@ func TestCapabilitiesReportWhetherAttendedInputIsAllowed(t *testing.T) {
 	}
 }
 
-func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
+func TestResourcesAreTheCapabilitiesAndTheSelectedReads(t *testing.T) {
 	setCapabilityEnvironment(t, "inspect,manage,execute,teardown", "", "")
 	target, err := tmux.NewServer(tmux.ServerOptions{
 		SocketName: "libtmux-mcp-capability-test",
@@ -758,15 +758,19 @@ func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resources.Resources) != 1 || resources.Resources[0].URI != testCapabilitiesURI {
-		t.Fatalf("resources = %#v, want only %s", resources.Resources, testCapabilitiesURI)
+	var resourceURIs []string
+	for _, resource := range resources.Resources {
+		resourceURIs = append(resourceURIs, resource.URI)
+	}
+	if !reflect.DeepEqual(resourceURIs, []string{testCapabilitiesURI, "tmux://sessions"}) {
+		t.Fatalf("resources = %v, want %s and tmux://sessions", resourceURIs, testCapabilitiesURI)
 	}
 	templates, err := clientSession.ListResourceTemplates(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(templates.ResourceTemplates) != 0 {
-		t.Fatalf("resource templates = %#v, want none", templates.ResourceTemplates)
+	if len(templates.ResourceTemplates) != 4 {
+		t.Fatalf("resource templates = %#v, want the four of the hierarchy", templates.ResourceTemplates)
 	}
 	read, err := clientSession.ReadResource(t.Context(), &sdk.ReadResourceParams{URI: testCapabilitiesURI})
 	if err != nil {
@@ -815,7 +819,7 @@ func TestOnlyCapabilitiesResourceIsAdvertised(t *testing.T) {
 		"oneSocketPerProcess":    true,
 		"perCallSocketSelection": false,
 		"hostCommandExecution":   false,
-		"dynamicResources":       false,
+		"dynamicResources":       true,
 	}
 	attachCommand, _ := payload.Connection["attachCommand"].(string)
 	if !reflect.DeepEqual(payload.Boundary, wantBoundary) ||

@@ -341,6 +341,37 @@ func TestRequestAdmissionLimitsTheInstance(t *testing.T) {
 	}
 }
 
+// A subscriptions/listen request never completes, so it is not a call in
+// flight: a client that watches many panes holds one per URI, and counting
+// them would shut its ordinary calls out.
+func TestListenStreamsAreNotCountedAsCallsInFlight(t *testing.T) {
+	instance := newInstance()
+	defer instance.cancel()
+	instance.maxSessionCalls = 2
+	instance.maxInstanceCalls = 2
+	scope := newSessionScope(instance.ctx)
+
+	for _, id := range []string{"a", "b", "c", "d"} {
+		listen := admissionRequest(t, id)
+		listen.Method = methodSubscriptionsListen
+		if err := instance.requestRead(scope, listen); err != nil {
+			t.Fatalf("admit listen %s: %v", id, err)
+		}
+	}
+	// Terminal shutdown waits for tracked calls only, so it must not wait here.
+	if got := instance.responses.count(); got != 0 {
+		t.Fatalf("tracked calls = %d, want none for listen streams", got)
+	}
+	for _, id := range []string{"first", "second"} {
+		if err := instance.requestRead(scope, admissionRequest(t, id)); err != nil {
+			t.Fatalf("admit %s beside the listens: %v", id, err)
+		}
+	}
+	if err := instance.requestRead(scope, admissionRequest(t, "third")); !errors.Is(err, ErrRequestCapacity) {
+		t.Fatalf("third ordinary call error = %v, want ErrRequestCapacity", err)
+	}
+}
+
 func TestResponseCommitReleasesRequestCapacity(t *testing.T) {
 	instance := newInstance()
 	defer instance.cancel()
