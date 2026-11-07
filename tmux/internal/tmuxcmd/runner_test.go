@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -502,5 +503,40 @@ func TestRunnerHelperProcess(t *testing.T) {
 		os.Exit(0)
 	default:
 		t.Fatalf("unknown helper mode %q", os.Args[separator+1])
+	}
+}
+
+func TestRequestFormattingNamesTheEnvironmentAndNeverItsValues(t *testing.T) {
+	t.Parallel()
+
+	request := Request{
+		Binary:      "tmux",
+		Arguments:   []string{"-L", "work", "list-sessions"},
+		Environment: []string{"PATH=/usr/bin", "LIBTMUX_EXAMPLE_VAR=example-value", "=C:=C:\\example-dir", "NOEQUALS"},
+		Directory:   "/work",
+		Stdio:       &Stdio{},
+	}
+	want := `tmuxcmd.Request{Binary: "tmux", Arguments: ["-L" "work" "list-sessions"], ` +
+		`EnvironmentNames: ["PATH" "LIBTMUX_EXAMPLE_VAR" "=C:" "NOEQUALS"], Directory: "/work", Stdio: true}`
+	for name, got := range map[string]string{
+		"%v":          fmt.Sprintf("%v", request),
+		"%+v":         fmt.Sprintf("%+v", request),
+		"%#v":         fmt.Sprintf("%#v", request),
+		"Sprint":      fmt.Sprint(request),
+		"pointer %#v": fmt.Sprintf("%#v", &request),
+		"slice %#v":   fmt.Sprintf("%#v", []Request{request}),
+		"slice %+v":   fmt.Sprintf("%+v", []Request{request}),
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s = %s, want it to contain %s", name, got, want)
+		}
+		for _, secret := range []string{"example-value", "/usr/bin", "example-dir"} {
+			if strings.Contains(got, secret) {
+				t.Errorf("%s printed the environment value %q: %s", name, secret, got)
+			}
+		}
+	}
+	if request.Environment[1] != "LIBTMUX_EXAMPLE_VAR=example-value" {
+		t.Errorf("formatting changed the request: %q", request.Environment)
 	}
 }
