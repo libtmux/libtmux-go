@@ -15,6 +15,14 @@
 // their own: a prompt is text a person picks, grants no callable authority, and
 // is listed only when every tool it names is in the startup selection.
 //
+// # Resources
+//
+// Resources for sessions, windows, panes, and a pane's content read through the
+// tools that own them, and each is offered only when its tool is selected.
+// They shape what a client sees and grant nothing a selected tool does not.
+// Pane content may hold secrets and text a pane wrote.
+// A client can subscribe to pane content on tmux 3.7 or newer.
+//
 // # Selection
 //
 // The four unordered toolsets are inspect, manage, execute, and teardown.
@@ -83,9 +91,10 @@
 // # Tool discovery
 //
 // The static tmux://capabilities resource and each tool's metadata expose the
-// startup-frozen public capability report. TOOLS.md is generated from the same
-// manifest and documents arguments, results, workflows, and retired names;
-// the index of tools in README.md is generated from it too.
+// startup-frozen public capability report, and the resource lists the others.
+// TOOLS.md is generated from the same manifest and documents arguments,
+// results, workflows, and retired names; the index of tools in README.md is
+// generated from it too.
 package mcp
 
 //go:generate go run ./internal/generate/toolsref -output TOOLS.md -index README.md

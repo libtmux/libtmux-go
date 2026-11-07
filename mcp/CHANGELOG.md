@@ -53,6 +53,26 @@ documentation, CI and release tooling, are in the core changelog.
   does not ask first, because the process and its pane id survive. (#150)
 - Add `break_pane` to the `manage` toolset. It moves a pane into a new window of
   its own session. On tmux 3.7 exactly it requires `name`. (#150)
+- Add resource templates for sessions, windows and panes: `tmux://sessions`,
+  `tmux://sessions/{session_id}`, `tmux://windows/{window_id}`, and
+  `tmux://panes/{pane_id}`. Ids are percent-encoded, so `$1` is `%241`. Each
+  is offered only when the tool it reads through is in the startup selection,
+  and a read runs that tool. An unknown object is error `-32602`. (#153)
+- Add `tmux://panes/{pane_id}/content`, which reads a pane as `capture_pane`
+  does. Pane content may hold secrets, so every `tmux://` read is marked
+  `cacheScope: "private"` on protocol 2026-07-28. (#153)
+- Support `resources/subscribe` and `subscriptions/listen` for pane content on
+  tmux 3.7 and newer. The server sends `notifications/resources/updated` at
+  most once every 100 ms per pane, watches at most 16 panes, and sends one
+  last update when the pane exits. (#153)
+- Refuse a pane-content subscription on tmux older than 3.7 with `-32602`,
+  naming `wait_for_text`. `resources.subscribe` is advertised whenever
+  `capture_pane` is selected, because the SDK cannot withdraw it per tmux
+  version. (#153)
+- `tmux://capabilities` now lists the resources and whether each can be
+  subscribed to. (#153)
+- A `subscriptions/listen` request no longer counts against the limits on calls
+  in flight, so watching many panes does not use up a session's 32 calls. (#153)
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 

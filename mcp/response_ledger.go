@@ -12,6 +12,10 @@ import (
 // Instance.mutex guards it.
 type responseLedger map[*sessionScope]map[jsonrpc.ID]struct{}
 
+// methodSubscriptionsListen is the protocol 2026-07-28 request that holds a
+// notification stream open.
+const methodSubscriptionsListen = "subscriptions/listen"
+
 var errDuplicateRequestID = errors.New("duplicate unsettled MCP request ID")
 
 func (l responseLedger) admit(
@@ -22,6 +26,12 @@ func (l responseLedger) admit(
 ) error {
 	request, ok := message.(*jsonrpc.Request)
 	if !ok || !request.IsCall() {
+		return nil
+	}
+	// A listen stream settles only when the client ends it, so counting it
+	// would spend a slot for as long as the client watches, and make a
+	// terminal shutdown wait out the drain for a call that cannot finish.
+	if request.Method == methodSubscriptionsListen {
 		return nil
 	}
 	requests := l[scope]
