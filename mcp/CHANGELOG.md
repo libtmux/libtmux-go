@@ -26,6 +26,9 @@ documentation, CI and release tooling, are in the core changelog.
   Earlier protocols are still asked with `elicitation/create`. The question's
   key no longer carries the socket path, server pid, or start time. A client
   that did not declare elicitation is still refused.
+- Ask every caller-pane question of `send_keys_batch` in one input-required
+  result on protocol 2026-07-28, before the first operation runs. Each
+  operation was refused with "input required" and the person was never asked.
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
