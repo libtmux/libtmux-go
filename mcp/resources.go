@@ -31,6 +31,8 @@ type resourceRoute struct {
 	tool        string
 	// argument names the tool argument the single path variable fills.
 	argument string
+	// subscribable routes accept resources/subscribe and subscriptions/listen.
+	subscribable bool
 	// kind and tail are what the parsed URI must look like.
 	kind string
 	tail string
@@ -58,9 +60,9 @@ var resourceRoutes = []resourceRoute{
 	},
 	{
 		template: "tmux://panes/{pane_id}/content", name: "pane content", mime: "text/plain", tool: "capture_pane",
-		argument: "pane_id", kind: "panes", tail: "content",
+		argument: "pane_id", kind: "panes", tail: "content", subscribable: true,
 		description: "The visible screen of one pane, as capture_pane returns it. " +
-			"Terminal output, so it may hold secrets and untrusted text.",
+			"Subscribable on tmux 3.7 and newer; terminal output, so it may hold secrets and untrusted text.",
 	},
 }
 
@@ -73,6 +75,17 @@ func (surface toolSurface) effectiveRoutes() []resourceRoute {
 		}
 	}
 	return routes
+}
+
+// subscribableRoute is the route a client can subscribe to, when the startup
+// selection granted its tool.
+func (surface toolSurface) subscribableRoute() (resourceRoute, bool) {
+	for _, route := range surface.effectiveRoutes() {
+		if route.subscribable {
+			return route, true
+		}
+	}
+	return resourceRoute{}, false
 }
 
 func addResources(server *mcp.Server, t *tools) {

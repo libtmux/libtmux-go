@@ -316,6 +316,7 @@ func (surface toolSurface) capabilityReport() map[string]any {
 	for _, route := range surface.effectiveRoutes() {
 		resources = append(resources, map[string]any{
 			"uriTemplate": route.template, "tool": route.tool, "mimeType": route.mime,
+			"subscribable": route.subscribable,
 		})
 	}
 	return map[string]any{
