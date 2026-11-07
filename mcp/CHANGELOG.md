@@ -53,6 +53,9 @@ documentation, CI and release tooling, are in the core changelog.
   does not ask first, because the process and its pane id survive. (#150)
 - Add `break_pane` to the `manage` toolset. It moves a pane into a new window of
   its own session. On tmux 3.7 exactly it requires `name`. (#150)
+- Require `golang.org/x/sys` v0.49.0 and newer `golang.org/x/oauth2`,
+  `golang.org/x/sync`, `golang.org/x/time` and `segmentio/asm`. A module that
+  imports `mcp` picks up these minimums. (#152)
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
