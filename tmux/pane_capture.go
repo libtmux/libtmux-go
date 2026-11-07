@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
@@ -173,11 +174,24 @@ var captureFileSequence atomic.Uint64
 //
 // path must name a file the tmux server can write and this process can read.
 // It is replaced and left for the caller. Concurrent calls must use distinct
-// paths. The scratch tmux buffer is deleted before return when possible.
+// paths. The scratch tmux buffer is staged, saved, and deleted in one tmux
+// command list, so a cancellation cannot land between those steps.
+//
+// The scratch buffer is deleted before return on every path, including after
+// ctx is cancelled or its deadline passes and when the capture reports an
+// error after tmux ran it. That delete runs on a context detached from ctx's
+// cancellation and bounded to two seconds, so a server that does not answer
+// in that time delays the return by at most that long. A buffer tmux already
+// reports absent is clean. If the delete fails, the failure is joined into the
+// returned error, so an error that says the cleanup failed means a buffer may
+// remain.
 //
 // Safe named-buffer cleanup requires tmux 3.4 before staging. Other version
 // gates match [Pane.Capture]. Capture, save, and file-read failures return an
-// error with no lines; buffer cleanup is best effort.
+// error with no lines. A call whose command list ran to completion before ctx
+// ending was observed returns its lines and a nil error: the file is written
+// and the buffer is gone, so ctx ending afterward does not turn that into a
+// failure.
 func (p Pane) CaptureToFile(
 	ctx context.Context,
 	path string,
@@ -187,31 +201,69 @@ func (p Pane) CaptureToFile(
 	if err != nil {
 		return nil, err
 	}
-	buffer := fmt.Sprintf(
-		"libtmux-go-capture-%d-%d",
-		os.Getpid(),
-		captureFileSequence.Add(1),
+	scratch := newScratchBuffer(
+		p.server,
+		"capture",
+		fmt.Sprintf("%d-%d", os.Getpid(), captureFileSequence.Add(1)),
 	)
 	p.server.requiredVersion = bufferDeleteNamedVersion
-	if err := p.CaptureToBuffer(ctx, buffer, request); err != nil {
-		return nil, err
-	}
-	// The buffer is deleted whichever way this returns: tmux's most recent
-	// buffer is what an interactive paste reaches, so leaving a pane's screen
-	// there would change what the user's own prefix-] does.
-	defer func() { _ = p.server.DeleteBuffer(ctx, &buffer) }()
-	if err := p.server.SaveBuffer(ctx, SaveBufferRequest{
-		Path: expanded,
-		Name: &buffer,
-	}); err != nil {
-		return nil, err
-	}
-	contents, err := os.ReadFile(expanded)
+	scratch.server = p.server
+	arguments, err := p.captureArguments(ctx, scratch.name, true, request)
 	if err != nil {
 		return nil, err
 	}
+	arguments, err = exactPaneArguments(p, arguments)
+	if err != nil {
+		return nil, err
+	}
+	if strings.HasSuffix(expanded, ";") {
+		// tmux reads a final semicolon as a list separator, and escaping it
+		// would differ between the subprocess and the connection, so this path
+		// cannot ride in a list. It stages in steps and cleans up detached.
+		return p.captureToFileInSteps(ctx, scratch, expanded, request)
+	}
+	// One list, one dispatch: a cancellation cannot land between capture, save,
+	// and delete, so the buffer never outlives the call. tmux stops a list at
+	// its first failure, which is the only time the buffer can remain.
+	arguments = append(arguments,
+		";", "save-buffer", "-b", scratch.name, "--", expanded,
+		";", "delete-buffer", "-b", scratch.name,
+	)
+	result, err := p.server.Cmd(ctx, arguments...)
+	if err := requireServerCommandNoStderr("capture-pane", result, err); err != nil {
+		return nil, errors.Join(err, scratch.delete(ctx))
+	}
+	contents, err := os.ReadFile(expanded)
+	if err != nil {
+		// A list that reported success has deleted the buffer. A missing file
+		// means the transport's answer cannot be trusted, so make sure.
+		return nil, errors.Join(err, scratch.delete(ctx))
+	}
 	// tmux writes the buffer to the file exactly as it would have printed it, so
 	// the same decoder produces the same lines Pane.Capture reports.
+	return tmuxcmd.SplitStdout(contents), nil
+}
+
+// captureToFileInSteps is CaptureToFile for a path a command list cannot carry.
+func (p Pane) captureToFileInSteps(
+	ctx context.Context,
+	scratch scratchBuffer,
+	path string,
+	request CapturePaneRequest,
+) ([]string, error) {
+	if err := p.CaptureToBuffer(ctx, scratch.name, request); err != nil {
+		return nil, errors.Join(err, scratch.delete(ctx))
+	}
+	if err := p.server.SaveBuffer(ctx, SaveBufferRequest{Path: path, Name: &scratch.name}); err != nil {
+		return nil, errors.Join(err, scratch.delete(ctx))
+	}
+	if err := scratch.delete(ctx); err != nil {
+		return nil, err
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 	return tmuxcmd.SplitStdout(contents), nil
 }
 
