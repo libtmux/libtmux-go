@@ -262,7 +262,7 @@ func registerDefinition[In, Out any](
 		registered = withRequestRuntime(registry, definition.readsOnly(), registered)
 	}
 	registered = withVersionRemedy(registry, registered)
-	sdk.AddTool(server, definition.sdkTool(), registered)
+	sdk.AddTool(server, definition.sdkTool(), withInputRequests(registered))
 	if definition.aggregate {
 		return
 	}
@@ -327,6 +327,25 @@ func withVersionRemedy[In, Out any](
 			}
 		}
 		return result, output, explained
+	}
+}
+
+// withInputRequests turns an inputRequiredError into the result a client on
+// protocol 2026-07-28 answers by retrying the call with its input responses.
+func withInputRequests[In, Out any](
+	handler func(context.Context, *sdk.CallToolRequest, In) (*sdk.CallToolResult, Out, error),
+) func(context.Context, *sdk.CallToolRequest, In) (*sdk.CallToolResult, Out, error) {
+	return func(
+		ctx context.Context,
+		request *sdk.CallToolRequest,
+		input In,
+	) (*sdk.CallToolResult, Out, error) {
+		result, output, err := handler(ctx, request, input)
+		if need, ok := errors.AsType[*inputRequiredError](err); ok {
+			var zero Out
+			return &sdk.CallToolResult{InputRequests: need.inputRequests()}, zero, nil
+		}
+		return result, output, err
 	}
 }
 

@@ -17,6 +17,9 @@ func logToClient(
 	if request == nil || request.Session == nil {
 		return
 	}
+	// Protocol 2026-07-28 deprecates logging, but earlier clients still read it
+	// and the SDK keeps each request's level to that request.
+	//nolint:staticcheck // SA1019: the SDK has no other way to send a log message
 	_ = request.Session.Log(ctx, &mcp.LoggingMessageParams{
 		Logger: "libtmux",
 		Level:  mcp.LoggingLevel(level),

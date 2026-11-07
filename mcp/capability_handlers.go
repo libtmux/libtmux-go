@@ -686,6 +686,11 @@ func (t *tools) catalogSendKeysBatch(ctx context.Context, request *sdk.CallToolR
 		return nil, sendKeysBatchCapabilityOutput{}, err
 	}
 	output := sendKeysBatchCapabilityOutput{Results: make([]sendKeysBatchCapabilityResult, 0, len(input.Operations))}
+	// A retry runs the whole call again, so every question is asked before the
+	// first operation runs rather than between two of them.
+	if need := t.batchInputQuestions(ctx, request, input.Operations); need != nil {
+		return nil, output, need
+	}
 	for _, operation := range input.Operations {
 		_, sent, callErr := t.sendKeysBatch(ctx, request, sendKeysBatchInput{
 			PaneID: operation.PaneID, Keys: operation.Keys, Literal: operation.Literal, Enter: operation.Enter,
@@ -706,6 +711,43 @@ func (t *tools) catalogSendKeysBatch(ctx context.Context, request *sdk.CallToolR
 		output.Results = append(output.Results, row)
 	}
 	return nil, output, nil
+}
+
+// batchInputQuestions gathers the caller-pane questions that no answer on this
+// call covers, for a client that is asked through the call's result. It is nil
+// when nothing is owed, the client asks another way, or it cannot be asked and
+// each operation is refused on its own.
+func (t *tools) batchInputQuestions(
+	ctx context.Context,
+	request *sdk.CallToolRequest,
+	operations []sendKeysOperation,
+) *inputRequiredError {
+	if !asksByInputRequest(request) || !canElicitForm(request) {
+		return nil
+	}
+	need := &inputRequiredError{requests: map[string]*sdk.ElicitParams{}}
+	for _, operation := range operations {
+		if len(operation.Keys) == 0 {
+			continue
+		}
+		preflight, err := t.preflightPaneInput(
+			ctx, operation.PaneID, "", paneInputConfigured, "send_keys_batch",
+		)
+		if err != nil {
+			continue // the operation reports its own failure when it runs
+		}
+		question, err := t.callerInputQuestion(request, preflight, "sending keys")
+		if err != nil || question == nil {
+			continue
+		}
+		if _, answered := inputAnswer(request, *question); !answered {
+			need.requests[question.inputRequestKey()] = question.elicitParams()
+		}
+	}
+	if len(need.requests) == 0 {
+		return nil
+	}
+	return need
 }
 
 func (t *tools) catalogPasteText(ctx context.Context, request *sdk.CallToolRequest, input pasteTextCapabilityInput) (*sdk.CallToolResult, pasteTextCapabilityOutput, error) {

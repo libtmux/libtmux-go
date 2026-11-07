@@ -467,9 +467,12 @@ the pane whose process is one of its own ancestors.
 
 A write to the pane with `isCaller` true asks you first, through MCP's
 elicitation request: a question the client puts to you on the server's behalf.
+From protocol 2026-07-28 the question comes back in the result of the call, and
+the client repeats the call with your answer.
 
 - Declining fails the call, and a client that cannot ask is refused.
-- A batch asks the same way, and declining stops the batch there.
+- A batch asks the same way, and declining stops the batch there. On protocol
+  2026-07-28 the batch asks all its questions before its first operation runs.
 - With `synchronize-panes` on, the question covers every pane the input would
   reach.
 

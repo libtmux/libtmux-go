@@ -218,13 +218,16 @@ to the agent through.
 
 A note in a reply is something a model with a task does not always read, so a
 write to that pane asks you first, through MCP's elicitation request: a
-question the client puts to you on the server's behalf. Declining fails the
-call, and a client that cannot ask is refused.
+question the client puts to you on the server's behalf. From protocol
+2026-07-28 the question comes back in the result of the call, and the client
+repeats the call with your answer. Declining fails the call, and a client that
+cannot ask is refused.
 
 A write reached through a batch asks in the same way, and declining stops the
-batch there. With `synchronize-panes` on, the question covers every pane the
-input would reach, so a write that would arrive in your pane by way of another
-still asks.
+batch there. On protocol 2026-07-28 a batch asks all its questions before its
+first operation runs, because the repeated call runs the whole batch again.
+With `synchronize-panes` on, the question covers every pane the input would
+reach, so a write that would arrive in your pane by way of another still asks.
 
 A linked pane that is dead or in a mode refuses the whole write before anyone
 is asked.

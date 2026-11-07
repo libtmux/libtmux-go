@@ -435,6 +435,222 @@ func TestSendRechecksAfterCallerConfirmation(t *testing.T) {
 	}
 }
 
+// inputRequestFixture serves a server running in the first pane of three, with
+// the key presses it would send counted rather than delivered.
+type inputRequestFixture struct {
+	ctx      context.Context
+	instance *Instance
+	caller   tmux.Pane
+	other    tmux.Pane
+	socket   string
+	sends    *int
+}
+
+func newInputRequestFixture(ctx context.Context, t *testing.T) inputRequestFixture {
+	t.Helper()
+	target, _, panes := threePaneInputFixture(ctx, t)
+	instance := mustInternalMCPServer(t, target)
+	setPaneInputCallerEnvironment(t, target, panes[0])
+	sends := 0
+	instance.runtime.deps.sendKeySequence = func(
+		context.Context,
+		tmux.Pane,
+		tmux.SendKeySequenceRequest,
+	) error {
+		sends++
+		return nil
+	}
+	return inputRequestFixture{
+		ctx: ctx, instance: instance, caller: panes[0], other: panes[2],
+		socket: target.SocketPath(), sends: &sends,
+	}
+}
+
+// client connects at protocol 2026-07-28 and leaves each input-required result
+// to the test. A server-initiated elicitation would reach the handler, which
+// fails the test, because that protocol forbids one.
+func (f inputRequestFixture) client(t *testing.T, elicits bool) *sdk.ClientSession {
+	t.Helper()
+	options := &sdk.ClientOptions{MultiRoundTrip: &sdk.MultiRoundTripOptions{Disabled: true}}
+	if elicits {
+		options.ElicitationHandler = func(context.Context, *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
+			t.Error("the server sent elicitation/create on protocol 2026-07-28")
+			return &sdk.ElicitResult{Action: "decline"}, nil
+		}
+	}
+	session := connectInputTestClient(f.ctx, t, f.instance, options)
+	if got := session.InitializeResult().ProtocolVersion; got != "2026-07-28" {
+		t.Fatalf("negotiated protocol = %q, want 2026-07-28", got)
+	}
+	return session
+}
+
+// call runs a tool, answering with responses when there are any.
+func (f inputRequestFixture) call(
+	t *testing.T,
+	client *sdk.ClientSession,
+	name string,
+	arguments map[string]any,
+	responses sdk.InputResponseMap,
+) *sdk.CallToolResult {
+	t.Helper()
+	result, err := client.CallTool(f.ctx, &sdk.CallToolParams{
+		Name: name, Arguments: arguments, InputResponses: responses,
+	})
+	if err != nil {
+		t.Fatalf("%s CallTool() error = %v", name, err)
+	}
+	return result
+}
+
+// onlyRequest is the one question an input-required result asks, and its key.
+func onlyRequest(t *testing.T, result *sdk.CallToolResult) (string, *sdk.ElicitParams) {
+	t.Helper()
+	if !result.NeedsInput() || len(result.InputRequests) != 1 {
+		t.Fatalf("result = (needs input %t, %d requests, error %t, %q), want one question",
+			result.NeedsInput(), len(result.InputRequests), result.IsError, callToolResultText(result))
+	}
+	for key, request := range result.InputRequests {
+		params, ok := request.(*sdk.ElicitParams)
+		if !ok {
+			t.Fatalf("input request %q is %T, want elicitation", key, request)
+		}
+		return key, params
+	}
+	return "", nil
+}
+
+//libtmux:real-tmux
+func TestCallerPaneAsksByInputRequest(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	keys := func(f inputRequestFixture) map[string]any {
+		return map[string]any{"pane_id": f.caller.ID().String(), "keys": []string{"C-l"}}
+	}
+
+	t.Run("accept lets the write through and can be remembered", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, true)
+		asked := f.call(t, client, "send_keys", keys(f), nil)
+		key, params := onlyRequest(t, asked)
+		if *f.sends != 0 {
+			t.Fatalf("keys sent before the person answered: %d", *f.sends)
+		}
+		if !strings.Contains(params.Message, f.caller.ID().String()) {
+			t.Errorf("question = %q, want it to name %s", params.Message, f.caller.ID())
+		}
+		if !strings.HasPrefix(key, "consent-") ||
+			strings.Contains(key, f.socket) || strings.Contains(key, "pane-input") {
+			t.Errorf("input request key = %q, want an opaque one", key)
+		}
+		accepted := f.call(t, client, "send_keys", keys(f), sdk.InputResponseMap{
+			key: &sdk.ElicitResult{Action: "accept", Content: map[string]any{"remember": true}},
+		})
+		if accepted.IsError || accepted.NeedsInput() || *f.sends != 1 {
+			t.Fatalf("accepted write = (error %t, needs input %t, sends %d)",
+				accepted.IsError, accepted.NeedsInput(), *f.sends)
+		}
+		remembered := f.call(t, client, "send_keys", keys(f), nil)
+		if remembered.IsError || remembered.NeedsInput() || *f.sends != 2 {
+			t.Fatalf("remembered write = (error %t, needs input %t, sends %d)",
+				remembered.IsError, remembered.NeedsInput(), *f.sends)
+		}
+	})
+
+	t.Run("decline refuses the write", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, true)
+		key, _ := onlyRequest(t, f.call(t, client, "send_keys", keys(f), nil))
+		declined := f.call(t, client, "send_keys", keys(f), sdk.InputResponseMap{
+			key: &sdk.ElicitResult{Action: "decline"},
+		})
+		if !declined.IsError || !strings.Contains(callToolResultText(declined), "the person declined") ||
+			*f.sends != 0 {
+			t.Fatalf("declined write = (error %t, %q, sends %d)",
+				declined.IsError, callToolResultText(declined), *f.sends)
+		}
+	})
+
+	t.Run("a missing answer is asked for again", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, true)
+		key, _ := onlyRequest(t, f.call(t, client, "send_keys", keys(f), nil))
+		again, _ := onlyRequest(t, f.call(t, client, "send_keys", keys(f), sdk.InputResponseMap{
+			"consent-something-else": &sdk.ElicitResult{Action: "accept"},
+		}))
+		if again != key || *f.sends != 0 {
+			t.Fatalf("second ask = (%q, sends %d), want %q and no keys", again, *f.sends, key)
+		}
+	})
+
+	t.Run("a client without elicitation is refused", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, false)
+		refused := f.call(t, client, "send_keys", keys(f), nil)
+		if !refused.IsError || refused.NeedsInput() ||
+			!strings.Contains(callToolResultText(refused), "cannot be asked") || *f.sends != 0 {
+			t.Fatalf("unaskable write = (error %t, needs input %t, %q, sends %d)",
+				refused.IsError, refused.NeedsInput(), callToolResultText(refused), *f.sends)
+		}
+	})
+}
+
+//libtmux:real-tmux
+func TestCallerPaneBatchAsksOnceBeforeAnythingRuns(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	batch := func(f inputRequestFixture) map[string]any {
+		return map[string]any{"operations": []map[string]any{
+			{"pane_id": f.other.ID().String(), "keys": []string{"C-l"}},
+			{"pane_id": f.caller.ID().String(), "keys": []string{"C-l"}},
+			{"pane_id": f.caller.ID().String(), "keys": []string{"C-u"}},
+		}}
+	}
+
+	t.Run("accept asks once, before the first operation", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, true)
+		key, _ := onlyRequest(t, f.call(t, client, "send_keys_batch", batch(f), nil))
+		if *f.sends != 0 {
+			t.Fatalf("operations ran before the person answered: %d sends", *f.sends)
+		}
+		done := f.call(t, client, "send_keys_batch", batch(f), sdk.InputResponseMap{
+			key: &sdk.ElicitResult{Action: "accept"},
+		})
+		if done.IsError || done.NeedsInput() || *f.sends != 3 {
+			t.Fatalf("accepted batch = (error %t, needs input %t, sends %d), want all 3 run once",
+				done.IsError, done.NeedsInput(), *f.sends)
+		}
+	})
+
+	t.Run("decline runs only the operations that do not reach the caller", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, true)
+		key, _ := onlyRequest(t, f.call(t, client, "send_keys_batch", batch(f), nil))
+		declined := f.call(t, client, "send_keys_batch", batch(f), sdk.InputResponseMap{
+			key: &sdk.ElicitResult{Action: "decline"},
+		})
+		rows := structuredRows(t, declined, "results")
+		if declined.NeedsInput() || *f.sends != 1 || len(rows) != 2 ||
+			!strings.Contains(fmt.Sprint(rows[1]["error"]), "the person declined") {
+			t.Fatalf("declined batch = (needs input %t, sends %d, rows %v)",
+				declined.NeedsInput(), *f.sends, rows)
+		}
+	})
+
+	t.Run("a client without elicitation is refused per operation", func(t *testing.T) {
+		f := newInputRequestFixture(ctx, t)
+		client := f.client(t, false)
+		refused := f.call(t, client, "send_keys_batch", batch(f), nil)
+		rows := structuredRows(t, refused, "results")
+		if refused.NeedsInput() || *f.sends != 1 || len(rows) != 2 ||
+			!strings.Contains(fmt.Sprint(rows[1]["error"]), "cannot be asked") {
+			t.Fatalf("unaskable batch = (needs input %t, sends %d, rows %v)",
+				refused.NeedsInput(), *f.sends, rows)
+		}
+	})
+}
+
 func threePaneInputFixture(
 	ctx context.Context,
 	t *testing.T,

@@ -129,8 +129,9 @@ contains its own process. `get_server_info` reports `insideThisServer` and
 
 The protection differs. Python refuses teardown that would end its caller pane,
 window, session, or server. Go protects both teardown and input. Writing to or
-ending the caller asks through MCP elicitation and fails closed when the client
-cannot ask or the person declines. Confirmation cannot make an unselected tool
+ending the caller asks through MCP elicitation, in the result of the call from
+protocol 2026-07-28, and fails closed when the client cannot ask or the person
+declines. Confirmation cannot make an unselected tool
 reachable.
 
 Go input checks one more human boundary. Before send, paste, or command

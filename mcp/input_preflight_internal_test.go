@@ -692,7 +692,12 @@ func TestConfirmCallerInputPreflight(t *testing.T) {
 			return &sdk.ElicitResult{Action: "accept", Content: map[string]any{"remember": true}}, nil
 		},
 	})
-	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	// This calls the helper with a bare request, so it asks the way a client
+	// before 2026-07-28 is asked. The newer protocol is covered through tool
+	// calls, where the answer travels on the retried call.
+	clientSession, err := client.Connect(ctx, clientTransport, &sdk.ClientSessionOptions{
+		ProtocolVersion: "2025-11-25",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
