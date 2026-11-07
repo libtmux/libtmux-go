@@ -19,6 +19,7 @@ type snapshotPaneInput struct {
 	IncludeHistory bool   `json:"includeHistory,omitempty" jsonschema:"read scrollback as well as the visible screen"`
 	MaxLines       int    `json:"maxLines,omitempty" jsonschema:"how many lines to return at most, keeping the last ones"`
 	MaxBytes       int    `json:"maxBytes,omitempty" jsonschema:"how many bytes to return at most, keeping the last lines"`
+	Styles         bool   `json:"styles,omitempty" jsonschema:"return terminal colour and attribute escape sequences raw in the lines"`
 }
 
 type snapshotPaneOutput struct {
@@ -48,7 +49,7 @@ func (t *tools) snapshotPane(
 	if err != nil {
 		return nil, snapshotPaneOutput{}, err
 	}
-	request := tmux.CapturePaneRequest{}
+	request := tmux.CapturePaneRequest{EscapeSequences: input.Styles}
 	if input.IncludeHistory {
 		request.Start = tmux.CaptureBoundary
 	}

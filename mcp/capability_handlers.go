@@ -34,6 +34,8 @@ type captureCapabilityInput struct {
 	PaneID   string `json:"pane_id" jsonschema:"the pane id, such as %1"`
 	History  bool   `json:"history,omitempty" jsonschema:"include scrollback as well as the visible screen"`
 	MaxLines int    `json:"max_lines,omitempty" jsonschema:"maximum lines, keeping the newest"`
+	// capture_since has no styles: its cursor fingerprints plain rows.
+	Styles bool `json:"styles,omitempty" jsonschema:"return terminal colour and attribute escape sequences raw in the lines; off by default"`
 }
 
 type captureSinceCapabilityInput struct {
@@ -327,6 +329,7 @@ func (t *tools) catalogGetPaneInfo(ctx context.Context, request *sdk.CallToolReq
 func (t *tools) catalogCapturePane(ctx context.Context, request *sdk.CallToolRequest, input captureCapabilityInput) (*sdk.CallToolResult, capturePaneOutput, error) {
 	return t.capturePane(ctx, request, capturePaneInput{
 		PaneID: input.PaneID, IncludeHistory: input.History, MaxLines: input.MaxLines,
+		Styles: input.Styles,
 	})
 }
 
@@ -339,6 +342,7 @@ func (t *tools) catalogCaptureSince(ctx context.Context, request *sdk.CallToolRe
 func (t *tools) catalogSnapshotPane(ctx context.Context, request *sdk.CallToolRequest, input captureCapabilityInput) (*sdk.CallToolResult, snapshotPaneOutput, error) {
 	return t.snapshotPane(ctx, request, snapshotPaneInput{
 		PaneID: input.PaneID, IncludeHistory: input.History, MaxLines: input.MaxLines,
+		Styles: input.Styles,
 	})
 }
 

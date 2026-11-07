@@ -184,6 +184,7 @@ func appendInspectDefinitions(definitions []toolDefinition) []toolDefinition {
 		input("pane_id", sinkTmuxLookup),
 		input("history", sinkNone),
 		input("max_lines", sinkNone),
+		input("styles", sinkNone),
 	)
 	terminal := outputs(outputTerminalContent, outputTmuxMetadata)
 	definitions = append(definitions,

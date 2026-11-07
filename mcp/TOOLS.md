@@ -595,7 +595,7 @@ through `get_recipe`.
 | `set_option` | constrained tools such as `set_mouse_enabled`, `set_history_limit`, and `set_synchronize_panes` |
 | `set_environment` | no generic caller-controlled process environment route |
 | `display_message` | `get_tmux_variables` for validated variable names; no free-form tmux-format interpreter |
-| `capture_pane styles` / colored output | No current MCP replacement; captures return plain rendered text, so do not infer status from color alone |
+| `capture_pane styles` / colored output | `styles: true` on `capture_pane` or `snapshot_pane`; the lines then carry raw escape sequences. `capture_since` stays plain |
 | `build_workspace` | compose `create_session`, `create_window`, `split_window`, and layout tools |
 | `move_pane` | compose the retained layout operations; no direct public MCP replacement |
 | `load_buffer` / `paste_buffer` | `paste_text` stages an ephemeral private buffer internally |
@@ -678,6 +678,7 @@ Reads only (effect `observe`). Repeating it changes nothing.
 | `pane_id` **required** | string | the pane id, such as %1 |
 | `history` | boolean | include scrollback as well as the visible screen |
 | `max_lines` | integer | maximum lines, keeping the newest |
+| `styles` | boolean | return terminal colour and attribute escape sequences raw in the lines; off by default |
 
 | Returns | Type |
 | --- | --- |
@@ -1917,6 +1918,7 @@ Reads only (effect `observe`). Repeating it changes nothing.
 | `pane_id` **required** | string | the pane id, such as %1 |
 | `history` | boolean | include scrollback as well as the visible screen |
 | `max_lines` | integer | maximum lines, keeping the newest |
+| `styles` | boolean | return terminal colour and attribute escape sequences raw in the lines; off by default |
 
 | Returns | Type |
 | --- | --- |
