@@ -338,8 +338,8 @@ That also keeps this package from creating an import cycle with the library.
 
 ## Support and status
 
-- **No runtime dependencies.** It is part of the tmux module and imports only
-  the standard library.
+- **No third-party Go dependencies.** It is part of the tmux module and
+  imports only the standard library; tmux is required at runtime.
 - **Go 1.26+.** The package needs no tmux. The examples that read a server
   need tmux 3.3a or newer.
 - **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
