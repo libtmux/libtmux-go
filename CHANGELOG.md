@@ -32,6 +32,41 @@ span modules, such as documentation, CI and release tooling, are listed here.
   0600 instead of the umask's mode, commonly 0644, which left a pane's screen
   readable by every local user. A file that already exists keeps its mode, and
   a failed call removes the file it created. (#140)
+- `Plan.SendKeys` and `Plan.ClearHistory` now refuse an unsupported flag under
+  `FailUnsupported` and report it under `DegradeUnsupported`, as
+  `Pane.SendKeys` and `Pane.ClearHistory` do. A plan on tmux 3.3a with
+  `KeyName` or `ResetHyperlinks` used to drop the flag and succeed. (#131)
+- `Plan.Run` applies the unsupported-feature policy, and every other check this
+  package can make, to all steps before it sends the first. A step that targets
+  an object an earlier step creates is checked against a placeholder, so a plan
+  no longer refuses after it has already changed tmux. `Plan.Preview` checks
+  those steps too and leaves out only their arguments. (#131)
+- A plan refuses a `Ref` returned by another plan's step with a `PlanError`
+  before sending anything. Refs from `Session.Ref`, `Window.Ref`, `Pane.Ref`
+  and the ID constructors still work in any plan, and a plan copied by value
+  keeps recognizing its own step refs. (#131)
+- `Window.Ref` carries the window's exact winlink as of the call, which
+  `Plan.UnlinkWindow`, `Plan.LinkWindow`, `Plan.MoveWindow` and
+  `Plan.SwapWindow` use to address one linked view. A later renumbering is not
+  followed. (#131)
+- The window operations whose `Window` methods name the winlink, such as
+  `Plan.RenameWindow`, `Plan.SelectWindow` and `Plan.KillOtherWindows`, use it
+  too. `Plan.KillWindow` keeps the window ID, as `Window.Kill` does, and so do
+  `Plan.SetOption` and `Plan.SetHook`, as `Window.SetOption` and
+  `Window.SetHook` do without format expansion. (#131)
+- `Pane.Ref` carries the pane's exact target, which the pane operations use as
+  the `Pane` methods do, so a pane in a window linked more than once is the one
+  meant. (#131)
+- A `Window.Ref` or `Pane.Ref` whose record cannot name its placement makes the
+  operations that need it refuse with a `PlanError`, instead of falling back to
+  the bare ID. (#131)
+- `ServerRef` addresses the server explicitly. `Plan.SetEnvironment` and
+  `Plan.UnsetEnvironment` with `ServerRef` or the zero `Ref` render
+  `set-environment -g` and `-g -u` instead of failing with `operation has no
+  target`. (#131)
+- `Pane.SendKeys`, `Pane.Enter` and the capture methods document that a nonzero
+  exit with empty stderr is success, matching their behavior and the package's
+  rule for mutations. The attach family is the documented exception. (#131)
 
 ### Documentation
 
@@ -39,6 +74,9 @@ span modules, such as documentation, CI and release tooling, are listed here.
   tmux at runtime.
 - `Server.SearchSessions` is described as tmux filtering the listing, plus the
   identity probes that detect a replaced daemon.
+- The concurrency contract in `DESIGN.md` and the package documentation now
+  agrees: a `Server` and its derived values are safe for concurrent method
+  calls. (#131)
 
 ### Development
 

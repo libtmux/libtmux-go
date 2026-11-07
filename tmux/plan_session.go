@@ -16,7 +16,7 @@ func (p *Plan) NewSession(request NewSessionRequest) Ref {
 		name:      "new-session",
 		untargets: true,
 		creates:   true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			if request.KillExisting {
 				return nil, invalidLifecycleRequest(
 					"KillExisting probes for an existing session before creating, " +
@@ -24,7 +24,7 @@ func (p *Plan) NewSession(request NewSessionRequest) Ref {
 				)
 			}
 			return newSessionArguments(request)
-		},
+		}),
 	})
 }
 
@@ -33,9 +33,9 @@ func (p *Plan) KillSession(target Ref) {
 	p.add(Op{
 		name:   "kill-session",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("kill-session", resolved)
-		},
+		}),
 	})
 }
 
@@ -44,12 +44,12 @@ func (p *Plan) RenameSession(target Ref, name string) {
 	p.add(Op{
 		name:   "rename-session",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateLifecycleSessionName("name", name); err != nil {
 				return nil, err
 			}
 			return targetedArguments("rename-session", resolved, "--", name)
-		},
+		}),
 	})
 }
 
@@ -58,9 +58,9 @@ func (p *Plan) NextWindow(target Ref) {
 	p.add(Op{
 		name:   "next-window",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("next-window", resolved)
-		},
+		}),
 	})
 }
 
@@ -70,9 +70,9 @@ func (p *Plan) PreviousWindow(target Ref) {
 	p.add(Op{
 		name:   "previous-window",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("previous-window", resolved)
-		},
+		}),
 	})
 }
 
@@ -82,9 +82,9 @@ func (p *Plan) LastWindow(target Ref) {
 	p.add(Op{
 		name:   "last-window",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("last-window", resolved)
-		},
+		}),
 	})
 }
 
@@ -94,9 +94,9 @@ func (p *Plan) LockSession(target Ref) {
 	p.add(Op{
 		name:   "lock-session",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			return targetedArguments("lock-session", resolved)
-		},
+		}),
 	})
 }
 
@@ -106,45 +106,54 @@ func (p *Plan) DetachClients(target Ref) {
 	p.add(Op{
 		name:   "detach-client",
 		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			// detach-client names its session with -s rather than -t, so this
 			// is untargetedArguments with the selector spelled out; it still
 			// validates every argument the way the targeted form does.
 			return untargetedArguments("detach-client", "-s", resolved)
-		},
+		}),
 	})
 }
 
 // SetEnvironment records a variable set in the session target names, or in the
-// server when target is the zero [Ref].
+// server's global environment when target is [ServerRef] or the zero [Ref].
 func (p *Plan) SetEnvironment(target Ref, name, value string) {
 	p.add(Op{
-		name:   "set-environment",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:      "set-environment",
+		target:    target,
+		untargets: target.addressesServer(),
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
 			}
 			if err := validateEnvironmentValue(value); err != nil {
 				return nil, err
 			}
+			if resolved == "" {
+				return untargetedArguments("set-environment", "-g", "--", name, value)
+			}
 			return targetedArguments("set-environment", resolved, "--", name, value)
-		},
+		}),
 	})
 }
 
 // UnsetEnvironment records a variable removed from the session target names, or
-// from the server when target is the zero [Ref].
+// from the server's global environment when target is [ServerRef] or the zero
+// [Ref].
 func (p *Plan) UnsetEnvironment(target Ref, name string) {
 	p.add(Op{
-		name:   "set-environment",
-		target: target,
-		build: func(resolved, _ string, _ planRenderContext) ([]string, error) {
+		name:      "set-environment",
+		target:    target,
+		untargets: target.addressesServer(),
+		build: plainBuild(func(resolved, _ string, _ planRenderContext) ([]string, error) {
 			if err := validateEnvironmentName(name); err != nil {
 				return nil, err
 			}
+			if resolved == "" {
+				return untargetedArguments("set-environment", "-g", "-u", "--", name)
+			}
 			return targetedArguments("set-environment", resolved, "-u", "--", name)
-		},
+		}),
 	})
 }
 
@@ -153,9 +162,9 @@ func (p *Plan) SourceFile(request SourceFileRequest) {
 	p.add(Op{
 		name:      "source-file",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return sourceFileArguments(request)
-		},
+		}),
 	})
 }
 
@@ -165,8 +174,8 @@ func (p *Plan) KillServer() {
 	p.add(Op{
 		name:      "kill-server",
 		untargets: true,
-		build: func(_, _ string, _ planRenderContext) ([]string, error) {
+		build: plainBuild(func(_, _ string, _ planRenderContext) ([]string, error) {
 			return untargetedArguments("kill-server")
-		},
+		}),
 	})
 }
