@@ -47,6 +47,12 @@ documentation, CI and release tooling, are in the core changelog.
   as raw ESC bytes, so a program that reports pass or fail in colour can be
   read. The bytes count toward the output byte limit. `capture_since` does
   not take it.
+- Add `move_pane` to the `manage` toolset. It moves a pane beside another pane
+  or into another window on the same server, and refuses to move a window's
+  only pane, which would close that window. Moving the pane the server runs in
+  does not ask first, because the process and its pane id survive. (#150)
+- Add `break_pane` to the `manage` toolset. It moves a pane into a new window of
+  its own session. On tmux 3.7 exactly it requires `name`. (#150)
 
 ## v0.1.2, workspace/v0.1.2, mcp/v0.1.2 (2026-11-01)
 
