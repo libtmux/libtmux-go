@@ -426,6 +426,17 @@ jobs:
         with:
           ref: ${{ matrix.tmux-version }}
 
+      # The cache regressions start the lane's own tmux, so a build that the
+      # validation would wrongly accept fails here before the module suites run.
+      - name: Test the tmux build and cache regressions
+        env:
+          TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/tmux-build-tests"
+          "$RUNNER_TEMP/tmux-build-tests/bin/pip" install --quiet pytest==9.2.0
+          export PATH="$TMUX_PREFIX/bin:$PATH"
+          "$RUNNER_TEMP/tmux-build-tests/bin/python" -m pytest -p no:cacheprovider .github/scripts/test_tmux_build.py
+
       - name: Open a tmate session before the tests
         if: ${{ matrix.tmate == 'before-tests' }}
         uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3.24
