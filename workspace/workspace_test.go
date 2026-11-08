@@ -1380,3 +1380,47 @@ func recordedTmuxArguments(data []byte) [][]string {
 	}
 	return commands
 }
+
+// tmuxpExamplesThisModuleCannotParse maps a tmuxp example [workspace.Parse]
+// refuses to the error it reports. Each is a gap in the library loader, not a
+// fixture to drop; the test fails when the error changes or the file parses.
+var tmuxpExamplesThisModuleCannotParse = map[string]string{
+	"env-variables.yaml": "workspace: invalid workspace: line 3: before_script is not supported: " +
+		"it runs a script through tmuxp's own process handling, which needs a Python runtime; " +
+		"run it yourself before calling Build",
+	"pane-shell.yaml": "workspace: invalid workspace: line 3: window 0 (\"first\") sets window_shell " +
+		"and a shell on its first pane, which are the same pane's command",
+	"plugin-system.yaml": "workspace: invalid workspace: line 2: plugins is not supported: " +
+		"it loads Python classes, which needs a Python runtime",
+}
+
+// TestEveryTmuxpExampleParses loads tmuxp's example catalog, kept under
+// testdata/tmuxp with tmuxp's license, through [workspace.Parse].
+func TestEveryTmuxpExampleParses(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("testdata", "tmuxp", "*.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) < 20 {
+		t.Fatalf("found %d tmuxp examples, want at least 20", len(paths))
+	}
+	for _, path := range paths {
+		name := filepath.Base(path)
+		t.Run(strings.TrimSuffix(name, ".yaml"), func(t *testing.T) {
+			document, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = workspace.Parse(document)
+			if want, known := tmuxpExamplesThisModuleCannotParse[name]; known {
+				if err == nil || err.Error() != want {
+					t.Fatalf("Parse(%s) error = %v, want the known error %q", name, err, want)
+				}
+				t.Skipf("known gap: %v", err)
+			}
+			if err != nil {
+				t.Fatalf("Parse(%s) error = %v", name, err)
+			}
+		})
+	}
+}
