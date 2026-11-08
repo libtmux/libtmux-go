@@ -18,6 +18,14 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ## Unreleased
 
+### Development
+
+- The `workspace` tests compare the plan the command builds from each of
+  tmuxp's 23 examples with the structure tmuxp's own loader makes of it, and
+  commit a record of which tmuxp syntax the command supports, derived from
+  what the test observed. The expected files are copied from libtmux-rs.
+  (#161)
+
 ## v0.1.3, workspace/v0.1.3, mcp/v0.1.3 (2026-11-07)
 
 ### tmux
