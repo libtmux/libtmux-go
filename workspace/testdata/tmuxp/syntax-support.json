@@ -1,0 +1,533 @@
+{
+  "schema_version": 1,
+  "port": "go",
+  "surface": "tmux-workspace load: readDocument and normalizeSource, the plan the command builds",
+  "tmuxp": "1.74.0",
+  "files": [
+    {
+      "file": "2-pane-synchronized.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "2-pane-vertical.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "3-pane.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "4-pane.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "blank-panes.yaml",
+      "outcome": "deviates",
+      "deviations": [
+        {
+          "path": "/windows/2/panes/0/commands",
+          "reason": "an empty-string pane is read as a blank pane, where tmuxp presses Enter in it",
+          "features": [
+            "pane.empty_command"
+          ]
+        }
+      ],
+      "refusal": null
+    },
+    {
+      "file": "env-variables.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "focus-window-and-panes.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "main-pane-height-percentage.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "main-pane-height.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "minimal.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "options.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "pane-shell.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "plugin-system.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "session-environment.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "shorthands.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "skip-send-pane-level.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "skip-send.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "sleep-pane-level.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "sleep-virtualenv.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "sleep.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "start-directory.yaml",
+      "outcome": "deviates",
+      "deviations": [
+        {
+          "path": "/session/start_directory",
+          "reason": "a trailing slash is dropped from a resolved path; tmux starts in the same directory",
+          "features": [
+            "session.start_directory"
+          ]
+        },
+        {
+          "path": "/windows/0/start_directory",
+          "reason": "a trailing slash is dropped from a resolved path; tmux starts in the same directory",
+          "features": [
+            "session.start_directory"
+          ]
+        },
+        {
+          "path": "/windows/0/panes/0/start_directory",
+          "reason": "a trailing slash is dropped from a resolved path; tmux starts in the same directory",
+          "features": [
+            "session.start_directory"
+          ]
+        },
+        {
+          "path": "/windows/0/panes/1/start_directory",
+          "reason": "a trailing slash is dropped from a resolved path; tmux starts in the same directory",
+          "features": [
+            "session.start_directory"
+          ]
+        }
+      ],
+      "refusal": null
+    },
+    {
+      "file": "suppress-history.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    },
+    {
+      "file": "window-index.yaml",
+      "outcome": "matches",
+      "deviations": [],
+      "refusal": null
+    }
+  ],
+  "features": [
+    {
+      "id": "session.shell_command_before",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "env-variables.yaml",
+        "sleep-virtualenv.yaml"
+      ]
+    },
+    {
+      "id": "window.shell_command_before",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "3-pane.yaml",
+        "4-pane.yaml",
+        "focus-window-and-panes.yaml",
+        "plugin-system.yaml"
+      ]
+    },
+    {
+      "id": "pane.shell_command_before",
+      "status": "unverified",
+      "detail": null,
+      "files": []
+    },
+    {
+      "id": "session.before_script",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "env-variables.yaml"
+      ]
+    },
+    {
+      "id": "sleep_before",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "sleep-pane-level.yaml",
+        "sleep-virtualenv.yaml",
+        "sleep.yaml"
+      ]
+    },
+    {
+      "id": "sleep_after",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "sleep-virtualenv.yaml",
+        "sleep.yaml"
+      ]
+    },
+    {
+      "id": "session.plugins",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "plugin-system.yaml"
+      ]
+    },
+    {
+      "id": "window.window_shell",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "pane-shell.yaml"
+      ]
+    },
+    {
+      "id": "pane.shell",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "pane-shell.yaml"
+      ]
+    },
+    {
+      "id": "suppress_history",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "pane-shell.yaml",
+        "suppress-history.yaml"
+      ]
+    },
+    {
+      "id": "window.focus",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "focus-window-and-panes.yaml",
+        "suppress-history.yaml"
+      ]
+    },
+    {
+      "id": "pane.focus",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "blank-panes.yaml",
+        "focus-window-and-panes.yaml"
+      ]
+    },
+    {
+      "id": "session.options",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "options.yaml"
+      ]
+    },
+    {
+      "id": "session.global_options",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "options.yaml"
+      ]
+    },
+    {
+      "id": "window.options",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "env-variables.yaml",
+        "main-pane-height-percentage.yaml",
+        "main-pane-height.yaml",
+        "options.yaml",
+        "pane-shell.yaml"
+      ]
+    },
+    {
+      "id": "window.options_after",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "2-pane-synchronized.yaml"
+      ]
+    },
+    {
+      "id": "pane.string",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "2-pane-synchronized.yaml",
+        "2-pane-vertical.yaml",
+        "3-pane.yaml",
+        "4-pane.yaml",
+        "blank-panes.yaml",
+        "plugin-system.yaml",
+        "session-environment.yaml",
+        "shorthands.yaml",
+        "start-directory.yaml",
+        "suppress-history.yaml",
+        "window-index.yaml"
+      ]
+    },
+    {
+      "id": "pane.list",
+      "status": "unverified",
+      "detail": null,
+      "files": []
+    },
+    {
+      "id": "pane.shell_command_string",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "blank-panes.yaml",
+        "session-environment.yaml",
+        "shorthands.yaml",
+        "skip-send-pane-level.yaml"
+      ]
+    },
+    {
+      "id": "pane.command_mapping",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "skip-send.yaml",
+        "sleep-pane-level.yaml",
+        "sleep.yaml"
+      ]
+    },
+    {
+      "id": "pane.blank",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "blank-panes.yaml",
+        "focus-window-and-panes.yaml",
+        "minimal.yaml"
+      ]
+    },
+    {
+      "id": "pane.empty_command",
+      "status": "supported_with_difference",
+      "detail": "an empty-string pane is read as a blank pane, where tmuxp presses Enter in it",
+      "files": [
+        "blank-panes.yaml"
+      ]
+    },
+    {
+      "id": "command.enter",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "skip-send-pane-level.yaml",
+        "skip-send.yaml"
+      ]
+    },
+    {
+      "id": "expand.environment_variable",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "env-variables.yaml",
+        "options.yaml",
+        "session-environment.yaml"
+      ]
+    },
+    {
+      "id": "expand.tilde",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "main-pane-height-percentage.yaml",
+        "main-pane-height.yaml",
+        "options.yaml",
+        "start-directory.yaml"
+      ]
+    },
+    {
+      "id": "session.start_directory",
+      "status": "supported_with_difference",
+      "detail": "a trailing slash is dropped from a resolved path; tmux starts in the same directory",
+      "files": [
+        "env-variables.yaml",
+        "main-pane-height-percentage.yaml",
+        "main-pane-height.yaml",
+        "options.yaml",
+        "start-directory.yaml"
+      ]
+    },
+    {
+      "id": "window.start_directory",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "env-variables.yaml",
+        "start-directory.yaml"
+      ]
+    },
+    {
+      "id": "pane.start_directory",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "blank-panes.yaml",
+        "main-pane-height-percentage.yaml",
+        "main-pane-height.yaml",
+        "options.yaml"
+      ]
+    },
+    {
+      "id": "start_directory.relative_to_session",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "start-directory.yaml"
+      ]
+    },
+    {
+      "id": "start_directory.dot_relative",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "start-directory.yaml"
+      ]
+    },
+    {
+      "id": "session.environment",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "session-environment.yaml"
+      ]
+    },
+    {
+      "id": "window.environment",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "session-environment.yaml"
+      ]
+    },
+    {
+      "id": "pane.environment",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "session-environment.yaml"
+      ]
+    },
+    {
+      "id": "window.window_index",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "window-index.yaml"
+      ]
+    },
+    {
+      "id": "window.layout.even-vertical",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "pane-shell.yaml"
+      ]
+    },
+    {
+      "id": "window.layout.main-horizontal",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "main-pane-height-percentage.yaml",
+        "main-pane-height.yaml",
+        "options.yaml"
+      ]
+    },
+    {
+      "id": "window.layout.main-vertical",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "3-pane.yaml"
+      ]
+    },
+    {
+      "id": "window.layout.tiled",
+      "status": "supported",
+      "detail": null,
+      "files": [
+        "4-pane.yaml",
+        "plugin-system.yaml"
+      ]
+    }
+  ]
+}

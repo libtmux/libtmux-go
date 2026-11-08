@@ -380,38 +380,3 @@ func BenchmarkNormalize(b *testing.B) {
 		}
 	}
 }
-
-// tmuxpExamplesTheCommandRefuses maps a tmuxp example the load command's own
-// loader refuses to the error it reports; each is a gap, not a fixture to drop.
-var tmuxpExamplesTheCommandRefuses = map[string]string{}
-
-// TestEveryTmuxpExampleNormalizes reads tmuxp's example catalog, kept under
-// workspace/testdata/tmuxp, the way the load command does: readDocument, then
-// normalizeSource.
-func TestEveryTmuxpExampleNormalizes(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "testdata", "tmuxp", "*.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) < 20 {
-		t.Fatalf("found %d tmuxp examples, want at least 20", len(paths))
-	}
-	for _, path := range paths {
-		name := filepath.Base(path)
-		t.Run(strings.TrimSuffix(name, ".yaml"), func(t *testing.T) {
-			doc, lines, err := readDocument(path)
-			if err == nil {
-				_, err = normalizeSource(doc, t.TempDir(), lines)
-			}
-			if want, known := tmuxpExamplesTheCommandRefuses[name]; known {
-				if err == nil || err.Error() != want {
-					t.Fatalf("%s error = %v, want the known error %q", name, err, want)
-				}
-				t.Skipf("known gap: %v", err)
-			}
-			if err != nil {
-				t.Fatalf("%s error = %v", name, err)
-			}
-		})
-	}
-}
