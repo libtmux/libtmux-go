@@ -350,7 +350,11 @@ if [ "$control" = yes ]; then
     else
         printf 'pinned\n' > "$PIN_RECORD"
     fi
+    pid=$("$PIN_REAL" -S "$PIN_ORIGINAL" display-message -p '#{pid}') || exit 90
     "$PIN_REAL" -S "$PIN_ORIGINAL" kill-server || exit 91
+    # kill-server returns before the daemon exits and still accepts clients
+    # until it does, so a replacement started now can land in the dying server.
+    while kill -0 "$pid" 2>/dev/null; do :; done
     "$PIN_OLD" -f /dev/null -S "$PIN_ORIGINAL" new-session -d -s keeper 'sleep 300' || exit 92
 fi
 exec "$PIN_REAL" "$@"
