@@ -62,11 +62,12 @@ func ExampleWindow_SplitPane_complete() {
 		if err != nil {
 			return fmt.Errorf("resize pane: %w", err)
 		}
-		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello")}); err != nil {
+		text := "hello"
+		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &text}); err != nil {
 			return fmt.Errorf("send keys: %w", err)
 		}
 		// Capture reads one moment, so wait for the typed line to show first.
-		if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{Text: "hello"}); err != nil {
+		if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{Text: text}); err != nil {
 			return fmt.Errorf("wait for text: %w", err)
 		}
 		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
