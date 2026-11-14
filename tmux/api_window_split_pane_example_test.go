@@ -51,6 +51,7 @@ func ExampleWindow_SplitPane_complete() {
 		if err != nil {
 			return fmt.Errorf("find window: %w", err)
 		}
+		// docs:split-keys given:ctx context.Context; window tmux.Window
 		pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
 			Direction: tmux.PaneDirectionRight, Command: "cat",
 		})
@@ -64,6 +65,7 @@ func ExampleWindow_SplitPane_complete() {
 		if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello")}); err != nil {
 			return fmt.Errorf("send keys: %w", err)
 		}
+		// Capture reads one moment, so wait for the typed line to show first.
 		if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{Text: "hello"}); err != nil {
 			return fmt.Errorf("wait for text: %w", err)
 		}
@@ -73,6 +75,7 @@ func ExampleWindow_SplitPane_complete() {
 		}
 		width, _ := pane.Width()
 		fmt.Printf("%d columns, showing %q\n", width, lines[0])
+		// docs:end
 		return nil
 	}
 	if err := run(); err != nil {

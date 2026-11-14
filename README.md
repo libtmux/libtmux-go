@@ -542,6 +542,56 @@ and backslashes in it as syntax.
 an `io.Reader`, and [`Pane.CaptureTo`][tmux-pane-captureto] writes a scrollback
 to an `io.Writer`. [`examples/byte-streams`](examples/byte-streams) does both.
 
+### [`Pane.SendKeys`][tmux-pane-sendkeys]: send keys to a pane, then capture it
+
+[`Window.SplitPane`][tmux-window-splitpane] makes the pane,
+[`Pane.Resize`][tmux-pane-resize] and [`Window.Resize`][tmux-window-resize] set
+sizes, and [`Pane.Capture`][tmux-pane-capture] reads the screen. Given a window,
+this excerpt of [a whole program](tmux/api_window_split_pane_example_test.go)
+splits it, sizes the new pane, types into it and reads it back:
+
+<!-- docs:split-keys -->
+
+```go
+// Given: ctx context.Context; window tmux.Window
+pane, err := window.SplitPane(ctx, tmux.SplitPaneRequest{
+	Direction: tmux.PaneDirectionRight, Command: "cat",
+})
+if err != nil {
+	return fmt.Errorf("split window: %w", err)
+}
+pane, err = pane.Resize(ctx, tmux.ResizePaneRequest{Width: tmux.PaneCells(20)})
+if err != nil {
+	return fmt.Errorf("resize pane: %w", err)
+}
+if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello")}); err != nil {
+	return fmt.Errorf("send keys: %w", err)
+}
+// Capture reads one moment, so wait for the typed line to show first.
+if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{Text: "hello"}); err != nil {
+	return fmt.Errorf("wait for text: %w", err)
+}
+lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
+if err != nil {
+	return fmt.Errorf("capture pane: %w", err)
+}
+width, _ := pane.Width()
+fmt.Printf("%d columns, showing %q\n", width, lines[0])
+```
+
+<!-- docs:end -->
+
+<!-- docs:checked tmux/api_window_split_pane_example_test.go -->
+It prints `20 columns, showing "hello"`.
+<!-- docs:end -->
+
+[`Pane.Kill`][tmux-pane-kill], [`Window.Kill`][tmux-window-kill],
+[`Session.Kill`][tmux-session-kill] and [`Server.Kill`][tmux-server-kill] remove
+what a program made.
+
+[`Session.SetMouse`][tmux-session-setmouse] and the other typed setters change
+[options and hooks](tmux/README.md#options-and-hooks).
+
 ## Watch tmux change
 
 ### [`Session.OpenNotifications`][tmux-session-opennotifications]: hear changes as they happen
@@ -1252,6 +1302,8 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-pane-waitfortext]: https://libtmux.org/en/go/latest/reference/tmux-pane-waitfortext/
 [tmux-pane-writer]: https://libtmux.org/en/go/latest/reference/tmux-pane-writer/
 [tmux-pane-refresh]: https://libtmux.org/en/go/latest/reference/tmux-pane-refresh/
+[tmux-pane-resize]: https://libtmux.org/en/go/latest/reference/tmux-pane-resize/
+[tmux-pane-sendkeys]: https://libtmux.org/en/go/latest/reference/tmux-pane-sendkeys/
 [tmux-pane]: https://libtmux.org/en/go/latest/reference/tmux-pane/
 [tmux-paneendederror]: https://libtmux.org/en/go/latest/reference/tmux-paneendederror/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
@@ -1263,6 +1315,7 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-plan-runwith]: https://libtmux.org/en/go/latest/reference/tmux-plan-runwith/
 [tmux-planner]: https://libtmux.org/en/go/latest/reference/tmux-planner/
 [tmux-poll]: https://libtmux.org/en/go/latest/reference/tmux-poll/
+[tmux-server-kill]: https://libtmux.org/en/go/latest/reference/tmux-server-kill/
 [tmux-server-loadbufferfrom]: https://libtmux.org/en/go/latest/reference/tmux-server-loadbufferfrom/
 [tmux-server-panes]: https://libtmux.org/en/go/latest/reference/tmux-server-panes/
 [tmux-server-searchsessions]: https://libtmux.org/en/go/latest/reference/tmux-server-searchsessions/
@@ -1274,13 +1327,18 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-sequential]: https://libtmux.org/en/go/latest/reference/tmux-sequential/
 [tmux-serveroptions-configfile]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-configfile/
 [tmux-serveroptions]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions/
+[tmux-session-kill]: https://libtmux.org/en/go/latest/reference/tmux-session-kill/
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
 [tmux-session-opennotifications]: https://libtmux.org/en/go/latest/reference/tmux-session-opennotifications/
 [tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
 [tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
+[tmux-session-setmouse]: https://libtmux.org/en/go/latest/reference/tmux-session-setmouse/
 [tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
+[tmux-window-kill]: https://libtmux.org/en/go/latest/reference/tmux-window-kill/
 [tmux-window-refresh]: https://libtmux.org/en/go/latest/reference/tmux-window-refresh/
+[tmux-window-resize]: https://libtmux.org/en/go/latest/reference/tmux-window-resize/
+[tmux-window-splitpane]: https://libtmux.org/en/go/latest/reference/tmux-window-splitpane/
 [tmux-window]: https://libtmux.org/en/go/latest/reference/tmux-window/
 [tmux]: https://github.com/tmux/tmux
 [tmuxq-first]: https://libtmux.org/en/go/latest/reference/tmuxq-first/
