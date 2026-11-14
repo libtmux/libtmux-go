@@ -215,6 +215,118 @@ func (s Session) Panes() ([]Pane, bool) {
 // Window is one materialized (session, index, window) winlink record. It is
 // normally returned by [Server.Snapshot], [Server.Window], or [Window.Refresh].
 // A zero Window is not a usable tmux target.
+//
+// # What is on here
+//
+// A window is one session's link to a tmux window, so the same [WindowID] can
+// appear in several sessions with different indexes.
+// Most methods address that exact link, and the result of one that changes the
+// window is a fresh record that may name another linked session.
+// Whatever is not one window's job, such as lookups by ID or the server's
+// buffers, lives on [Server] and [Session].
+//
+// # Fields on the record
+//
+// The typed accessors read tmux's window formats from the record in hand and
+// never query tmux.
+// Each returns false as its second result when the value is absent, empty, or
+// malformed.
+// The raw expansions come back as a [FormatValues].
+// [Window.Refresh] returns a new record read live by stable ID, and it does
+// not keep the linked-session view the receiver had.
+//
+//   - Identity: [Window.ID], [Window.Index], [Window.SessionID],
+//     [Window.Server], [Window.Ref], [Window.Equal], [Window.String]
+//   - Name and state: [Window.Name], [Window.Active], [Window.Flags],
+//     [Window.Layout], [Window.ZoomedFlag], [Window.PaneCount]
+//   - Size: [Window.Width], [Window.Height]
+//   - Alerts: [Window.ActivityFlag], [Window.BellFlag], [Window.SilenceFlag]
+//   - Raw: [Window.Formats]
+//   - Live: [Window.Refresh]
+//
+// # Panes and sessions
+//
+// A record from a snapshot holds its panes and its session, and reading them
+// queries nothing;
+// a record from a lookup or a refresh carries no relations and reports false.
+// The resolvers and the search method read live state, and a search takes a
+// [TmuxFilter], where nil omits tmux's -f expression.
+// Selecting a pane here is scoped to this window's link and does not select the
+// window in its session.
+//
+//   - Held by the record: [Window.Panes], [Window.ActivePane],
+//     [Window.Session], [Window.LinkedSessions]
+//   - Read live: [Window.ResolveActivePane], [Window.ResolveSession]
+//   - Search: [Window.SearchPanes]
+//   - Select a pane: [Window.SelectPane], [Window.LastPane]
+//
+// # Splitting and arranging
+//
+// A split makes a tiled pane and a new pane makes a floating one;
+// both return a [Pane] materialized in this window, and a failure after tmux
+// reports the pane ID returns the partial result with the error and does not
+// roll the creation back.
+// A layout change alters pane geometry without selecting the window or
+// refreshing the receiver, so take a new snapshot to read the result;
+// rotating and resizing return a fresh [Window].
+//
+//   - Create a pane: [Window.SplitPane], [Window.NewPane]
+//   - Layout: [Window.SelectLayout], [Window.NextLayout],
+//     [Window.PreviousLayout]
+//   - Arrange: [Window.Rotate], [Window.Resize]
+//
+// # Moving and linking
+//
+// Linking adds the window to another session and keeps the source;
+// moving takes this link out and places it in the target;
+// swapping exchanges two links.
+// Unlinking a window's only link is rejected unless the request sets KillIfLast,
+// which destroys the window.
+// A transport or context error on a call that returns nothing can be
+// delivery-ambiguous, and nothing is rolled back.
+//
+//   - Link: [Window.Link], [Window.Unlink]
+//   - Move: [Window.Move], [Window.Swap]
+//   - Create beside this one: [Window.NewWindow]
+//
+// # Renaming and ending
+//
+// Rename, Select, Respawn and Resize return a fresh record, and if the command
+// succeeds but the refresh fails they return the receiver with that error.
+// Killing the window destroys its panes and every link to it, and a session left
+// with no windows is destroyed;
+// KillOthers keeps only this link's window in its session.
+// A completed kill is a [CommandError] only when it wrote to stderr,
+// so a nonzero exit without stderr is ignored.
+//
+//   - Change: [Window.Rename], [Window.Select], [Window.Respawn]
+//   - End: [Window.Kill], [Window.KillOthers]
+//
+// # Messages and raw commands
+//
+// DisplayMessage formats a message at this window's target and can print it
+// back, and a completed stderr reaches the [WarningHandler] rather than
+// becoming an error.
+// Cmd sends any tmux subcommand targeted at the window's stable ID.
+//
+// [Window.DisplayMessage] and [Window.Cmd]
+//
+// # Options and hooks
+//
+// Typed reads include inherited values,
+// and a failed read is returned rather than answered with zero values.
+// A write by name reaches an option the typed setters do not cover,
+// and each known option has a typed setter that [WindowOptionValues] pairs with
+// its accessor.
+//
+//   - Read options: [Window.Options], [Window.RawOption]
+//   - Write by name: [Window.SetOption], [Window.AppendOption],
+//     [Window.UnsetOption]
+//   - Typed setters, for example: [Window.SetAutomaticRename],
+//     [Window.SetSynchronizePanes], [Window.SetMainPaneWidth]
+//   - Read hooks: [Window.Hooks], [Window.RawHook]
+//   - Write hooks: [Window.SetHook], [Window.SetHooks], [Window.AppendHook],
+//     [Window.UnsetHook], [Window.RunHook]
 type Window struct {
 	formats     formatValues
 	server      Server
@@ -276,6 +388,134 @@ func (w Window) Panes() ([]Pane, bool) {
 // Pane is one materialized pane record within a specific winlink. It is
 // normally returned by [Server.Snapshot], [Server.Pane], or [Pane.Refresh].
 // A zero Pane is not a usable tmux target.
+//
+// # What is on here
+//
+// A pane is one pane in one session's link to a window, so the same [PaneID]
+// can appear under several linked windows.
+// Most methods address that exact view, and a method that changes the pane
+// returns a record refreshed by [PaneID], which can carry a different linked
+// session or window.
+// Lookups by ID and the server's buffers live on [Server].
+//
+// # Fields on the record
+//
+// The typed accessors read tmux's pane formats from the record in hand and never
+// query tmux.
+// Each returns false as its second result when the value is absent, empty, or
+// malformed.
+// The raw expansions come back as a [FormatValues].
+// [Pane.Refresh] returns a new record read live by stable ID.
+//
+//   - Identity: [Pane.ID], [Pane.Index], [Pane.SessionID], [Pane.WindowID],
+//     [Pane.WindowIndex], [Pane.Server], [Pane.Ref], [Pane.Equal],
+//     [Pane.String]
+//   - Process: [Pane.CurrentCommand], [Pane.CurrentPath], [Pane.ProcessPID],
+//     [Pane.TTY], [Pane.StartCommand]
+//   - Dead panes: [Pane.Dead], [Pane.DeadStatus], [Pane.DeadSignal],
+//     [Pane.DeadTime]
+//   - Geometry: [Pane.Width], [Pane.Height], [Pane.Left], [Pane.Top],
+//     [Pane.Right], [Pane.Bottom]
+//   - State: [Pane.Active], [Pane.Title], [Pane.InMode], [Pane.Marked],
+//     [Pane.ZoomedFlag]
+//   - Cursor: [Pane.CursorX], [Pane.CursorY]
+//   - Raw: [Pane.Formats]
+//   - Live: [Pane.Refresh]
+//
+// # Window and session
+//
+// A record from a snapshot holds its window and session, and reading them
+// queries nothing;
+// a record from a lookup or a refresh carries no relations and reports false.
+// The resolvers snapshot live state and fail with an error that matches
+// [ErrNotFound] when nothing is found.
+//
+//   - Held by the record: [Pane.Window], [Pane.Session]
+//   - Read live: [Pane.ResolveWindow], [Pane.ResolveSession]
+//
+// # Sending input
+//
+// The keys go to tmux, not to a shell: the pane's program interprets what
+// arrives, and a call returns once tmux has taken the input.
+// A completed command is a redacted [CommandError] only when it wrote to
+// stderr, and a transport or context error is delivery-ambiguous.
+// Clear types the word reset and Enter as a person would, where Reset acts on
+// the pane itself.
+//
+//   - Keys: [Pane.SendKeys], [Pane.SendKeySequence], [Pane.Enter],
+//     [Pane.SendPrefix]
+//   - As a writer: [Pane.Writer]
+//   - Paste: [Pane.PasteBuffer]
+//   - Clear: [Pane.Clear], [Pane.Reset], [Pane.ClearHistory]
+//
+// # Reading output
+//
+// A capture reads the screen at one point in time, not a stream, and the zero
+// request reads the visible screen.
+// The printed forms need a subprocess, so a [Pane] bound to a [Connection]
+// returns [ErrConnectionRequiresProcess] for them, and [Pane.CaptureToFile]
+// stages through a tmux buffer to run over the connection.
+// A text wait polls the visible screen and matches text already there, so match
+// what a command prints, not the command typed.
+//
+//   - Capture: [Pane.Capture], [Pane.CaptureBytes]
+//   - Capture elsewhere: [Pane.CaptureTo], [Pane.CaptureToFile],
+//     [Pane.CaptureToBuffer]
+//   - Wait for output: [Pane.WaitForText]
+//   - Observe: [Pane.OpenObservation]
+//   - Pipe: [Pane.Pipe]
+//
+// # Splitting and arranging
+//
+// A split makes a tiled pane beside this one and a new pane makes a floating
+// one, both returned as a [Pane] materialized in this window.
+// Moving and joining relocate the pane, and removing a window's last pane
+// destroys the window.
+// Resizing and retitling refresh by [PaneID] and return the original receiver
+// with the error if only the refresh fails.
+//
+//   - Create: [Pane.Split], [Pane.NewPane]
+//   - Relocate: [Pane.Move], [Pane.Join], [Pane.BreakPane], [Pane.Swap]
+//   - Size: [Pane.Resize], [Pane.SetWidth], [Pane.SetHeight]
+//   - Title: [Pane.SetTitle]
+//   - Focus: [Pane.Select]
+//
+// # Modes and overlays
+//
+// Copy mode and the choosers act on this pane's target.
+// A window search needs an attached client, and a popup draws on a client's
+// screen, waits until it closes, and exposes no handle to its process.
+//
+//   - Copy mode: [Pane.CopyMode]
+//   - Choosers: [Pane.ChooseTree], [Pane.ChooseBuffer], [Pane.ChooseClient],
+//     [Pane.FindWindow]
+//   - Overlays: [Pane.DisplayPopup], [Pane.DisplayPanes], [Pane.DisplayMessage]
+//
+// # Respawning and ending
+//
+// Respawn restarts the pane's process and refreshes by [PaneID].
+// Killing the last pane destroys its window, and a session left with no
+// windows is destroyed;
+// KillOthers keeps only this pane in its window and never destroys a window.
+// Only stderr makes a completed kill a [CommandError].
+//
+// [Pane.Respawn], [Pane.Kill], and [Pane.KillOthers]
+//
+// # Options and hooks
+//
+// Typed reads include inherited values,
+// and a failed read is returned rather than answered with zero values.
+// A write by name reaches an option the typed setters do not cover.
+// Cmd sends any tmux subcommand targeted at the pane's stable ID.
+//
+//   - Read options: [Pane.Options], [Pane.RawOption]
+//   - Write by name: [Pane.SetOption], [Pane.AppendOption], [Pane.UnsetOption]
+//   - Typed setters, for example: [Pane.SetWindowStyle],
+//     [Pane.SetSynchronizePanes], [Pane.SetRemainOnExit]
+//   - Read hooks: [Pane.Hooks], [Pane.RawHook]
+//   - Write hooks: [Pane.SetHook], [Pane.SetHooks], [Pane.AppendHook],
+//     [Pane.UnsetHook], [Pane.RunHook]
+//   - Raw command: [Pane.Cmd]
 type Pane struct {
 	formats     formatValues
 	server      Server
