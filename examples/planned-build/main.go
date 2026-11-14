@@ -66,6 +66,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 
 	// Preview leaves unresolved forward-reference steps nil; other rendering
 	// failures return an error.
+	// docs:planning-explain given:plan *tmux.Plan
 	preview, err := plan.Preview(tmux.Version{})
 	if err != nil {
 		return fmt.Errorf("preview: %w", err)
@@ -85,11 +86,12 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
 			dispatch.Ops, dispatch.Reason)
 	}
+	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+	// docs:end
 	if len(dispatches) >= plan.Len() {
 		return fmt.Errorf("%d operations took %d tmux invocations, want fewer than one each",
 			plan.Len(), len(dispatches))
 	}
-	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
 
 	// docs:planning-run given:ctx context.Context; server tmux.Server; plan *tmux.Plan
 	result, err := plan.Run(ctx, server)

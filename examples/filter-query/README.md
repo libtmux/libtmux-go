@@ -28,6 +28,24 @@ live matches: 1
 
 ## What to look at
 
+**List what the server holds.** One call asks tmux for every session:
+
+<!-- docs:list-sessions -->
+
+```go
+// Given: ctx context.Context; server tmux.Server
+sessions, err := server.Sessions(ctx)
+if err != nil {
+	return fmt.Errorf("list sessions: %w", err)
+}
+for _, session := range sessions {
+	name, _ := session.Name()
+	fmt.Println("session:", name)
+}
+```
+
+<!-- docs:end -->
+
 **Let tmux filter.** tmux evaluates the format itself and returns only the
 matches; the call also adds the identity probes that detect a replaced daemon:
 

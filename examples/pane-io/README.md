@@ -74,6 +74,30 @@ answer, `42`, appears only once the shell has computed it.
 `WaitFor` calls the match function with everything the pane has written since
 the observation opened.
 
+**`WaitForText` polls, on every release.** It reads the visible screen until it
+holds the text, so it needs no observation:
+
+<!-- docs:pane-wait-text -->
+
+```go
+// Given: ctx context.Context; pane tmux.Pane
+// A pane is an io.Writer, and a newline is the Enter key.
+command := `echo "6 x 7 = $((6 * 7))"`
+if _, err := fmt.Fprintln(pane.Writer(ctx), command); err != nil {
+	return fmt.Errorf("type command: %w", err)
+}
+// The screen already holds the typed line, which says "$((6 * 7))"
+// and never "42", so the answer is what the wait names.
+if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{
+	Text: "6 x 7 = 42",
+}); err != nil {
+	return fmt.Errorf("wait for answer: %w", err)
+}
+fmt.Println("the pane answered 6 x 7 = 42")
+```
+
+<!-- docs:end -->
+
 ## Read the pane as a stream
 
 <!-- docs:pane-io -->

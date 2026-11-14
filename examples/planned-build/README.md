@@ -132,11 +132,11 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
 			dispatch.Ops, dispatch.Reason)
 	}
+	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
 	if len(dispatches) >= plan.Len() {
 		return fmt.Errorf("%d operations took %d tmux invocations, want fewer than one each",
 			plan.Len(), len(dispatches))
 	}
-	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
 
 	result, err := plan.Run(ctx, server)
 	if err != nil {
@@ -168,7 +168,21 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 
 **A pane named before it exists.** The split has not run, so the pane it returns
 is not real yet — but it can already be named, which is what lets every step
-after it be written here rather than after a round trip.
+after it be written here rather than after a round trip:
+
+<!-- docs:planning -->
+
+```go
+// Given: window tmux.Window
+plan := tmux.NewPlan()
+plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
+editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
+plan.SetPaneTitle(editor, "editor")
+plan.SendKeys(editor, tmux.SendKeysRequest{Command: new("echo built")})
+plan.DisplayMessage(editor, "#{pane_title}")
+```
+
+<!-- docs:end -->
 
 **Preview renders what will be sent.** A step naming a pane no earlier step
 created here comes back nil, and that is not an error: it is the plan saying
@@ -177,7 +191,35 @@ an error, which is the point of reading a plan before sending it.
 
 **Explain says why each group ends.** A group ends early at a command whose
 new object's ID a later step needs, and at a command whose output is read.
-tmux answers a command list with one merged stdout, so neither can share it.
+tmux answers a command list with one merged stdout, so neither can share it:
+
+<!-- docs:planning-explain -->
+
+```go
+// Given: plan *tmux.Plan
+preview, err := plan.Preview(tmux.Version{})
+if err != nil {
+	return fmt.Errorf("preview: %w", err)
+}
+for index, argv := range preview {
+	if argv == nil {
+		fmt.Printf("step %d: rendered when the split has reported its pane\n", index)
+		continue
+	}
+	fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
+}
+
+// Groups end when later steps need a created ID or when merged stdout would
+// prevent result attribution.
+dispatches := plan.Explain()
+for _, dispatch := range dispatches {
+	fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
+		dispatch.Ops, dispatch.Reason)
+}
+fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+```
+
+<!-- docs:end -->
 
 **More results than calls.** `SendKeys` with a command records the keys and the
 Enter that submits them, because that is the two tmux commands it sends.
