@@ -1,9 +1,8 @@
 # Examples
 
-Runnable programs, one per topic. Each starts what it needs in tmux and
-removes it on the way out, so no tmux server is left running after one.
-`byte-streams` also writes an archive to your temporary directory, and names
-it.
+Runnable programs, one per topic. Each starts a tmux of its own and removes it
+on the way out. `byte-streams` also writes an archive to your temporary
+directory, and names it.
 
 They live in the repository rather than the module you install, so run them
 from a clone:
@@ -71,17 +70,18 @@ dependencies:
 
 ## Which tmux they reach
 
-The programs use empty configs and remove their servers on exit. `quickstart`
-owns a new temporary socket directory. Other programs use dedicated socket
-names: choose an unused name before running one, since an existing server on
-that socket can be modified or killed.
-`any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
-server the test harness owns.
+The programs use empty configs and remove their servers on exit.
 
-The subprocess examples need tmux 3.3a or newer on `PATH`. `byte-streams`,
-`control-mode-subscribe`, `fast-path`, `pane-io`, and `run-to-completion` need
-tmux 3.7 for their control connections or observations. `any-slice` needs no
-tmux.
+- `quickstart` owns a new temporary socket directory.
+- Other programs use dedicated socket names: choose an unused name before
+  running one, since an existing server on that socket can be modified or
+  killed.
+- `any-slice` needs no tmux, and `testing-a-program` is a test, which runs in a
+  server the test harness owns.
+
+The examples need tmux 3.3a or newer on `PATH`; `any-slice` needs none.
+`byte-streams`, `control-mode-subscribe`, `fast-path`, `pane-io` and
+`run-to-completion` need tmux 3.7 for their control connections or observations.
 
 ## Testing them
 
@@ -92,10 +92,9 @@ one the examples use when you run them:
 $ go -C examples test ./...
 ```
 
-These are a module of their own, so an example reaching for a dependency can
-never put that dependency in the library's `go.mod`. How the pages quote the
-programs, and the tests that hold them to it, are in
-[CONTRIBUTING.md](../.github/CONTRIBUTING.md#generated-documentation).
+They are a module of their own, so an example's dependency never reaches the
+library's `go.mod`. [CONTRIBUTING.md](../.github/CONTRIBUTING.md#generated-documentation)
+says how the pages quote the programs.
 
 ## See also
 

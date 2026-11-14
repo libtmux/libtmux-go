@@ -122,9 +122,8 @@ func run(ctx context.Context) (err error) {
 ## What to look at
 
 **A mutation returns the record it changed.** `Session.Rename` hands back the
-session as tmux now reports it. The `session` value already in hand still says
-`old`, because nothing refreshes a record behind you. `Session.Refresh` asks
-again when you want a new one.
+session as tmux now reports it; the `session` already in hand still says `old`.
+`Session.Refresh` asks again for a new one.
 
 **Identity survives a rename.** Both records carry the same `SessionID`, which
 tmux never reuses for the life of the server, so a command sent through either
@@ -138,10 +137,9 @@ the session carries no windows and says so. `Session.SearchWindows` asks tmux.
 no session holds returns an error matching `tmux.ErrNotFound`, so "it is gone"
 and "tmux could not be asked" are different checks.
 
-**A command tmux refused is a result.** `Server.Cmd` returns an error only
-when tmux could not be reached or the arguments could not be sent. A command
-that ran and failed, here `kill-window` on a window that does not exist, comes
-back with its exit status.
+**A command tmux refused is a result.** `Server.Cmd` errors only when tmux
+cannot be reached or the arguments cannot be sent. A command that ran and
+failed, such as `kill-window` on a missing window, returns its exit status.
 
 ## Running its test
 

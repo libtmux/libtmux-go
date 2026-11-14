@@ -37,11 +37,9 @@ the file described and tmux declined to create would be missing here.
 configuration, so it builds the same thing whatever your `~/.tmux.conf` says,
 and it stops that server before it exits.
 
-**A pane running a command that exits takes its window with it.** Then the
-session, then the server. The panes here run a shell and type a command into
-it, so they stay. A workspace whose panes each run something short-lived as
-their `shell` disappears before you can look at it, which is worth knowing
-before writing one.
+**A pane running a command that exits takes its window with it,** then the
+session, then the server. These panes run a shell and type a command into it, so
+they stay; a workspace of short-lived `shell` panes disappears before you look.
 
 ## Running its test
 

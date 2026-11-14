@@ -134,8 +134,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 
 **Scopes are separate objects.** `session.SetMouse` writes to that session;
 `server.GlobalSessionScope()` writes the global value every session inherits.
-Which one you hold decides what you changed, so it is a different receiver
-rather than a flag.
+Which you hold decides what you changed, so each is a receiver, not a flag.
 
 **A status line is a sparse array.** tmux indexes status format slots, and they
 need not be contiguous — this sets 0 and 2 and leaves 1 alone. `NewSparseArray`

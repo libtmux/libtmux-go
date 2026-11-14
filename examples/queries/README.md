@@ -227,9 +227,8 @@ lists sequentially. Each query filters the captured slice in Go, so the tenth
 question sends no further tmux command.
 
 **A filter is a value.** `tmux.PaneFilter` fields combine with AND; `AnyOf` and
-`Not` build the rest, and `Window` and `Session` reach through to the pane's
-window and session. `tmux.PaneActiveIs(true)` is a shorthand for the
-one-field filter.
+`Not` build the rest, and `Window` and `Session` reach the pane's window and
+session. `tmux.PaneActiveIs(true)` shorthands the one-field filter.
 
 **`Matching` reports the one error a filter can have.** A filter compiles
 itself into a predicate, and an invalid one, such as a bad `NameRegex`, is

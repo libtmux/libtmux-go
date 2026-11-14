@@ -59,12 +59,9 @@ fmt.Println("exited", result.Status)
 not do — start the window, wait, read the screen. What the command did is in
 `result.Status`, the way `exec.ExitError` carries it.
 
-**tmux signals the exit.** tmux runs a `pane-died` hook inside the server that
-signals a wait-for channel of this call's own, so `Run` returns when the
-process exits, not on the next tick of a loop. A liveness check stands behind
-that signal in case tmux loses it, starting at a quarter second and asking
-less often the longer the command runs. Nothing needs a tmux binary on the
-command's `PATH`.
+**tmux signals the exit.** A `pane-died` hook signals a wait-for channel of this
+call's own, so `Run` returns when the process exits, not on a loop's tick. A
+liveness check stands behind it. No tmux binary is needed on the command's `PATH`.
 
 **`Keep: true` leaves the window in place.** `result.Pane` then names a pane
 you can look at, which is what you want when a build fails and the screen is
@@ -105,19 +102,19 @@ fmt.Println("stopped:", streamed.Signal)
 <!-- docs:end -->
 
 **`StreamTo` is the whole loop.** It copies what the command prints into any
-writer and returns the same result `Wait` would, so nothing about following a
-command needs a goroutine of the caller's. `Kill` may run in one, as it does
-here.
+writer and returns the result `Wait` would, so following a command needs no
+goroutine of the caller's. `Kill` may run in one, as it does here.
 
 **`Kill` is the process group, not the pane.** tmux resolves the pid itself
 when the command runs, so killing does not depend on a pid this program read
 earlier, and `result.Signal` reports what ended it — as data, not an error.
 
 **The screen is authoritative.** `result.Lines` is a capture and always holds
-what the command showed. The stream is what tmux pushed while it ran: it starts
-where `StreamTo` opens it, which is why this command waits before its first
-line, and tmux can drop a line printed with nothing between it and the
-command's exit.
+what the command showed. The stream is what tmux pushed while it ran:
+
+- It starts where `StreamTo` opens it, which is why this command waits before
+  its first line.
+- tmux can drop a line printed with nothing between it and the command's exit.
 
 **The streamed bytes are the terminal's.** Each line arrives ending `\r\n`,
 because that is what a program writing to a tty produces. The output above

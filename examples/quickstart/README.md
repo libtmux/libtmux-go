@@ -88,22 +88,17 @@ func run(ctx context.Context) (err error) {
 
 ## What to look at
 
-**The server is the program's own.** `os.MkdirTemp` creates a directory that
-this run owns, and `SocketPath` selects a socket inside it. Cleanup kills that
-server before removing the directory. `ConfigFile: os.DevNull` keeps personal
-configuration out. `NewServer` starts nothing; the first command that needs a
-server starts one.
+**The server is the program's own.** Its `SocketPath` is in a directory from
+`os.MkdirTemp`, removed after cleanup kills the server. `ConfigFile: os.DevNull`
+keeps personal configuration out, and `NewServer` starts nothing.
 
-**`Session.Run` is `os/exec` for a program that needs a terminal.** The command
-runs in a window of its own with a tty, and what comes back is its exit status
-and the screen tmux rendered. A nonzero status is a result, not an error:
-[`run-to-completion`](../run-to-completion) shows one, and a command stopped by
-a signal.
+**`Session.Run` is `os/exec` for a terminal program.** It runs the command in a
+window with a tty and returns its exit status and the screen tmux rendered. A
+nonzero status is a result, not an error; see [`run-to-completion`](../run-to-completion).
 
 **Cleanup outlives the context.** The deferred `server.Kill` takes
-`context.WithoutCancel(ctx)`, so it still runs when a deadline or a cancelled
-context is why the program is leaving. `main` calls `run` because `log.Fatal`
-skips deferred calls.
+`context.WithoutCancel(ctx)`, so it runs even when a deadline or cancellation
+ends the program. `main` calls `run` because `log.Fatal` skips deferred calls.
 
 ## Running its test
 

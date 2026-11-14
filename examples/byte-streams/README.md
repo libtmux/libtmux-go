@@ -3,12 +3,15 @@
 Bytes into tmux and back out through the standard interfaces: a payload read
 from an `io.Reader`, and a scrollback written to an `io.Writer`.
 
-Typing a payload has two problems this avoids. A shell reads what it is sent, so
-`$HOME`, quotes and backslashes mean something on the way in; and keys cross
-tmux's command channel one line at a time, which caps a paste at tmux's
-16 KiB command limit and cannot carry a NUL at all. A buffer loaded from a
-reader has neither limit: tmux reads it as a stream, so the bytes arrive exactly
-as written, at any size.
+Typing a payload has two problems, which a buffer avoids:
+
+- A shell reads what it is sent, so `$HOME`, quotes and backslashes mean
+  something on the way in.
+- Keys cross tmux's command channel one line at a time, which caps a paste at
+  tmux's command limit and cannot carry a NUL.
+
+A buffer loaded from a reader has neither limit: tmux reads it as a stream, so
+the bytes arrive as written, at any size.
 
 Coming back out, `CaptureTo` writes the screen to any writer — here a
 `gzip.Writer` onto a file, with no intermediate copy of the scrollback in memory
@@ -110,9 +113,8 @@ if err := compressor.Close(); err != nil {
 <!-- docs:end -->
 
 **The payload is never an argument.** `LoadBufferFrom` hands tmux a stream, so
-no quoting rule applies and nothing is bounded by how long a command line may
-be. `Server.SetBuffer` is the other way to fill a buffer and is bounded by
-both.
+no quoting rule or command-line length applies. `Server.SetBuffer`, the other
+way to fill a buffer, is bounded by both.
 
 **`DeleteAfter` keeps the buffer list clean.** tmux keeps a buffer until
 something drops it, and the most recent buffer is what a person's own paste key
@@ -126,10 +128,9 @@ read with `gzip -dc`; each run leaves one, and nothing removes it.
 the call runs. Use `CaptureBoundary` for both ends to take the whole history
 rather than the visible rows.
 
-**These need a tmux process.** tmux gives a control client no stdin or stdout,
-so a connection-bound value refuses; `Server.LoadBuffer`,
-`Server.SaveBuffer` and `Pane.CaptureToFile` take a path and work over a
-connection.
+**These need a tmux process.** A control client has no stdin or stdout, so a
+connection-bound value refuses; the path-taking `Server.LoadBuffer`,
+`Server.SaveBuffer` and `Pane.CaptureToFile` work over a connection.
 
 ## Running its test
 

@@ -3,10 +3,12 @@
 Type a command into a pane and wait for its answer, then read what the pane
 prints next as a stream.
 
-A pane is an `io.Writer`, and what it prints is an `io.Reader`. Both are the
-standard interfaces, so what already works on a file or a socket works on a
-pane: `fmt.Fprintln` to submit a line, `bufio.Scanner` to read lines back,
-`io.Copy` to mirror a pane to stdout.
+A pane is an `io.Writer`, and what it prints is an `io.Reader`. What works on a
+file or a socket works on a pane:
+
+- `fmt.Fprintln` submits a line.
+- `bufio.Scanner` reads lines back.
+- `io.Copy` mirrors a pane to stdout.
 
 ## Running it
 
@@ -65,10 +67,9 @@ the answer cannot be missed.
 **A newline is the Enter key.** `Fprintln` types the text and presses Enter.
 Text without a trailing newline is typed and left on the line.
 
-**Wait for what the command prints, not for what you typed.** The terminal
-echoes the typed line, and that echo is pane output like any other. A wait for
-`6 x 7` would find the request itself and return before the command ran. The
-answer, `42`, appears only once the shell has computed it.
+**Wait for what the command prints, not what you typed.** The terminal echoes
+the typed line, which is pane output, so a wait for `6 x 7` would return before
+the command ran. The answer, `42`, appears only once the shell computes it.
 
 **`WaitFor` is pushed, not polled.** tmux reports each write as it happens, and
 `WaitFor` calls the match function with everything the pane has written since
@@ -128,11 +129,9 @@ return fmt.Errorf("read pane: %w", scanner.Err())
 as the program wrote them. `bufio.Scanner` drops the `\r` of a `\r\n` line
 ending; anything else is yours to interpret.
 
-**A prompt can share the reply's line.** A shell that is still starting when
-the command is typed prints its first prompt afterwards, so the reply arrives
-as `$ streamed 2 lines`. Comparing a whole line with the reply then never
-matches. The loop matches how the line ends, and the typed command, which ends
-in a quote, cannot match.
+**A prompt can share the reply's line.** A shell still starting prints its
+first prompt after the command is typed, so the reply arrives as
+`$ streamed 2 lines`. The loop matches how the line ends.
 
 ## Running its test
 

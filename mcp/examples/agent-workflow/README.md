@@ -3,16 +3,19 @@
 Drive the tmux MCP server the way an agent does.
 
 It does what an agent needs to do before it is useful in somebody's terminal:
-work out which pane it is running in, create a session when the socket is
-empty, make room without replacing the conversation's pane, start work and
-wait for what it prints, run one command and read its exit status, and read
-back what it built.
+
+- work out which pane it is running in;
+- create a session when the socket is empty;
+- make room without replacing the conversation's pane;
+- start work and wait for what it prints;
+- run one command and read its exit status;
+- read back what it built.
 
 The client and server are joined in memory rather than over a pipe, so this is
-one program rather than two. Everything else is what a client speaking to
-`libtmux-mcp` over stdin and stdout sees: tool names, arguments, and the shape
-of what comes back. The example grants itself the `inspect`, `manage`, and
-`execute` toolsets when the environment does not choose.
+one program, not two. Tool names, arguments and results are what a client
+speaking to `libtmux-mcp` over stdin and stdout sees. The example grants itself
+the `inspect`, `manage` and `execute` toolsets when the environment does not
+choose.
 
 ## Running it
 

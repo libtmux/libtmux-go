@@ -1,9 +1,8 @@
 # fast-path
 
-The same reads made two ways: through a plain server, which starts a tmux
-process for each command, and through a connection, one tmux client that
-carries them all. The example then shows which exact-capture operations each
-path supports.
+The same reads two ways: through a plain server, which starts a tmux process
+per command, and through a connection, one tmux client that carries them all.
+It then shows which exact-capture operations each path supports.
 
 The connection path requires tmux 3.7 or newer. Ordinary subprocess operations
 retain the 3.3a floor.
@@ -49,11 +48,12 @@ connected := connection.Session()
 <!-- docs:end -->
 
 Once established, `connection.Server()` and `connection.Session()` are bound
-to that exact daemon, and values derived from them keep that owner. The
-binding is terminal: closing the connection makes later operations return
-`ErrControlClosed`, and an operation that needs a separate process returns
-`ErrConnectionRequiresProcess`. It never falls back or rebinds. The session
-the connection was opened from stays on its process path.
+to that exact daemon, and values derived from them keep that owner.
+
+- Closing the connection is terminal: later operations return `ErrControlClosed`.
+- An operation that needs a separate process returns
+  `ErrConnectionRequiresProcess`. Nothing falls back or rebinds.
+- The session the connection was opened from stays on its process path.
 
 `Server.NewSessionConnection` creates a session and keeps its creating control
 process as the first lane, for when no session exists yet.
@@ -68,9 +68,8 @@ whose session is bound to its command lanes and exact daemon. The original
 session remains process-bound.
 
 **Printed capture stays on the process path.** Pane content can contain control
-protocol delimiters. A terminal connection refuses `Pane.Capture` instead of
-starting a hidden process. `Pane.CaptureToFile` stages the same capture through
-a tmux buffer and remains safe on the connection.
+protocol delimiters, so a connection refuses `Pane.Capture` rather than start a
+hidden process. `Pane.CaptureToFile` stages it through a buffer and is safe there.
 
 ## Running its test
 
