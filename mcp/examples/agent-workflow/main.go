@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -38,6 +39,7 @@ func main() {
 	socketName := flag.String("socket-name", "libtmux-agent-workflow",
 		`tmux socket name; "default" is the one your tmux command uses`)
 	traceCalls := flag.Bool("trace", false, "print the work calls and what came back, to standard error")
+	flag.BoolVar(&keepServer, "keep", false, "leave a server this program started running when it exits")
 	flag.Parse()
 	if *traceCalls {
 		traced = os.Stderr
@@ -57,7 +59,10 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, socketName string) error {
+// keepServer leaves a server the program started running when it exits.
+var keepServer bool
+
+func run(ctx context.Context, socketName string) (err error) {
 	// An empty config, so what it prints does not depend on yours.
 	target, err := tmux.NewServer(tmux.ServerOptions{SocketName: socketName, ConfigFile: os.DevNull})
 	if err != nil {
@@ -89,6 +94,16 @@ func run(ctx context.Context, socketName string) error {
 			"session_name": "agent-workflow",
 		}, nil); err != nil {
 			return err
+		}
+		// The server is this program's own, so it ends it. That goes through the
+		// library: the client has no teardown toolset to do it with.
+		if !keepServer {
+			defer func() {
+				stopped := target.Kill(context.WithoutCancel(ctx))
+				if !errors.Is(stopped, tmux.ErrNoServer) {
+					err = errors.Join(err, stopped)
+				}
+			}()
 		}
 		if err := call(ctx, session, "get_server_info", nil, &server); err != nil {
 			return err

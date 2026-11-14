@@ -46,10 +46,9 @@ the window now holds 2 panes: %0 %1
 
 <!-- docs:end -->
 
-It leaves that session running for you to attach to and look at, so a second
-run on the same socket works beside it and prints other pane ids. Clean up with
-`tmux -L demo kill-server`, or `tmux -L libtmux-agent-workflow kill-server`
-after a run without the flag.
+It stops a server it started before it exits. `-keep` leaves that server
+running for you to attach to; a second run on the same socket then works beside
+it and prints other pane ids.
 
 `-trace` also prints each call it makes and what came back, to standard error:
 
