@@ -88,8 +88,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	return nil
 }
 
-// list prints what the server holds now. It is a function of its own so the
-// region can use the names a reader would.
+// list prints what the server holds now.
 func list(ctx context.Context, server tmux.Server) error {
 	// docs:list-sessions given:ctx context.Context; server tmux.Server
 	sessions, err := server.Sessions(ctx)
