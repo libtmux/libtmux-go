@@ -11,24 +11,22 @@
 
 # libtmux for Go
 
-Drive tmux from Go: [sessions][tmux-session], [windows][tmux-window], and
-[panes][tmux-pane] as typed values, every tmux
-[option and hook as a typed accessor][topic-options-and-hooks], and
-[errors classified][topic-errors] by what tmux actually refused.
+Drive tmux from Go: [sessions][tmux-session], [windows][tmux-window] and
+[panes][tmux-pane] as typed values, [options and hooks][topic-options-and-hooks]
+as typed accessors, and [errors][topic-errors] classified by what tmux refused.
 
 [![tests](https://github.com/libtmux/libtmux-go/actions/workflows/tests.yml/badge.svg)](https://github.com/libtmux/libtmux-go/actions/workflows/tests.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux)
 [![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/libtmux/libtmux-go/blob/master/LICENSE)
 [![workspace reference](https://img.shields.io/badge/workspace-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace)
 [![mcp reference](https://img.shields.io/badge/mcp-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp)
 
 </div>
 
-[Run a command][tmux-session-run] in a real terminal and read what it printed,
-[find][tmux-server-sessions] and [filter][tmuxq-matching] what a tmux server
-holds, [type into a pane and wait][tmux-pane-waitfortext] for its
-answer, and [hear about changes][tmux-session-opennotifications] as tmux makes
-them.
+[Run a command][tmux-session-run], [find][tmux-server-sessions] and
+[filter][tmuxq-matching] what tmux holds, [type and wait][tmux-pane-waitfortext]
+for an answer, and [hear changes][tmux-session-opennotifications] as they happen.
 
 It suits tools that drive a terminal program, test suites that need a real
 tmux, and agents that share a terminal.
@@ -39,19 +37,16 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
 
-Releases are numbered `0.1.N`, and each release increments `N`. The API is not
-settled: any release may change or remove exported identifiers, and the
-[changelog](CHANGELOG.md) marks each break. Pin an exact version to avoid one.
+Releases are numbered `0.1.N`. The API is not settled: any release may change
+or remove exported identifiers, and the [changelog](CHANGELOG.md) marks each
+break. Pin an exact version to avoid one.
 
 It needs Go 1.26 or newer and tmux 3.3a or newer, on a Unix host. Against an
-older daemon, an operation returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
-and withholds the requested operation. A read-only version probe may run first.
+older tmux, a call returns [`tmux.ErrVersionTooLow`][tmux-errversiontoolow]
+instead of sending its command.
 
-tmux release candidates are not supported: a feature can require one only until
-its release ships, and a candidate such as `X.Y-rcN` ranks below `X.Y`. See
-[Release candidates](https://libtmux.org/en/tmux/guides/tmux-support/#release-candidates).
-
-The detail is in [the library contracts][contract-requirements].
+tmux [release candidates][tmux-release-candidates] are not supported.
+[The library contracts][contract-requirements] say what each feature needs.
 
 A tmux server for AI agents and a tmuxp-style workspace builder ship beside the
 library, under [Packages](#packages).
@@ -154,11 +149,12 @@ $ go mod init demo && \
     go run .
 ```
 
-The program creates a socket path in a new temporary directory, then kills its
-server and removes that directory on the way out. With no socket in
-[`ServerOptions`][tmux-serveroptions], it uses the socket in
-`LIBTMUX_SOCKET_PATH`, else the name in `LIBTMUX_SOCKET`; with neither set it
-reaches the server your own `tmux` command does.
+The program puts its socket in a new temporary directory, and kills its server
+and removes the directory on the way out.
+
+With no socket in [`ServerOptions`][tmux-serveroptions], a server uses
+`LIBTMUX_SOCKET_PATH`, else `LIBTMUX_SOCKET`; with neither set it reaches the
+server your own `tmux` command does.
 
 [`Session.Run`][tmux-session-run] is `os/exec` for a program that needs a
 terminal. The command runs in a window of its own with a tty, and you get back
@@ -168,44 +164,133 @@ A nonzero exit status arrives in the result.
 [`examples/run-to-completion`](examples/run-to-completion) shows one, on a tmux
 server of its own.
 
-Every Go block on this page comes from a program or test that runs on the
-releases its features support, against a real tmux wherever it uses one. Each
-output shown is what that run printed.
-
 ## Find sessions, windows, and panes
 
 ### [`Server.Sessions`][tmux-server-sessions]: what tmux has now
 
 One call asks tmux for every session. [`Server.Windows`][tmux-server-windows]
-and [`Server.Panes`][tmux-server-panes] are its siblings:
+and [`Server.Panes`][tmux-server-panes] are its siblings. This program starts
+a server of its own, lists it, filters it, and kills it:
 
-<!-- docs:list-sessions -->
+<!-- docs:file examples/filter-query/main.go -->
 
 ```go
-// Given: ctx context.Context; server tmux.Server
-sessions, err := server.Sessions(ctx)
-if err != nil {
-	return fmt.Errorf("list sessions: %w", err)
+// Command filter-query demonstrates snapshot predicates and live tmux filters.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+	"github.com/libtmux/libtmux-go/tmuxq"
+)
+
+func main() {
+	if err := start(); err != nil {
+		log.Fatal(err)
+	}
 }
-for _, session := range sessions {
-	name, _ := session.Name()
-	fmt.Println("session:", name)
+
+// start owns cleanup because log.Fatal skips deferred calls in main.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-filter-query",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
+	defer func() { _ = server.Kill(context.WithoutCancel(ctx)) }()
+	return run(ctx, server)
+}
+
+// run accepts injected server state so tests can isolate the example.
+func run(ctx context.Context, server tmux.Server) (err error) {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-filter"})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cleanupCancel()
+		err = errors.Join(err, session.Kill(cleanupCtx))
+	}()
+
+	if err := list(ctx, server); err != nil {
+		return err
+	}
+
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	active, err := tmuxq.Matching(snapshot.Panes(), tmux.PaneActiveIs(true))
+	if err != nil {
+		return err
+	}
+	fmt.Println("active panes:", len(active))
+
+	filter := tmux.PaneFilter{
+		Active:  new(true),
+		Session: &tmux.SessionFilter{Name: new("libtmux-filter")},
+	}
+	panes, err := tmuxq.Matching(snapshot.Panes(), filter)
+	if err != nil {
+		return err
+	}
+	fmt.Println("typed panes:", len(panes))
+
+	live := tmux.TmuxFilter("#{==:#{session_name},libtmux-filter}")
+	sessions, err := server.SearchSessions(ctx, &live)
+	if err != nil {
+		return err
+	}
+	fmt.Println("live matches:", len(sessions))
+	return nil
+}
+
+// list prints what the server holds now.
+func list(ctx context.Context, server tmux.Server) error {
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return fmt.Errorf("list sessions: %w", err)
+	}
+	for _, session := range sessions {
+		name, _ := session.Name()
+		fmt.Println("session:", name)
+	}
+	return nil
 }
 ```
 
 <!-- docs:end -->
 
-Each block on this page is the body of a function that returns an error, with
-the values its first line names already in hand.
+Save it as `main.go` and run it as the quick start does, or run
+[`examples/filter-query`](examples/filter-query) from a clone. It prints:
 
-[`examples/filter-query`](examples/filter-query) runs this and the two blocks
-below on a tmux server of its own. Like every example, it runs from a clone
-of the repository, with `go -C examples run ./filter-query`;
-[`examples/README.md`](examples/README.md) has the commands to clone it.
+<!-- docs:output examples/filter-query/output.txt -->
 
-<!-- docs:checked examples/filter-query/output.txt -->
-This one prints `session: libtmux-filter`.
+```text
+session: libtmux-filter
+active panes: 1
+typed panes: 1
+live matches: 1
+```
+
 <!-- docs:end -->
+
+The blocks below are fragments of it: each is the body of a function that
+returns an error, with the values its first line names already in hand.
 
 What comes back is a record: the [`Session`][tmux-session] you hold is what
 tmux said when you asked, and it stays as it was when tmux changes.
@@ -217,8 +302,7 @@ and "nobody to ask" stay different answers.
 ### [`tmuxq.Matching`][tmuxq-matching]: several answers from one read
 
 Collect a snapshot with [`Server.Snapshot`][tmux-server-snapshot], then filter
-the captured records in Go. Collection uses sequential listings and identity
-probes; it is not an atomic view of one instant.
+its records in Go; it is not an atomic view of one instant.
 [`Matching`][tmuxq-matching] takes any filter the `tmux` package declares:
 
 <!-- docs:query-in-go -->
@@ -272,12 +356,9 @@ the filters that run in Go and the helpers that apply them.
 
 ### [`Session.Refresh`][tmux-session-refresh]: read a held record again
 
-A [`Session`][tmux-session], [`Window`][tmux-window] or [`Pane`][tmux-pane] you
-hold is what tmux said when it was read, and a change to tmux does not reach
-it. Python libtmux's `.refresh()` updates the object in place; here `Refresh`
-asks tmux again and returns a replacement, and the record you called it on
-stays as it was. [`Window.Refresh`][tmux-window-refresh] and
-[`Pane.Refresh`][tmux-pane-refresh] work the same way:
+Unlike Python libtmux's in-place `.refresh()`, `Refresh` asks tmux again and
+returns a replacement; the record you called it on stays as it was.
+[`Window.Refresh`][tmux-window-refresh] and [`Pane.Refresh`][tmux-pane-refresh] work alike:
 
 <!-- docs:refresh -->
 
@@ -307,55 +388,117 @@ It prints `held record: old`, then `returned record: new`, then
 
 ### [`Pane.WaitForText`][tmux-pane-waitfortext]: wait for text on every release
 
-`Pane.WaitForText` polls the pane's visible screen until it holds the text, on
-every tmux release from 3.3a, and never opens a control client. It returns the
-screen it last read with every error. A pane or server that ends first returns
-a [`PaneEndedError`][tmux-paneendederror], which matches `ErrPaneEnded` and,
-through the failed read, `ErrNotFound` or `ErrNoServer`. A deadline or cancel
-returns `ctx.Err()`.
+`Pane.WaitForText` polls the visible screen until it holds the text, on every
+supported tmux. A pane or server that ends first returns a
+[`PaneEndedError`][tmux-paneendederror]; a deadline returns `ctx.Err()`.
 
 A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
 newline is the Enter key. Type, then wait for text the command prints:
 
-<!-- docs:pane-wait-text -->
+<!-- docs:file tmux/api_pane_wait_for_text_example_test.go -->
 
 ```go
-// Given: ctx context.Context; pane tmux.Pane
-// A pane is an io.Writer, and a newline is the Enter key.
-command := `echo "6 x 7 = $((6 * 7))"`
-if _, err := fmt.Fprintln(pane.Writer(ctx), command); err != nil {
-	return fmt.Errorf("type command: %w", err)
+package tmux_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+// Type a command into a shell and wait for what it prints. The wait polls the
+// visible screen on every supported tmux release, and the typed line is
+// already on that screen, so the text names the answer and not the command.
+func ExamplePane_WaitForText() {
+	run := func() (runErr error) {
+		directory, err := os.MkdirTemp("", "libtmux-go-api-")
+		if err != nil {
+			return fmt.Errorf("create socket directory: %w", err)
+		}
+		server, err := tmux.NewServer(tmux.ServerOptions{
+			SocketPath: filepath.Join(directory, "tmux.sock"),
+			ConfigFile: "/dev/null",
+		})
+		if err != nil {
+			return errors.Join(err, os.RemoveAll(directory))
+		}
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := server.Kill(cleanup); err != nil && !errors.Is(err, tmux.ErrNoServer) {
+				runErr = errors.Join(runErr, fmt.Errorf("stop server at %s: %w", directory, err))
+				return
+			}
+			runErr = errors.Join(runErr, os.RemoveAll(directory))
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+			Name: "work", Command: "sh", Width: 100, Height: 30,
+		})
+		if err != nil {
+			return fmt.Errorf("create session: %w", err)
+		}
+		pane, err := session.ResolveActivePane(ctx)
+		if err != nil {
+			return fmt.Errorf("resolve pane: %w", err)
+		}
+
+		// A pane is an io.Writer, and a newline is the Enter key.
+		command := `echo "6 x 7 = $((6 * 7))"`
+		if _, err := fmt.Fprintln(pane.Writer(ctx), command); err != nil {
+			return fmt.Errorf("type command: %w", err)
+		}
+		// The screen already holds the typed line, which says "$((6 * 7))"
+		// and never "42", so the answer is what the wait names.
+		if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{
+			Text: "6 x 7 = 42",
+		}); err != nil {
+			return fmt.Errorf("wait for answer: %w", err)
+		}
+		fmt.Println("the pane answered 6 x 7 = 42")
+		return nil
+	}
+	if err := run(); err != nil {
+		panic(err)
+	}
+	// Output:
+	// the pane answered 6 x 7 = 42
 }
-// The screen already holds the typed line, which says "$((6 * 7))"
-// and never "42", so the answer is what the wait names.
-if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{
-	Text: "6 x 7 = 42",
-}); err != nil {
-	return fmt.Errorf("wait for answer: %w", err)
-}
-fmt.Println("the pane answered 6 x 7 = 42")
 ```
 
 <!-- docs:end -->
 
-The wait is level-triggered: text already on screen matches at once, with
-`MatchedAtEntry` set, and the shell's echo of a typed line matches too, so name
-the answer and not the command. It reads the visible screen only, so text that
-scrolled off is not seen, and a poll sees the final state of text a program
-overwrote. Each read runs the owner's `after-capture-pane` hook. See
-[`docs/contracts.md`](tmux/docs/contracts.md#waiting-for-pane-text).
+Save it as `example_test.go` and run it as a test:
+
+```console
+$ go mod init demo && \
+    go get github.com/libtmux/libtmux-go/tmux@latest && \
+    go test
+```
+
+- Text already on screen matches at once, with `MatchedAtEntry` set. The
+  shell's echo of a typed line matches too, so name the answer, not the command.
+- Only the visible screen is read: text that scrolled off is not seen, and a
+  poll sees the final state of text a program overwrote.
+- Each read runs the owner's `after-capture-pane` hook.
+- Every error carries the screen the wait last read.
+
+More: [`docs/contracts.md`](tmux/docs/contracts.md#waiting-for-pane-text).
 
 ### [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor]: wait for what a command prints
 
 Needs tmux 3.7. It reports only output written after its baseline, where
-`Pane.WaitForText` matches what is already on screen.
-[`tmux.Poll`][tmux-poll] is for a state tmux does not announce, not for pane
-text.
+`Pane.WaitForText` matches what is on screen. [`tmux.Poll`][tmux-poll] is for
+state tmux does not announce, not for pane text.
 
-A pane is an `io.Writer` through [`Pane.Writer`][tmux-pane-writer], and a
-newline is the Enter key. Open an observation with
-[`Pane.OpenObservation`][tmux-pane-openobservation] before typing, then wait
-for text the command prints:
+Open an observation with [`Pane.OpenObservation`][tmux-pane-openobservation]
+before typing, then wait for text the command prints:
 
 <!-- docs:pane-wait -->
 
@@ -504,27 +647,159 @@ start fewer:
 ### [`tmux.NewPlan`][tmux-newplan]: write a layout in one pass
 
 A plan records commands instead of running them, sends the ones needing no
-answer together, and hands back a reference to what a step will create.
+answer together, and hands back a reference to what a step will create. This
+program records one, previews it, runs it, and prints each step's result:
 
-`new("echo built")` is how Go 1.26 writes a pointer to a value, for a field
-that may be left unset:
-
-<!-- docs:planning -->
+<!-- docs:file examples/planned-build/main.go -->
 
 ```go
-// Given: window tmux.Window
-plan := tmux.NewPlan()
-plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
-editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
-plan.SetPaneTitle(editor, "editor")
-plan.SendKeys(editor, tmux.SendKeysRequest{Command: new("echo built")})
-plan.DisplayMessage(editor, "#{pane_title}")
+// Command planned-build records tmux commands, uses forward references, and
+// groups compatible operations into fewer invocations.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := start(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// start owns cleanup because log.Fatal skips deferred calls in main.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-planned-build",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
+	return run(ctx, server)
+}
+
+// run accepts injected server state so tests can isolate the example.
+func run(ctx context.Context, server tmux.Server) (err error) {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-planned"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cleanupCancel()
+		err = errors.Join(err, session.Kill(cleanupCtx))
+	}()
+
+	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("planned")})
+	if err != nil {
+		return fmt.Errorf("create window: %w", err)
+	}
+
+	// The split's forward reference is usable before tmux reports its pane ID.
+	plan := tmux.NewPlan()
+	plan.SelectLayout(window.Ref(), tmux.SelectLayoutRequest{Layout: "tiled"})
+	editor := plan.SplitPane(window.Ref(), tmux.SplitPaneRequest{Attach: true})
+	plan.SetPaneTitle(editor, "editor")
+	plan.SendKeys(editor, tmux.SendKeysRequest{Command: new("echo built")})
+	plan.DisplayMessage(editor, "#{pane_title}")
+
+	// Preview leaves unresolved forward-reference steps nil; other rendering
+	// failures return an error.
+	preview, err := plan.Preview(tmux.Version{})
+	if err != nil {
+		return fmt.Errorf("preview: %w", err)
+	}
+	for index, argv := range preview {
+		if argv == nil {
+			fmt.Printf("step %d: rendered when the split has reported its pane\n", index)
+			continue
+		}
+		fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
+	}
+
+	// Groups end when later steps need a created ID or when merged stdout would
+	// prevent result attribution.
+	dispatches := plan.Explain()
+	for _, dispatch := range dispatches {
+		fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
+			dispatch.Ops, dispatch.Reason)
+	}
+	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+	if len(dispatches) >= plan.Len() {
+		return fmt.Errorf("%d operations took %d tmux invocations, want fewer than one each",
+			plan.Len(), len(dispatches))
+	}
+
+	result, err := plan.Run(ctx, server)
+	if err != nil {
+		return fmt.Errorf("run plan: %w", err)
+	}
+	if !result.OK() {
+		return fmt.Errorf("plan did not complete: %w", result.Err())
+	}
+
+	// Results remain per operation even when operations share an invocation.
+	for index, op := range result.Ops {
+		fmt.Printf("step %d %-16s %-8s created %q stdout %q\n",
+			index, op.Command, op.Status, op.Created, op.Stdout)
+	}
+	if result.Ops[1].Created == "" {
+		return errors.New("the split reported no pane ID")
+	}
+	read := result.Ops[len(result.Ops)-1]
+	if got := read.Stdout; len(got) != 1 || got[0] != "editor" {
+		return fmt.Errorf("the read reported %q, want the title the plan set", got)
+	}
+	return nil
+}
 ```
 
 <!-- docs:end -->
 
-[`Plan.Run`][tmux-plan-run] sends it, and reports on each step by itself even
-where several shared one tmux process:
+Save it as `main.go` and run it as the quick start does, or run
+[`examples/planned-build`](examples/planned-build) from a clone. It prints:
+
+<!-- docs:output examples/planned-build/output.txt -->
+
+```text
+step 0: tmux select-layout -t @1 tiled
+step 1: tmux split-window -t @1 -v -P -F#{pane_id}
+step 2: rendered when the split has reported its pane
+step 3: rendered when the split has reported its pane
+step 4: rendered when the split has reported its pane
+step 5: rendered when the split has reported its pane
+tmux invocation carrying steps [0], ends because it alone
+tmux invocation carrying steps [1], ends because it creates
+tmux invocation carrying steps [2 3 4], ends because it chained
+tmux invocation carrying steps [5], ends because it captures
+operations: 6, tmux invocations: 4
+step 0 select-layout    complete created "" stdout []
+step 1 split-window     complete created "%2" stdout []
+step 2 select-pane      complete created "" stdout []
+step 3 send-keys        complete created "" stdout []
+step 4 send-keys        complete created "" stdout []
+step 5 display-message  complete created "" stdout ["editor"]
+```
+
+<!-- docs:end -->
+
+In it, `new("echo built")` is how Go 1.26 writes a pointer to a value, for a
+field that may be left unset. [`Plan.Run`][tmux-plan-run] sends the plan, and
+reports on each step by itself even where several shared one tmux process:
 
 <!-- docs:planning-run -->
 
@@ -547,23 +822,86 @@ for index, op := range result.Ops {
 
 <!-- docs:end -->
 
-[`examples/planned-build`](examples/planned-build) is the program both blocks
-come from.
+<!-- docs:checked examples/planned-build/output.txt -->
+The last step reads back the title the plan set, so its line ends
+`stdout ["editor"]`.
+<!-- docs:end -->
+
+### [`Plan.Explain`][tmux-plan-explain]: see what runs in tmux first
+
+[`Plan.Preview`][tmux-plan-preview] renders each step's tmux arguments, and
+`Explain` shows how the plan groups steps into tmux invocations and why each
+group ends. Neither runs a command:
+
+<!-- docs:planning-explain -->
+
+```go
+// Given: plan *tmux.Plan
+preview, err := plan.Preview(tmux.Version{})
+if err != nil {
+	return fmt.Errorf("preview: %w", err)
+}
+for index, argv := range preview {
+	if argv == nil {
+		fmt.Printf("step %d: rendered when the split has reported its pane\n", index)
+		continue
+	}
+	fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
+}
+
+// Groups end when later steps need a created ID or when merged stdout would
+// prevent result attribution.
+dispatches := plan.Explain()
+for _, dispatch := range dispatches {
+	fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
+		dispatch.Ops, dispatch.Reason)
+}
+fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+```
+
+<!-- docs:end -->
 
 <!-- docs:checked examples/planned-build/output.txt -->
-It prints `operations: 6, tmux invocations: 4` before it runs the plan: six
-tmux commands, in four process starts rather than six. The last step reads
-back the title the plan set, so its line ends `stdout ["editor"]`.
+Six tmux commands go out in four process starts, so this prints
+`operations: 6, tmux invocations: 4`.
+<!-- docs:end -->
+
+[`Plan.Run`][tmux-plan-run] groups with [`Folding`][tmux-folding].
+[`Plan.RunWith`][tmux-plan-runwith] takes another [`Planner`][tmux-planner],
+such as [`Sequential`][tmux-sequential], which sends one process per step.
+
+### [`Session.OpenControl`][tmux-session-opencontrol]: one client for every command
+
+A connection keeps one tmux client attached and sends each command through it,
+where a plain [`Server`][tmux-server] starts a process per command. It needs
+tmux 3.7:
+
+<!-- docs:control-pool -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+connection, err := session.OpenControl(ctx, tmux.ConnectionOptions{})
+if err != nil {
+	return fmt.Errorf("open control connection: %w", err)
+}
+defer func() { _ = connection.Close() }()
+connected := connection.Session()
+```
+
 <!-- docs:end -->
 
 A connection appears in `list-clients` and counts toward `session_attached`,
 which is why opening one is explicit.
 
+[`examples/fast-path`](examples/fast-path) runs ten searches down each path.
+
+<!-- docs:checked examples/fast-path/output.txt -->
+It prints `process path: 10 searches`, then `connection path: 10 searches`.
+<!-- docs:end -->
+
 "Execution modes" in the [package documentation][tmux-package] has the rules
 each path follows. [`BENCHMARKS.md`](BENCHMARKS.md) is what each costs,
 measured on every supported tmux.
-
-[`examples/fast-path`](examples/fast-path) runs the same reads down each path.
 
 ## Testing your own code
 
@@ -663,10 +1001,12 @@ $ go install github.com/libtmux/libtmux-go/workspace/cmd/tmux-workspace@latest
 
 ### [`tmux`](https://github.com/libtmux/libtmux-go/tree/master/tmux): the library
 
-Sessions, windows, panes, options, hooks, formats, filters, snapshots, and
-plans, with no dependency outside the standard library. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) and
-[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+Sessions, windows, panes, options, hooks, formats, filters, snapshots and
+plans, with nothing outside the standard library.
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux),
+[libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
+[`CHANGELOG.md`](CHANGELOG.md).
 
 [`Session.Run`][tmux-session-run] runs a command in a window of its own, with
 a terminal. A nonzero exit status arrives in the result:
@@ -695,11 +1035,12 @@ This prints `screen: stdout is a terminal`, then `exited 3`.
 
 ### [`tmuxq`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq): filters for any slice
 
-Helpers that find records in a slice or an `iter.Seq`. The package imports no
-tmux type, so they work on a slice of your own as well as on the records
-`tmux` returns. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) and
-[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+Helpers that find records in a slice or an `iter.Seq`, whether your own or the
+ones `tmux` returns.
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq),
+[libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
+[`CHANGELOG.md`](CHANGELOG.md).
 
 [`tmuxq.Where`][tmuxq-where] keeps what a function accepts, and
 [`tmuxq.First`][tmuxq-first] returns the first match. This needs no tmux:
@@ -729,15 +1070,16 @@ This prints `open: test` and `open: deploy`, then `first open: test`.
 
 ### [`tmuxtest`](https://github.com/libtmux/libtmux-go/tree/master/tmux/tmuxtest): a real tmux for tests
 
-Runs your program in a real pane and lets a test assert on what it drew. The
-server, its sessions, and its panes end with the test. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
-and [libtmux.org](https://libtmux.org/en/go/latest/reference/).
+Runs your program in a real pane and lets a test assert on what it drew. What
+it starts ends with the test.
 
-[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
-itself a server on a socket of its own. This is the body of a test, in a
-package whose `TestMain` calls [`tmuxtest.Main`][tmuxtest-main], as in
-[the test above](#testing-your-own-code):
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest),
+[libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
+[`CHANGELOG.md`](CHANGELOG.md).
+
+[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test of tmux itself a server
+of its own. It goes in a package whose `TestMain` calls
+[`tmuxtest.Main`][tmuxtest-main], as in [the test above](#testing-your-own-code):
 
 <!-- docs:new-server -->
 
@@ -759,12 +1101,13 @@ if name, _ := session.Name(); name != "under-test" {
 ### [`workspace`](https://github.com/libtmux/libtmux-go/tree/master/workspace): tmuxp-style workspaces
 
 Loads tmuxp-style YAML workspace files and builds them in tmux, from Go or with
-the `tmux-workspace` command. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
-[libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/), and the
-[command reference](https://libtmux.org/en/go/latest/workspace/cli/).
-[`workspace/CLI.md`][workspace-cli-md] covers every command and its output
-formats.
+the `tmux-workspace` command.
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
+[libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/),
+[command reference](https://libtmux.org/en/go/latest/workspace/cli/),
+[`CLI.md`][workspace-cli-md]. Changelog:
+[`workspace/CHANGELOG.md`](workspace/CHANGELOG.md).
 
 With the command installed as above and a [workspace file][workspace-file]
 saved as `project.yaml`, [`tmux-workspace load`][workspace-cli-load] builds it
@@ -781,12 +1124,12 @@ $ tmux-workspace load \
 
 Serves one tmux server to Model Context Protocol clients, as the
 [`libtmux-mcp`][libtmux-mcp-command] command or from a program of your own.
-Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
-[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the
-[tool pages](https://libtmux.org/en/go/latest/mcp/tools/).
 
-[`mcp/README.md`][mcp-readme] covers client configuration, and
-[`mcp/TOOLS.md`][mcp-tools] lists each tool's arguments and results.
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
+[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/),
+[tool pages](https://libtmux.org/en/go/latest/mcp/tools/),
+[`TOOLS.md`][mcp-tools]. Changelog: [`mcp/CHANGELOG.md`](mcp/CHANGELOG.md).
+[`mcp/README.md`][mcp-readme] covers client configuration.
 
 An MCP client starts the server installed above itself, and speaks to it over
 stdin and stdout. Register it with Claude Code:
@@ -808,15 +1151,13 @@ module is a command that prints what each way of reaching tmux costs.
 ## What it leaves out
 
 - **Live objects.** A [`Session`][tmux-session] or a [`Pane`][tmux-pane] is a
-  record of what tmux reported when it was read, and does not change when
-  tmux does. Read again, or subscribe, to see a change.
+  record of what tmux said when it was read. Read again, or subscribe, to see
+  a change.
 - **A terminal emulator.** [A capture][tmux-pane-capture] and
-  [`Session.Run`][tmux-session-run]
-  return the screen tmux drew. [`PaneObservation`][tmux-paneobservation]
-  returns the bytes a program wrote.
-- **Your tmux configuration file.** Options and hooks are read and set on a
-  running server, and nothing here edits `~/.tmux.conf`. tmux reads it when
-  it starts a server, unless
+  [`Session.Run`][tmux-session-run] return the screen tmux drew;
+  [`PaneObservation`][tmux-paneobservation] returns the bytes a program wrote.
+- **Your tmux configuration file.** Nothing here edits `~/.tmux.conf`. tmux
+  reads it when it starts a server, unless
   [`ServerOptions.ConfigFile`][tmux-serveroptions-configfile] names another.
 
 ## Support and status
@@ -826,19 +1167,16 @@ period, so pin an exact version. Not recommended for production.
 
 - **No third-party Go dependencies.** The core module imports only the
   standard library; tmux is required at runtime.
-- **Go 1.26+**, rising with Go's own support window, about twice a year.
-  tmux **3.3a through 3.8** across the core, workspace, and MCP modules,
-  tested on releases spanning that range.
-- **Linux, including WSL, is the primary platform.** CI runs every module's
-  tests on Linux against tmux 3.3a and 3.8 on each push, and across tmux 3.3a
-  through 3.8 for each release. macOS is supported on a best-effort basis, and
-  CI coverage for it is highly limited.
-- **Other hosts.** The BSDs, illumos, and Plan 9 build. A Windows build
-  compiles, and CI tests executable lookup there; no tmux runs there.
-- **Tagged per directory.** Each module carries its own version: the tags are
-  `mcp/vN` and `workspace/vN` beside the core's plain `vN`. Pin the exact ones
-  you want in your own go.mod; the commands here fetch the newest. Each module
-  keeps a changelog of its own beside its `go.mod`.
+- **Go 1.26 or newer, tmux 3.3a or newer.** The Go floor rises with Go's own
+  support window.
+- **Linux, including WSL, is the primary platform.** macOS is best-effort, with
+  little CI coverage. [What CI covers](.github/CONTRIBUTING.md#what-ci-covers)
+  has the rest.
+- **Other hosts.** The BSDs, illumos and Plan 9 build; Windows compiles but
+  has no tmux.
+- **Tagged per directory.** The tags are `mcp/vN` and `workspace/vN` beside the
+  core's plain `vN`; pin the ones you want. Each module keeps a changelog beside
+  its `go.mod`.
 
 ## Documentation
 
@@ -849,10 +1187,9 @@ finish:
 $ go doc github.com/libtmux/libtmux-go/tmux
 ```
 
-It opens with a task index, and carries the rule mapping a tmux command to
-its Go method: `kill-pane` is [`Pane.Kill`][tmux-pane-kill], and
-`rename-session` is [`Session.Rename`][tmux-session-rename]. A command usually
-leads to its method without a lookup.
+It opens with a task index and maps each tmux command to its method:
+`kill-pane` is [`Pane.Kill`][tmux-pane-kill], `rename-session` is
+[`Session.Rename`][tmux-session-rename].
 
 | | |
 | --- | --- |
@@ -919,7 +1256,12 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-paneendederror]: https://libtmux.org/en/go/latest/reference/tmux-paneendederror/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
 [tmux-paneobservation]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation/
+[tmux-folding]: https://libtmux.org/en/go/latest/reference/tmux-folding/
+[tmux-plan-explain]: https://libtmux.org/en/go/latest/reference/tmux-plan-explain/
+[tmux-plan-preview]: https://libtmux.org/en/go/latest/reference/tmux-plan-preview/
 [tmux-plan-run]: https://libtmux.org/en/go/latest/reference/tmux-plan-run/
+[tmux-plan-runwith]: https://libtmux.org/en/go/latest/reference/tmux-plan-runwith/
+[tmux-planner]: https://libtmux.org/en/go/latest/reference/tmux-planner/
 [tmux-poll]: https://libtmux.org/en/go/latest/reference/tmux-poll/
 [tmux-server-loadbufferfrom]: https://libtmux.org/en/go/latest/reference/tmux-server-loadbufferfrom/
 [tmux-server-panes]: https://libtmux.org/en/go/latest/reference/tmux-server-panes/
@@ -928,6 +1270,8 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-server-snapshot]: https://libtmux.org/en/go/latest/reference/tmux-server-snapshot/
 [tmux-server-windows]: https://libtmux.org/en/go/latest/reference/tmux-server-windows/
 [tmux-server]: https://libtmux.org/en/go/latest/reference/tmux-server/
+[tmux-release-candidates]: https://libtmux.org/en/tmux/guides/tmux-support/#release-candidates
+[tmux-sequential]: https://libtmux.org/en/go/latest/reference/tmux-sequential/
 [tmux-serveroptions-configfile]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions-configfile/
 [tmux-serveroptions]: https://libtmux.org/en/go/latest/reference/tmux-serveroptions/
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
