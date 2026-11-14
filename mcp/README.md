@@ -25,9 +25,9 @@ Serve one tmux server to Model Context Protocol clients, built on the
 $ go install github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp@latest
 ```
 
-Releases are numbered `0.1.N`, and each release increments `N`. The API is not
-settled: any release may change or remove exported identifiers, and the
-[changelog](CHANGELOG.md) marks each break. Pin an exact version to avoid one.
+Releases are numbered `0.1.N`. The API is not settled: any release may change
+or remove exported identifiers, and the [changelog](CHANGELOG.md) marks each
+break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) ·
 [Connect another client](#connect-another-client) ·
@@ -49,10 +49,9 @@ You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. The install
 command above puts [`libtmux-mcp`][libtmux-mcp-command] in `GOBIN` when that is
 set, and in `$(go env GOPATH)/bin` otherwise.
 
-An MCP client launches it as a subprocess and speaks to it over stdin and
-stdout. Closing the client ends the MCP process and its owned connections;
-tmux sessions remain running. If your shell cannot find `libtmux-mcp`, add
-that directory to `PATH`.
+An MCP client launches it as a subprocess over stdin and stdout. Closing the
+client ends the server and its connections; tmux sessions keep running. If your
+shell cannot find `libtmux-mcp`, add that directory to `PATH`.
 
 The Python server installs a command of the same name. Run
 `command -v libtmux-mcp` to see which one comes first, and
@@ -133,11 +132,9 @@ afterwards. [Settings](#settings) lists the other flags, and
 
 ### [`-socket-name`][guide-choose-a-server]: pick a socket by name
 
-With no flag and neither `LIBTMUX_SOCKET_PATH` nor `LIBTMUX_SOCKET` set, the
-server passes tmux no socket, so tmux picks the server. Started inside tmux,
-that is the server you are in. Started elsewhere, it is tmux's default socket,
-which holds the sessions you already have, and an agent given it can change
-them. A named socket keeps an agent apart from them:
+With no flag and neither `LIBTMUX_SOCKET_PATH` nor `LIBTMUX_SOCKET` set, tmux
+picks the server: the one you are in, else its default socket, which holds your
+existing sessions and which an agent can change. A named socket keeps it apart:
 
 ```console
 $ claude mcp add tmux -- libtmux-mcp -socket-name my-application
@@ -235,10 +232,9 @@ The trace splits `%0` to the right with `"percent":40` and gets back
 
 ### [`wait_for_text`][wait_for_text]: wait for what a pane prints
 
-[`wait_for_text`][wait_for_text] watches a pane and returns when a pattern
-appears, or when a `stop` pattern appears first.
-[`capture_since`][capture_since] returns what a pane wrote since the last
-look.
+[`wait_for_text`][wait_for_text] returns when a pattern appears in a pane, or a
+`stop` pattern does first. [`capture_since`][capture_since] returns what a pane
+wrote since the last look.
 
 <!-- docs:checked mcp/examples/agent-workflow/trace.txt -->
 The trace waits for `agent-workflow-ready` and names `agent-workflow-failed` as
@@ -351,11 +347,11 @@ $ claude mcp add tmux \
 
 ### [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] and [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable]: name exact tools
 
-[`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] adds tools by name to what the
-toolsets grant, and
-[`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] then removes
-tools by name. Excluding a tool also removes it from what
-[`call_read_tools_batch`][call_read_tools_batch] may call.
+- [`LIBTMUX_TOOLS`][mcp-toolsenvironmentvariable] adds tools by name to what
+  the toolsets grant.
+- [`LIBTMUX_EXCLUDE_TOOLS`][mcp-excludetoolsenvironmentvariable] then removes
+  tools by name, and from what [`call_read_tools_batch`][call_read_tools_batch]
+  may call.
 
 This lists the default tools without [`send_keys`][send_keys] and
 [`send_keys_batch`][send_keys_batch]:
@@ -374,9 +370,8 @@ from earlier releases.
 ### [`LIBTMUX_ALLOW_ATTENDED_INPUT`][mcp-allowattendedinputenvironmentvariable]: allow input to a pane someone is viewing
 
 Every input tool refuses a pane that a tmux client is viewing, so an agent does
-not type into the window a person is looking at. That refusal is the default.
-To let the agent type into the window you are viewing, launch the server with
-`LIBTMUX_ALLOW_ATTENDED_INPUT=1`:
+not type into the window a person is looking at. To allow it, launch the server
+with `LIBTMUX_ALLOW_ATTENDED_INPUT=1`:
 
 ```console
 $ claude mcp add tmux \
@@ -384,10 +379,12 @@ $ claude mcp add tmux \
     -- libtmux-mcp -socket-name default
 ```
 
-The setting lifts that one refusal. A dead pane, a pane with input disabled, a
-pane in a mode, and a synchronized pane that has such a member are still
-refused. The only accepted value is `1`. Any other value, including an empty
-one, stops startup with a message that names the variable.
+The setting lifts only that refusal:
+
+- A dead pane, a pane with input disabled, a pane in a mode, and a synchronized
+  pane with such a member are still refused.
+- The only accepted value is `1`. Any other, including an empty one, stops
+  startup with a message that names the variable.
 
 The server reads it once, at startup. `tmux://capabilities` reports it as
 `allowAttendedInput`, and `libtmux-mcp -doctor` prints it.
@@ -398,18 +395,17 @@ The server reads it once, at startup. `tmux://capabilities` reports it as
 $ libtmux-mcp -tools
 ```
 
-It prints the tools the server would advertise: each one's toolset, which
-processes it can reach, and a sentence on what it does. Below them it prints
-the prompts the same selection lists, each with the tools it names. Give it the flags and
-environment the client gives the server, because they decide the listing.
+It prints the tools the server would advertise, each with its toolset, the
+processes it can reach and what it does, then the prompts the same selection
+lists. Give it the flags and environment the client gives the server.
 
 ### [`tmux://capabilities`][mcp-capabilitiesresourceuri]: what each tool says about itself
 
 Each tool describes what it reaches and changes, under
 `_meta["com.git-pull.libtmux-mcp/capability"]`. The resource
-`tmux://capabilities` reports the same descriptions beside the selection in
-force, and lists the resources that read the hierarchy.
-[The contract][contract-capability-disclosure] lists them.
+`tmux://capabilities` reports them beside the selection in force.
+
+More: [the resources that read the hierarchy][contract-capability-disclosure].
 
 ## Settings
 
@@ -467,10 +463,9 @@ the pane whose process is one of its own ancestors.
 
 ### Asking before it types into your terminal
 
-A write to the pane with `isCaller` true asks you first, through MCP's
-elicitation request: a question the client puts to you on the server's behalf.
-From protocol 2026-07-28 the question comes back in the result of the call, and
-the client repeats the call with your answer.
+A write to the pane with `isCaller` true asks you first, through an MCP
+elicitation request, a question the client puts to you. From protocol
+2026-07-28 it comes back in the call's result, and the client repeats the call.
 
 - Declining fails the call, and a client that cannot ask is refused.
 - A batch asks the same way, and declining stops the batch there. On protocol
@@ -538,9 +533,12 @@ $ libtmux-mcp -doctor -socket-name default
 ## An agent-shaped program
 
 [`examples/agent-workflow`](examples/agent-workflow) is the whole loop in one
-file. It finds its own pane, splits one off, starts work there and waits for
-what it prints, runs a command and reads its exit status, then reads back what
-it built.
+file. It:
+
+- finds its own pane and splits one off;
+- starts work there and waits for what it prints;
+- runs a command and reads its exit status;
+- reads back what it built.
 
 It lives in the repository, outside the module you installed, so run it from a
 clone:
@@ -570,9 +568,9 @@ the window now holds 2 panes: %0 %1
 
 <!-- docs:end -->
 
-The client and server are joined in memory, so it is one program. The tool
-names, schemas, and results are the ones a client sees over stdin and stdout.
-Clean up with `tmux -L demo kill-server`.
+The client and server are joined in memory, so it is one program. Tool names,
+schemas and results are the ones a client sees over stdin and stdout. It stops
+the server it started; `-keep` leaves it running.
 
 ## Embedding it
 
@@ -606,10 +604,9 @@ target and starts nothing.
 
 ### [`mcp.AssumeResponseCommit`][mcp-assumeresponsecommit]: say a transport writes each response at once
 
-Standard input and output are known to deliver each response as soon as the
-write returns. Wrap any other transport in
-[`AssumeResponseCommit`][mcp-assumeresponsecommit], as the block does for the
-in-memory one.
+Standard input and output deliver each response as soon as the write returns.
+Wrap any other transport in [`AssumeResponseCommit`][mcp-assumeresponsecommit],
+as the block does for the in-memory one.
 
 [Close the instance][mcp-instance-close] when you have finished serving. The
 [reference][mcp-reference] has the rest of what an embedder is held to, and
@@ -646,12 +643,10 @@ It serves one tmux server over stdin and stdout. Reference:
 
 ## Support and status
 
-- **Go 1.26+ and tmux 3.3a or newer.** The server refuses an older tmux before
-  the MCP transport starts. CI runs tmux 3.3a and 3.8 on each push, and tmux
-  3.3a through 3.8 for each release.
-- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  against the same releases. macOS is supported on a best-effort basis, and CI
-  coverage for it is highly limited.
+- **Go 1.26 or newer and tmux 3.3a or newer.** The server refuses an older tmux
+  before the MCP transport starts.
+- **Linux, including WSL, and macOS.** macOS is best-effort, with little CI
+  coverage.
 - **A module of its own.** `go get` on the tmux library never pulls in the MCP
   SDK.
 - **Tagged as `mcp/vN`.** Pin an exact version in your own `go.mod`; the

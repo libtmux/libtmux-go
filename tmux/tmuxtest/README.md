@@ -14,6 +14,7 @@
 Run your program inside a real tmux and assert on what it drew.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/libtmux/libtmux-go/tmux/tmuxtest.svg)](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
+[![libtmux.org](https://img.shields.io/badge/docs-libtmux.org-0b7285)](https://libtmux.org/en/go/)
 
 </div>
 
@@ -23,10 +24,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmux/tmuxtest@latest
 ```
 
-Releases are numbered `0.1.N`, and each release increments `N`. The API is not
-settled: any release may change or remove exported identifiers, and the
-[changelog](../../CHANGELOG.md) marks each break. Pin an exact version to avoid
-one.
+Releases are numbered `0.1.N`. The API is not settled: any release may change
+or remove exported identifiers, and the [changelog](../../CHANGELOG.md) marks
+each break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) · [The waits](#the-waits) ·
 [Testing without a tmux](#testing-without-a-tmux) ·
@@ -111,9 +111,8 @@ removing its socket, and only then hands back the exit code.
 ### [`tmuxtest.WaitForText`][tmuxtest-waitfortext]: a failed wait shows the screen
 
 The failure carries the screen the pane last held, which is what a print
-statement would have shown. This is a real one, from
-[`WaitForText(ctx, t, pane, "ready")`][tmuxtest-waitfortext] on a program that
-never got that far:
+statement would have shown. This one is from
+[`WaitForText(ctx, t, pane, "ready")`][tmuxtest-waitfortext]:
 
 <!-- docs:output tmux/tmuxtest/testdata/wait-failure.txt -->
 
@@ -155,11 +154,9 @@ that line names already in hand.
 
 ### [`tmuxtest.ScriptedTmux`][tmuxtest-scriptedtmux]: answer the commands you name
 
-Where the subject is your own code rather than tmux's behaviour,
-[`ScriptedTmux`][tmuxtest-scriptedtmux] writes an executable that answers the
-invocations you name, and returns its path for
-[`tmux.ServerOptions.Binary`][tmux-serveroptions-binary]. The test then needs no
-tmux installed:
+When the subject is your own code, not tmux, [`ScriptedTmux`][tmuxtest-scriptedtmux]
+writes an executable that answers the invocations you name. Pass its path as
+[`tmux.ServerOptions.Binary`][tmux-serveroptions-binary]; no tmux is needed:
 
 <!-- docs:scripted-tmux -->
 
@@ -250,10 +247,9 @@ server you already hold, and remove it when the test ends.
 
 ## Keeping your suite to itself
 
-There is nothing to set up. [`tmuxtest.Main`][tmuxtest-main] gives each run of
-a suite a private temporary directory of its own and points the test process's
-`TMPDIR`, `GOTMPDIR`, and `TMUX_TMPDIR` at it until the suite ends. It also
-clears `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable.
+There is nothing to set up. [`tmuxtest.Main`][tmuxtest-main] gives each run a
+private temporary directory, points `TMPDIR`, `GOTMPDIR` and `TMUX_TMPDIR` at it
+until the suite ends, and clears `TMUX`, `TMUX_PANE` and `LIBTMUX_SOCKET*`.
 
 - Two checkouts running their suites on one machine share no socket, and
   neither shares one with a tmux you are using.
@@ -284,11 +280,9 @@ clears `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable.
 
 ## Support and status
 
-- **Go 1.26+ and tmux 3.3a or newer.** CI runs this package's tests on tmux
-  3.3a through 3.8.
-- **Linux, including WSL, and macOS.** CI runs the package's tests on Linux
-  across the tmux matrix. macOS is supported on a best-effort basis, and CI
-  coverage for it is highly limited.
+- **Go 1.26 or newer and tmux 3.3a or newer.**
+- **Linux, including WSL, and macOS.** macOS is best-effort, with little CI
+  coverage.
 - **Part of the tmux module.** It adds no dependency outside the standard
   library and the tmux package.
 - **Unsettled API.** Any release may change exported identifiers. Pin an exact

@@ -25,10 +25,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmuxq@latest
 ```
 
-Releases are numbered `0.1.N`, and each release increments `N`. The API is not
-settled: any release may change or remove exported identifiers, and the
-[changelog](../CHANGELOG.md) marks each break. Pin an exact version to avoid
-one.
+Releases are numbered `0.1.N`. The API is not settled: any release may change
+or remove exported identifiers, and the [changelog](../CHANGELOG.md) marks each
+break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) · [Filters](#filters) ·
 [Direct queries](#direct-queries) · [Which helper](#which-helper) ·
@@ -38,11 +37,9 @@ one.
 
 ## Quick start
 
-Nothing here names a tmux type, so the helpers work on a slice of your own.
-[`tmuxq.Where`][tmuxq-where] keeps what a function accepts,
-[`tmuxq.First`][tmuxq-first] returns the first match, and
-[`tmuxq.ExactlyOne`][tmuxq-exactlyone] insists on one. This program needs no
-tmux:
+The helpers work on a slice of your own. [`tmuxq.Where`][tmuxq-where] keeps
+what a function accepts, [`tmuxq.First`][tmuxq-first] returns the first match,
+and [`tmuxq.ExactlyOne`][tmuxq-exactlyone] insists on one. This needs no tmux:
 
 <!-- docs:file examples/any-slice/main.go -->
 
@@ -140,10 +137,9 @@ fmt.Println(len(panes), "panes,", len(active), "active")
 On the server described below, this prints `3 panes, 2 active`.
 <!-- docs:end -->
 
-[`tmuxq.Matching`][tmuxq-matching] returns a fresh slice, so changing it
-cannot change the snapshot. A filter that matches nothing returns an empty
-slice. The error is for a filter that cannot be one, such as a pattern that
-does not compile.
+[`tmuxq.Matching`][tmuxq-matching] returns a fresh slice, so changing it cannot
+change the snapshot. A filter that matches nothing returns an empty slice; the
+error is for a filter that cannot be one, such as a pattern that does not compile.
 
 Each filter below runs in [`examples/queries`](../examples/queries), against a
 server with one session, `work`, and two windows: `editor` holds one pane, and
@@ -174,10 +170,9 @@ panes in window 1 or later: `logs.0 logs.1`.
 
 #### [`tmux.PaneFilter{Active: new(true), WindowIndex: new(1)}`][tmux-panefilter]: every field must hold
 
-The fields of one filter combine with AND, so
-[`Active`][tmux-panefilter-active] and
-[`WindowIndex`][tmux-panefilter-windowindex] together select the active pane
-of window 1 and nothing else: `logs.1`.
+The fields of one filter combine with AND: [`Active`][tmux-panefilter-active]
+and [`WindowIndex`][tmux-panefilter-windowindex] together select the active
+pane of window 1 and nothing else: `logs.1`.
 
 #### [`tmux.PaneFilter{Window: &tmux.WindowFilter{Name: new("logs")}}`][tmux-panefilter-window]: the pane's window
 
@@ -340,12 +335,10 @@ That also keeps this package from creating an import cycle with the library.
 
 - **No third-party Go dependencies.** It is part of the tmux module and
   imports only the standard library; tmux is required at runtime.
-- **Go 1.26+.** The package needs no tmux. The examples that read a server
-  need tmux 3.3a or newer.
-- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  against tmux 3.3a and 3.8 on each push, and across tmux 3.3a through 3.8 for
-  each release. macOS is supported on a best-effort basis, and CI coverage for
-  it is highly limited.
+- **Go 1.26 or newer.** The package needs no tmux. The examples that read a
+  server need tmux 3.3a or newer.
+- **Linux, including WSL, and macOS.** macOS is best-effort, with little CI
+  coverage.
 - **Unsettled API.** Any release may change exported identifiers. Pin an exact
   version.
 

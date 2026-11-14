@@ -24,9 +24,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/workspace@latest
 ```
 
-Releases are numbered `0.1.N`, and each release increments `N`. The API is not
-settled: any release may change or remove exported identifiers, and the
-[changelog](CHANGELOG.md) marks each break. Pin an exact version to avoid one.
+Releases are numbered `0.1.N`. The API is not settled: any release may change
+or remove exported identifiers, and the [changelog](CHANGELOG.md) marks each
+break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) ·
 [A workspace file](#a-workspace-file) · [Using it](#using-it) ·
@@ -150,10 +150,12 @@ window logs: 3 panes
 
 <!-- docs:end -->
 
+[`workspace.Parse`][workspace-parse] reads the document and
+[`workspace.Build`][workspace-build] builds it.
+
 The program uses the socket name `libtmux-build-workspace` and stops that server
 before it exits. Choose an unused name: an existing server on that socket can be
-modified or killed. [`workspace.Parse`][workspace-parse] reads the document and
-[`workspace.Build`][workspace-build] builds it.
+modified or killed.
 
 ## A workspace file
 
@@ -183,9 +185,8 @@ windows:
 ```
 
 Each key has a page on libtmux.org: [session][config-session],
-[windows][config-windows], [panes][config-panes],
-[commands][config-commands], [environment][config-environment], and
-[layouts][config-layouts].
+[windows][config-windows], [panes][config-panes], [commands][config-commands],
+[environment][config-environment], [layouts][config-layouts].
 
 ## Using it
 
@@ -273,21 +274,19 @@ That workspace names its session `review`, so the block prints `review 2`.
 - **A build is not atomic.** tmux has no transaction, so a failure partway
   through leaves what was already created. The returned session identifies it.
 - **A control connection from tmux 3.7.** Below tmux 3.7, `Build` uses
-  ordinary subprocess operations. On qualified tmux 3.7 or newer it holds a
-  control connection that tmux counts as a client until `Build` returns.
+  ordinary subprocess operations. On tmux 3.7 or newer it holds a control
+  connection that tmux counts as a client until `Build` returns.
 - **The session carries no windows.** Ask tmux with
   [`Session.SearchWindows`][tmux-session-searchwindows], as the quick start
   does.
 
-[The contract][contract-building] explains the connection
-[`Build`][workspace-build] holds while it runs.
+More: [the connection `Build` holds][contract-building].
 
 ### [`workspace.BuildInto`][workspace-buildinto]: build into a session you made
 
-When the session has to exist first, for example to retain a connection on
-tmux 3.7 or newer,
+When the session must exist first, for example to keep a connection,
 [`Workspace.InitialSessionRequest`][workspace-workspace-initialsessionrequest]
-gives the request that creates it and [`BuildInto`][workspace-buildinto] fills
+gives the request that creates it, and [`BuildInto`][workspace-buildinto] fills
 in the rest:
 
 <!-- docs:workspace-build-into -->
@@ -327,9 +326,10 @@ The workspace has two windows, so it prints `2`.
 ### [`Workspace.MissingDirectories`][workspace-workspace-missingdirectories]: directories that are not there
 
 A `start_directory` that does not exist still builds: tmux falls back to the
-home directory and reports success. `MissingDirectories` reports those
-before you build, and [`Parse`][workspace-parse] does not refuse them.
-[The contract][contract-directories] says why.
+home directory and reports success. `MissingDirectories` reports those before
+you build; [`Parse`][workspace-parse] does not refuse them.
+
+More: [why][contract-directories].
 
 ## Supported fields
 
@@ -429,10 +429,9 @@ Without `-d`, `load` attaches your terminal, so it needs one.
 $ tmux-workspace ls --tree
 ```
 
-It lists a `.tmuxp.yaml`, `.tmuxp.yml`, or `.tmuxp.json` file in the current
+It lists `.tmuxp.yaml`, `.tmuxp.yml` and `.tmuxp.json` files in the current
 directory and each parent up to your home directory, and the files in your
-workspace directory.
-A file there loads by its name, as [`tmux-workspace load project`][cli-load].
+workspace directory. A file there loads by name: [`tmux-workspace load project`][cli-load].
 
 ### [`tmux-workspace search`][cli-search]: find a workspace by what it holds
 
@@ -487,10 +486,11 @@ contract][contract-commands] has the rest of each command.
 
 ### [`workspace`](https://github.com/libtmux/libtmux-go/tree/master/workspace): the library
 
-[`workspace.Parse`][workspace-parse], [`workspace.Build`][workspace-build], and
+[`workspace.Parse`][workspace-parse], [`workspace.Build`][workspace-build] and
 [`workspace.BuildInto`][workspace-buildinto] load and build a workspace.
-Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace)
-and [libtmux.org][workspace-reference].
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
+[libtmux.org][workspace-reference]. Changelog: [`CHANGELOG.md`](CHANGELOG.md).
 
 ### [`tmux-workspace`](https://github.com/libtmux/libtmux-go/tree/master/workspace/cmd/tmux-workspace): the command
 
@@ -503,12 +503,9 @@ The program above, with a page of its own, ready to run from a clone.
 
 ## Support and status
 
-- **Go 1.26+ and tmux 3.3a or newer.** CI runs tmux 3.3a and 3.8 against this
-  module on each push, and tmux 3.3a through 3.8 for each release.
-- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  across the tmux matrix. macOS is supported on a best-effort basis, and CI
-  coverage for it is highly limited. On Windows, CI vets the module, and tmux
-  does not run there.
+- **Go 1.26 or newer and tmux 3.3a or newer.**
+- **Linux, including WSL, and macOS.** macOS is best-effort, with little CI
+  coverage. Windows compiles, but tmux does not run there.
 - **A module of its own.** `go get` on the tmux library never pulls in its YAML
   parser.
 - **Unsettled API.** Any release may change exported identifiers. Pin an exact

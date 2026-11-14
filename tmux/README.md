@@ -24,10 +24,9 @@ Add it to your module:
 $ go get github.com/libtmux/libtmux-go/tmux@latest
 ```
 
-Releases are numbered `0.1.N`, and each release increments `N`. The API is not
-settled: any release may change or remove exported identifiers, and the
-[changelog](../CHANGELOG.md) marks each break. Pin an exact version to avoid
-one.
+Releases are numbered `0.1.N`. The API is not settled: any release may change
+or remove exported identifiers, and the [changelog](../CHANGELOG.md) marks each
+break. Pin an exact version to avoid one.
 
 **Contents** — [Quick start](#quick-start) · [Records](#records) ·
 [Method names](#method-names) · [Options and hooks](#options-and-hooks) ·
@@ -164,18 +163,122 @@ Choose an unused socket name: naming an existing server does not make it yours.
 
 ## Records
 
-A [`Server`][tmux-server] reaches one tmux server. It holds
-[`Session`][tmux-session] values, each holding [`Window`][tmux-window] values,
-each holding [`Pane`][tmux-pane] values, and every one of them is a record:
-what tmux said when you asked.
+A [`Server`][tmux-server] reaches one tmux server and holds
+[`Session`][tmux-session], [`Window`][tmux-window] and [`Pane`][tmux-pane]
+values. Each is a record: what tmux said when you asked. This program shows it:
 
-The blocks in this section and under Errors come from
-[`../examples/object-model`](../examples/object-model), a whole program you can
-run from a clone with `go -C examples run ./object-model`.
-[`../examples/README.md`](../examples/README.md) has the commands to clone it.
+<!-- docs:file examples/object-model/main.go -->
 
-A block that starts with `// Given:` is the body of a function that returns
-an error, with the values that line names already in hand.
+```go
+// Command object-model shows that the values tmux hands back are records.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := run(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context) (err error) {
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-object-model",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux: %w", err)
+	}
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "old"})
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	// Cleanup runs even when ctx is the reason the program is leaving.
+	defer func() {
+		err = errors.Join(err, server.Kill(context.WithoutCancel(ctx)))
+	}()
+
+	// Rename hands back the session as tmux now reports it. The record
+	// already in hand keeps the name it had when tmux handed it over.
+	renamed, err := session.Rename(ctx, "new")
+	if err != nil {
+		return fmt.Errorf("rename session: %w", err)
+	}
+	held, _ := session.Name()
+	current, _ := renamed.Name()
+	fmt.Println("held record:", held)
+	fmt.Println("returned record:", current)
+
+	// session was renamed above, so it still says "old". Refresh asks tmux
+	// again and returns a replacement; session itself does not change.
+	fresh, err := session.Refresh(ctx)
+	if err != nil {
+		return fmt.Errorf("refresh session: %w", err)
+	}
+	name, _ := fresh.Name()
+	fmt.Println("refreshed record:", name)
+
+	// Windows reads the record and takes no context. A session that came
+	// from a call about the session carries no windows, and says so.
+	if _, held := renamed.Windows(); !held {
+		fmt.Println("the record holds no windows")
+	}
+	// SearchWindows asks tmux.
+	windows, err := renamed.SearchWindows(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list windows: %w", err)
+	}
+	fmt.Println("tmux reports windows:", len(windows))
+
+	// A lookup that finds nothing is an error a caller can test for.
+	_, lookupErr := server.Session(ctx, tmux.SessionID("$999"))
+	if errors.Is(lookupErr, tmux.ErrNotFound) {
+		fmt.Println("session $999: not found")
+	}
+
+	// Cmd sends arguments you write yourself. A command tmux ran and
+	// refused comes back as a result, with the error left nil.
+	result, err := server.Cmd(ctx, "kill-window", "-t", "@999")
+	if err != nil {
+		return fmt.Errorf("reach tmux: %w", err)
+	}
+	fmt.Println("kill-window exit status:", result.ExitCode)
+	return nil
+}
+```
+
+<!-- docs:end -->
+
+Save it as `main.go` and run it as the quick start does, or run
+[`../examples/object-model`](../examples/object-model) from a clone. It prints:
+
+<!-- docs:output examples/object-model/output.txt -->
+
+```text
+held record: old
+returned record: new
+refreshed record: new
+the record holds no windows
+tmux reports windows: 1
+session $999: not found
+kill-window exit status: 1
+```
+
+<!-- docs:end -->
+
+The blocks below and under Errors are fragments of it. A block that starts with
+`// Given:` is the body of a function that returns an error, with the values
+that line names already in hand.
 
 ### [`Session.Rename`][tmux-session-rename]: a change returns a new record
 
@@ -202,10 +305,9 @@ The session was created as `old`, so this prints `held record: old` and then
 `returned record: new`.
 <!-- docs:end -->
 
-Nothing refreshes a record behind you. A method that changes which object you
-hold, or what it looks like, hands back a new record.
-[`Session.Refresh`][tmux-session-refresh] and its counterparts on a window and
-a pane ask tmux again when you want one.
+A method that changes which object you hold, or what it looks like, returns a
+new record. [`Session.Refresh`][tmux-session-refresh] and its window and pane
+counterparts ask tmux again.
 
 ### [`Session.Windows`][tmux-session-windows]: read what the record holds
 
@@ -261,11 +363,14 @@ A noun naming a *different* object always stays, which is why
 [`Session.NewWindow`][tmux-session-newwindow] and
 [`Window.SplitPane`][tmux-window-splitpane] keep theirs.
 
-**The parameters say what is required.** A method takes only a context when
-the receiver names everything ([`Window.Kill`][tmux-window-kill]), typed values
-when all are required ([`Session.Rename`][tmux-session-rename]), and a request
-value when any is
-optional ([`Pane.Capture`][tmux-pane-capture]).
+**The parameters say what is required:**
+
+- Only a context, when the receiver names everything
+  ([`Window.Kill`][tmux-window-kill]).
+- Typed values, when all are required
+  ([`Session.Rename`][tmux-session-rename]).
+- A request value, when any is optional
+  ([`Pane.Capture`][tmux-pane-capture]).
 
 **The result says what changed.** A method hands back a new record, read from
 tmux after the change, when the command changes which object you are holding
@@ -280,7 +385,127 @@ tmux name maps to the Go name by one rule, given under "Naming and call shapes"
 in the [package documentation][tmux-package].
 
 A setter returns only an error, because an option is not part of the record you
-hold. Read it back through [`Session.Options`][tmux-session-options]:
+hold. Read it back through [`Session.Options`][tmux-session-options]. This
+program sets options and a hook, then reads them back:
+
+<!-- docs:file examples/option-hook-editing/main.go -->
+
+```go
+// Command option-hook-editing demonstrates typed option and hook updates.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/libtmux/libtmux-go/tmux"
+)
+
+func main() {
+	if err := start(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// start owns cleanup because log.Fatal skips deferred calls in main.
+func start() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Choose an unused socket name: cleanup kills the server selected here.
+	// The empty config keeps personal settings out of a new server.
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "libtmux-option-hook-editing",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		return fmt.Errorf("configure tmux server: %w", err)
+	}
+	return run(ctx, server)
+}
+
+// run accepts injected server state so tests can isolate the example.
+func run(ctx context.Context, server tmux.Server) (err error) {
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-options"})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cleanupCancel()
+		err = errors.Join(err, session.Kill(cleanupCtx))
+	}()
+
+	if err := session.SetMouse(ctx, true); err != nil {
+		return err
+	}
+	options, err := session.Options(ctx)
+	if err != nil {
+		return err
+	}
+	mouse, _ := options.Mouse().Get()
+	fmt.Println("mouse:", mouse)
+
+	// An option this package has no accessor for, such as one a plugin
+	// defines, goes by its tmux name. tmux keeps user options under "@".
+	settings := tmux.SetOptionOptions{}
+	if err := session.SetOption(ctx, "@project", "libtmux", settings); err != nil {
+		return err
+	}
+	project, _, err := session.RawOption(ctx, "@project")
+	if err != nil {
+		return err
+	}
+	fmt.Println("@project:", project)
+	status, err := tmux.NewSparseArray(
+		tmux.SparseEntry[string]{Index: 0, Value: "#[align=left]#{session_name}"},
+		tmux.SparseEntry[string]{Index: 2, Value: "#[align=right]#{window_name}"},
+	)
+	if err != nil {
+		return err
+	}
+	if _, err := session.SetStatusFormat(ctx, status); err != nil {
+		return err
+	}
+
+	global := server.GlobalSessionScope()
+	if err := global.SetStatus(ctx, tmux.StatusOn); err != nil {
+		return err
+	}
+	if err := global.SetHook(ctx, "client-attached", "display-message 'client attached'"); err != nil {
+		return err
+	}
+	hooks, err := global.Hooks(ctx)
+	if err != nil {
+		return err
+	}
+	_, present := hooks.ClientAttached().Get()
+	fmt.Println("client-attached hook present:", present)
+	return nil
+}
+```
+
+<!-- docs:end -->
+
+Save it as `main.go` and run it as the quick start does, or run
+[`../examples/option-hook-editing`](../examples/option-hook-editing) from a
+clone. It prints:
+
+<!-- docs:output examples/option-hook-editing/output.txt -->
+
+```text
+mouse: true
+@project: libtmux
+client-attached hook present: true
+```
+
+<!-- docs:end -->
+
+This block is a fragment of it:
 
 <!-- docs:options -->
 
@@ -332,8 +557,7 @@ fmt.Println("@project:", project)
 This prints `@project: libtmux`.
 <!-- docs:end -->
 
-[`../examples/option-hook-editing`](../examples/option-hook-editing) is the
-program both blocks come from. It sets a hook the same way.
+Both blocks come from that program, which sets a hook the same way.
 
 ## Errors
 
@@ -361,11 +585,9 @@ This prints `session $999: not found`.
 
 ### [`Server.Cmd`][tmux-server-cmd]: a failed command is a result
 
-`Cmd` runs tmux arguments you write yourself. A command that ran and failed
-comes back as data:
-[`CommandResult.ExitCode`][tmux-commandresult-exitcode] carries its status. A
-tmux that could not be reached, and arguments refused before anything was
-sent, are Go errors.
+`Cmd` runs tmux arguments you write yourself. A command that ran and failed is
+a result, its status in [`CommandResult.ExitCode`][tmux-commandresult-exitcode].
+An unreachable tmux, or arguments refused before sending, are Go errors.
 
 <!-- docs:cmd-result -->
 
@@ -398,10 +620,12 @@ No window has that id, so this prints `kill-window exit status: 1`.
 
 ### [`tmux`](https://github.com/libtmux/libtmux-go/tree/master/tmux): this package
 
-Sessions, windows, panes, options, hooks, formats, filters, snapshots, and
-plans, with no dependency outside the standard library. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux) and
-[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+Sessions, windows, panes, options, hooks, formats, filters, snapshots and
+plans, with nothing outside the standard library.
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux),
+[libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
+[`CHANGELOG.md`](../CHANGELOG.md).
 
 [`Session.Run`][tmux-session-run] runs a command in a window of its own, with
 a terminal. A nonzero exit status arrives in the result:
@@ -429,22 +653,26 @@ This prints `screen: stdout is a terminal`, then `exited 3`.
 <!-- docs:end -->
 
 [`Pane.WaitForText`][tmux-pane-waitfortext] waits for text on a pane's visible
-screen by polling, on every supported release; a pane or server that ends first
-returns a [`PaneEndedError`][tmux-paneendederror], and the `PaneTextWait` holds
-the text read so far.
-The wait is level-triggered, so text already on screen matches, and so does a
-shell's echo of a typed command: wait for what the command prints.
-[`PaneObservation.WaitFor`][tmux-paneobservation-waitfor] needs tmux 3.7 and
-reports only output after its baseline. See the
-[contract](docs/contracts.md#waiting-for-pane-text).
+screen by polling, on every supported release:
+
+- A pane or server that ends first returns a
+  [`PaneEndedError`][tmux-paneendederror], and the `PaneTextWait` holds the text
+  read so far.
+- The wait is level-triggered: text already on screen matches, and so does a
+  shell's echo of a typed command, so wait for what the command prints.
+- [`PaneObservation.WaitFor`][tmux-paneobservation-waitfor] needs tmux 3.7 and
+  reports only output after its baseline.
+
+More: [the contract](docs/contracts.md#waiting-for-pane-text).
 
 ### [`tmuxq`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq): filters for any slice
 
-Helpers that find records in a slice or an `iter.Seq`. The package imports no
-tmux type, so they work on a slice of your own as well as on the records
-`tmux` returns. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq) and
-[libtmux.org](https://libtmux.org/en/go/latest/reference/).
+Helpers that find records in a slice or an `iter.Seq`, whether your own or the
+ones `tmux` returns.
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmuxq),
+[libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
+[`CHANGELOG.md`](../CHANGELOG.md).
 
 [`tmuxq.Where`][tmuxq-where] keeps what a function accepts, and
 [`tmuxq.First`][tmuxq-first] returns the first match. This needs no tmux:
@@ -474,14 +702,16 @@ This prints `open: test` and `open: deploy`, then `first open: test`.
 
 ### [`tmuxtest`](https://github.com/libtmux/libtmux-go/tree/master/tmux/tmuxtest): a real tmux for tests
 
-Runs your program in a real pane and lets a test assert on what it drew. The
-server, its sessions, and its panes end with the test. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest)
-and [libtmux.org](https://libtmux.org/en/go/latest/reference/).
+Runs your program in a real pane and lets a test assert on what it drew. What
+it starts ends with the test.
 
-[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test whose subject is tmux
-itself a server on a socket of its own. This is the body of a test, in a
-package whose `TestMain` calls [`tmuxtest.Main`][tmuxtest-main]:
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tmuxtest),
+[libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
+[`CHANGELOG.md`](../CHANGELOG.md).
+
+[`tmuxtest.NewServer`][tmuxtest-newserver] gives a test of tmux itself a server
+of its own. This is the body of a test, in a package whose `TestMain` calls
+[`tmuxtest.Main`][tmuxtest-main]:
 
 <!-- docs:new-server -->
 
@@ -503,10 +733,12 @@ if name, _ := session.Name(); name != "under-test" {
 ### [`workspace`](https://github.com/libtmux/libtmux-go/tree/master/workspace): tmuxp-style workspaces
 
 Loads tmuxp-style YAML workspace files and builds them in tmux, from Go or with
-the `tmux-workspace` command. Reference:
-[pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
-[libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/), and the
-[command reference](https://libtmux.org/en/go/latest/workspace/cli/).
+the `tmux-workspace` command.
+
+Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/workspace),
+[libtmux.org](https://libtmux.org/en/go/latest/workspace/reference/),
+[command reference](https://libtmux.org/en/go/latest/workspace/cli/). Changelog:
+[`workspace/CHANGELOG.md`](../workspace/CHANGELOG.md).
 
 Install the command:
 
@@ -528,9 +760,11 @@ $ tmux-workspace load \
 
 Serves one tmux server to Model Context Protocol clients, as the
 [`libtmux-mcp`][libtmux-mcp-command] command or from a program of your own.
+
 Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp),
-[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/), and the [tool
-reference](https://libtmux.org/en/go/latest/mcp/tools/).
+[libtmux.org](https://libtmux.org/en/go/latest/mcp/reference/),
+[tool reference](https://libtmux.org/en/go/latest/mcp/tools/). Changelog:
+[`mcp/CHANGELOG.md`](../mcp/CHANGELOG.md).
 
 Install the command:
 
@@ -566,14 +800,11 @@ $ libtmux-mcp -doctor
 
 - **No third-party Go dependencies.** The module imports only the standard
   library; tmux is required at runtime.
-- **Go 1.26+ and tmux 3.3a or newer.** An older tmux gets
+- **Go 1.26 or newer and tmux 3.3a or newer.** An older tmux gets
   [`tmux.ErrVersionTooLow`][tmux-errversiontoolow] before the requested
-  operation; a read-only version probe may run first. CI runs tmux 3.3a and
-  3.8 on each push, and tmux 3.3a through 3.8 for each release.
-  [The contract][contract-version] has the details.
-- **Linux, including WSL, and macOS.** CI runs this module's tests on Linux
-  against the same releases. macOS is supported on a best-effort
-  basis, and CI coverage for it is highly limited.
+  operation. [The contract][contract-version] has the details.
+- **Linux, including WSL, and macOS.** macOS is best-effort, with little CI
+  coverage.
 - **Unsettled API.** Any release may change exported identifiers. Pin an exact
   version.
 

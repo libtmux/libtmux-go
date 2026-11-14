@@ -163,9 +163,7 @@ server handling the SIGTERM it gets when a client tears the transport down,
 including when a client's connect timeout fires.
 
 **Give it the environment a client would.** A client starts its servers with a
-curated environment, which differs from your shell's. Running it from an
-inherited shell environment hides the bugs that only appear under a curated
-one.
+curated environment, not your shell's, and some bugs appear only under it.
 
 ## What it leaves out
 
@@ -184,9 +182,8 @@ one.
   `minimumVersion` beside `version`, and `-doctor` prints both. To fix an old
   daemon, restart that socket's server from a newer tmux, or point
   [`LIBTMUX_TMUX_BIN`][mcp-binaryenvironmentvariable] at one.
-- **Linux, including WSL, and macOS.** CI runs the module's tests on Linux
-  across the tmux matrix. macOS is supported on a best-effort basis, and CI
-  coverage for it is highly limited.
+- **Linux, including WSL, and macOS.** macOS is best-effort, with little CI
+  coverage.
 - **Unsettled API.** Releases are numbered `0.1.N`, and any release may change
   exported identifiers. Pin an exact version.
 
