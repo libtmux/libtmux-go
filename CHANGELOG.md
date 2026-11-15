@@ -18,6 +18,14 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ## Unreleased
 
+### tmux
+
+- `Server.Kill` returns once nothing accepts a connection at the socket. tmux
+  answers `kill-server` before the daemon exits and drops every connection it
+  accepts until then, so a command sent straight after `Kill` could read
+  `server exited unexpectedly` instead of starting a replacement daemon. `Kill`
+  reports a daemon still accepting connections after ten seconds.
+
 ### Development
 
 - The `workspace` tests compare the plan the command builds from each of
