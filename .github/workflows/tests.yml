@@ -131,7 +131,10 @@ jobs:
           cache-dependency-path: ${{ matrix.module }}/go.mod
 
       - name: Install tmux
-        run: ./scripts/apt-get.sh update && ./scripts/apt-get.sh install --yes tmux
+        uses: libtmux/.github/actions/apt-get@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
+        with:
+          update: "true"
+          args: install --yes tmux
 
       - name: Create the tmux socket directory
         run: mkdir -p "$TMUX_TMPDIR"
@@ -372,7 +375,10 @@ jobs:
           cache-dependency-path: benchmarks/go.mod
 
       - name: Install tmux
-        run: ./scripts/apt-get.sh update && ./scripts/apt-get.sh install --yes tmux
+        uses: libtmux/.github/actions/apt-get@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
+        with:
+          update: "true"
+          args: install --yes tmux
 
       - name: Publish the switch matrix
         continue-on-error: true
@@ -422,20 +428,9 @@ jobs:
 
       - name: Build tmux ${{ matrix.tmux-version }}
         id: tmux
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
         with:
           ref: ${{ matrix.tmux-version }}
-
-      # The cache regressions start the lane's own tmux, so a build that the
-      # validation would wrongly accept fails here before the module suites run.
-      - name: Test the tmux build and cache regressions
-        env:
-          TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
-        run: |
-          python3 -m venv "$RUNNER_TEMP/tmux-build-tests"
-          "$RUNNER_TEMP/tmux-build-tests/bin/pip" install --quiet pytest==9.2.0
-          export PATH="$TMUX_PREFIX/bin:$PATH"
-          "$RUNNER_TEMP/tmux-build-tests/bin/python" -m pytest -p no:cacheprovider .github/scripts/test_tmux_build.py
 
       - name: Open a tmate session before the tests
         if: ${{ matrix.tmate == 'before-tests' }}
@@ -443,13 +438,17 @@ jobs:
         with:
           limit-access-to-actor: true
 
+      - name: Install the libevent that older tmux builds link
+        uses: libtmux/.github/actions/apt-get@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
+        with:
+          update: "true"
+          args: install --yes libevent-2.1-7
+
       - name: Test compatible module coverage against tmux ${{ matrix.tmux-version }}
         env:
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
           TMUX_EXPECT: ${{ matrix.expect }}
         run: |
-          ./scripts/apt-get.sh update
-          ./scripts/apt-get.sh install --yes libevent-2.1-7
           export PATH="$TMUX_PREFIX/bin:$PATH"
           actual_version=$(tmux -V)
           # The expected version is a glob: master reports next-X.Y.
@@ -504,9 +503,16 @@ jobs:
       - name: Build tmux 3.3a for the older-daemon tests
         id: older
         if: ${{ matrix.control }}
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
         with:
           ref: '3.3a'
+
+      - name: Install the libevent that older tmux builds link
+        if: ${{ matrix.control }}
+        uses: libtmux/.github/actions/apt-get@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
+        with:
+          update: "true"
+          args: install --yes libevent-2.1-7
 
       - name: Run the older-daemon tests against tmux ${{ matrix.tmux-version }}
         if: ${{ matrix.control }}
@@ -514,8 +520,6 @@ jobs:
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
           OLDER_PREFIX: ${{ steps.older.outputs.prefix }}
         run: |
-          ./scripts/apt-get.sh update
-          ./scripts/apt-get.sh install --yes libevent-2.1-7
           export PATH="$TMUX_PREFIX/bin:$PATH"
           export LIBTMUX_OPTIONAL_OLD_TMUX="$OLDER_PREFIX/bin/tmux"
           test "$("$LIBTMUX_OPTIONAL_OLD_TMUX" -V)" = 'tmux 3.3a'
@@ -568,12 +572,12 @@ jobs:
           cache-dependency-path: go.mod
       - name: Build the supported floor tmux
         id: floor
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
         with:
           ref: '3.3a'
       - name: Build the rejected tmux ${{ matrix.rejected-version }}
         id: rejected
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
         with:
           ref: ${{ matrix.rejected-version }}
       # The unpatched 3.3 lane also needs 3.7c, the newer client the
@@ -581,7 +585,7 @@ jobs:
       - name: Build the newer client tmux 3.7c
         id: newer
         if: ${{ matrix.rejected-version == '3.3' }}
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@a3e6718f34fef208acaeb1c7d1a38b3d9d1e46f6
         with:
           ref: '3.7c'
       - name: Refuse unsupported daemons before effects
