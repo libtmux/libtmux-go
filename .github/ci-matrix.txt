@@ -1,5 +1,5 @@
-# What CI runs. scripts/ci-plan.sh turns this into the tests workflow's
-# matrices; scripts/matrix.sh and the documentation tests read it too.
+# What CI runs. scripts/ci-plan/ci_plan.py turns this into the tests workflow's
+# matrices; scripts/matrix/matrix.py and the documentation tests read it too.
 #
 # One entry per line: a kind, then a value. Releases run oldest first.
 #

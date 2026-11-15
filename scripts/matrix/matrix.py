@@ -216,18 +216,15 @@ def run(environ: Mapping[str, str]) -> int:
             "each with bin/tmux inside it:\n\n"
             "    $LIBTMUX_TMUX_MATRIX/3.3a/bin/tmux\n"
             "    $LIBTMUX_TMUX_MATRIX/3.7c/bin/tmux\n\n"
-            "Skipping rather than failing: a checkout without a matrix can still run every\n"
-            "other gate, and reporting a pass this did not earn would be worse than saying\n"
-            "it did not run.",
+            "Skipping rather than failing, so a checkout without a matrix still runs every\n"
+            "other gate. Set LIBTMUX_MATRIX_REQUIRED=1 to fail instead.",
             file=sys.stderr,
         )
         return 0
 
-    # A tmux namespace of this sweep's own, made fresh each run. Sibling
-    # checkouts sweep their own matrices on the same machine, and a shared
-    # socket directory is one sweep ending servers another is still using. The
-    # caller's TMUX_TMPDIR is not reused for the same reason: it is the
-    # directory of the tmux they use.
+    # A socket directory of this sweep's own, fresh each run: sibling checkouts
+    # sweep concurrently, and a shared one lets one sweep end servers another
+    # still uses. The caller's TMUX_TMPDIR is not reused for the same reason.
     try:
         socket_directory = Path(
             tempfile.mkdtemp(prefix="lmx.", dir=socket_base(environ.get("TMPDIR") or "/tmp"))

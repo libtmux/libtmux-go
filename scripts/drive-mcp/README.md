@@ -1,13 +1,16 @@
 # drive-mcp
 
 Drives the MCP server over stdio JSON-RPC from a plan on stdin, and prints what
-each step returned. It is layer 0 of the
+each step returned.
+
+It is layer 0 of the
 [`testing-the-mcp-server`](../../.agents/skills/testing-the-mcp-server/SKILL.md)
 skill, which says when to use it.
 
 It starts the binary with an environment it builds rather than inherits, holds
-stdin open, matches replies by id, and declines any question the server asks. It
-lists the tools a plan never called and flags a tool that declares an
+stdin open, matches replies by id, and declines any question the server asks.
+
+It lists the tools a plan never called and flags a tool that declares an
 `outputSchema` and answers without structured content. It does not validate JSON
 Schema.
 
