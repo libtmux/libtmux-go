@@ -207,19 +207,19 @@ One tmux is not enough. The supported range is a claim the README makes, and
 version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
 `-p` flag that 3.3a and 3.5 both take. Everything above runs against whichever
 tmux is on `PATH`, so run the supported releases before anything ships.
-`scripts/matrix.sh` runs every compatible module suite, given a directory of
-tmux builds with `<version>/bin/tmux` inside it. Every module runs across the
-whole 3.3a-through-3.8 range, with the feature example omissions above. It
-sweeps in a fresh socket directory of its own and drops `TMUX`, `TMUX_PANE`,
-and `LIBTMUX_SOCKET*` from the environment, so it never reaches the tmux you are
-using. With no matrix directory, the script skips with an explanation rather
-than reporting a pass it did not earn. Set `LIBTMUX_MATRIX_REQUIRED=1` for a
+`scripts/matrix/matrix.py` runs every compatible module suite, given a
+directory of tmux builds with `<version>/bin/tmux` inside it. Every module runs
+across the whole 3.3a-through-3.8 range, with the feature example omissions
+above. It sweeps in a fresh socket directory of its own and drops `TMUX`,
+`TMUX_PANE`, and `LIBTMUX_SOCKET*` from the environment, so it never reaches the
+tmux you are using. With no matrix directory, the script skips with an
+explanation rather than reporting a pass it did not earn. Set `LIBTMUX_MATRIX_REQUIRED=1` for a
 release gate, where absence must fail. With no explicit
 `LIBTMUX_MATRIX_VERSIONS`, required mode checks every supported build; setting
 it intentionally narrows the run:
 
 ```console
-$ LIBTMUX_MATRIX_REQUIRED=1 bash scripts/matrix.sh
+$ LIBTMUX_MATRIX_REQUIRED=1 uv run scripts/matrix/matrix.py
 ```
 
 The old releases remain negative version-check fixtures. The rejected-version CI

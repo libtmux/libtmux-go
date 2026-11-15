@@ -26,6 +26,7 @@ exclude-newer = "3 days"
 # directory.
 pythonpath = [
   "scripts/drive-mcp",
+  "scripts/matrix",
   "scripts/test-module",
 ]
 testpaths = ["scripts"]
@@ -44,6 +45,7 @@ target-version = "py312"
 line-length = 100
 src = [
   "scripts/drive-mcp",
+  "scripts/matrix",
   "scripts/test-module",
 ]
 
@@ -54,6 +56,7 @@ extend-select = ["ANN", "B", "C4", "I", "PT", "PTH", "RUF", "SIM", "UP"]
 python-version = "3.12"
 extra-paths = [
   "scripts/drive-mcp",
+  "scripts/matrix",
   "scripts/test-module",
 ]
 
