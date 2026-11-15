@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 // SessionKillRequest configures kill-session on tmux 3.3a or later. Its zero
@@ -41,9 +42,17 @@ type KillWindowRequest struct {
 }
 
 // Kill terminates the configured tmux server and all of its sessions, windows,
-// panes, and clients. After a completed failed kill, a liveness probe makes
-// repeated calls harmless when no daemon answers. Transport or context errors
-// can be delivery-ambiguous; no rollback is attempted.
+// panes, and clients, and returns once nothing accepts a connection at the
+// socket. tmux answers kill-server before the daemon has exited, and until it
+// has, the daemon still accepts a connection and closes it at once, so a
+// command sent in that gap, such as the NewSession that replaces the server,
+// fails with "server exited unexpectedly" instead of starting a new one. Kill
+// waits for that gap to close, and reports a daemon still accepting connections
+// ten seconds later.
+//
+// After a completed failed kill, a liveness probe makes repeated calls harmless
+// when no daemon answers. Transport or context errors can be
+// delivery-ambiguous; no rollback is attempted.
 //
 // tmux leaves the socket file in place, so cleanup that waits for the path to
 // disappear does not finish. Use [Server.IsAlive] to observe the daemon, and
@@ -53,40 +62,98 @@ func (s Server) Kill(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if result.ExitCode == 0 && len(result.Stderr) == 0 {
-		return nil
+	var commandErr error
+	if result.ExitCode != 0 || len(result.Stderr) != 0 {
+		commandErr = newCommandError("kill-server", result)
 	}
-	commandErr := newCommandError("kill-server", result)
-	alive, probeErr := s.cleanupServerAlive(ctx)
-	if probeErr != nil {
-		return errors.Join(
-			commandErr,
-			fmt.Errorf("verify server stopped: %w", probeErr),
-		)
-	}
-	if !alive {
-		return nil
-	}
-	return commandErr
+	return s.awaitServerStopped(ctx, killStopTimeout, commandErr)
 }
 
-// cleanupServerAlive permits an absent-server cleanup check without version-checking
-// another public operation or starting a daemon.
-func (s Server) cleanupServerAlive(ctx context.Context) (bool, error) {
-	result, err := s.runCheckedCommand(ctx, commandServer, []string{"list-sessions"}, nil, false)
+// killStopTimeout bounds how long Kill waits for the daemon to stop accepting
+// connections. A daemon with nothing left to wait for exits within
+// milliseconds; the bound is for one that cannot.
+const killStopTimeout = 10 * time.Second
+
+// killStopPoll is the gap between looks at a daemon that is still exiting.
+const killStopPoll = 10 * time.Millisecond
+
+// endpointState is what a client finds at the socket.
+type endpointState int
+
+const (
+	// endpointUnreachable means nothing listens.
+	endpointUnreachable endpointState = iota
+	// endpointClosing means the connection was accepted and dropped, as a
+	// daemon that has been told to exit does until the process is gone.
+	endpointClosing
+	// endpointAnswering means a daemon answered.
+	endpointAnswering
+)
+
+// awaitServerStopped waits until the socket stops accepting connections, given
+// the failure kill-server reported, or nil when it succeeded. A daemon that
+// answers is one started since, because an exiting daemon drops every
+// connection, so it ends the wait: with kill's own failure if there was one,
+// and with nil otherwise.
+func (s Server) awaitServerStopped(
+	ctx context.Context,
+	timeout time.Duration,
+	commandErr error,
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	answered := false
+	var probeErr error
+	err := Poll(waitCtx, killStopPoll, func(ctx context.Context) (bool, error) {
+		state, err := s.cleanupEndpointState(ctx)
+		if err != nil {
+			probeErr = err
+			return false, err
+		}
+		answered = state == endpointAnswering
+		return state != endpointClosing, nil
+	})
+	switch {
+	case err == nil && answered:
+		return commandErr
+	case err == nil:
+		return nil
+	case ctx.Err() != nil:
+		return errors.Join(commandErr, fmt.Errorf("wait for server to stop: %w", ctx.Err()))
+	case waitCtx.Err() != nil:
+		return errors.Join(
+			commandErr,
+			fmt.Errorf("tmux: server still accepting connections %v after kill-server", timeout),
+		)
+	default:
+		return errors.Join(commandErr, fmt.Errorf("verify server stopped: %w", probeErr))
+	}
+}
+
+// cleanupEndpointState permits an absent-server cleanup check without
+// version-checking another public operation or starting a daemon. It asks
+// through a process of its own, because a connection that was bound to the
+// server dies with it.
+func (s Server) cleanupEndpointState(ctx context.Context) (endpointState, error) {
+	process := s
+	process.connection = nil
+	result, err := process.runCheckedCommand(ctx, commandServer, []string{"list-sessions"}, nil, false)
 	if err != nil {
-		return false, commandTransportFailure(err)
+		return endpointAnswering, commandTransportFailure(err)
 	}
 	if result.ExitCode == 0 {
-		return true, nil
+		return endpointAnswering, nil
 	}
 	commandErr := newCommandError("list-sessions", CommandResult{
 		ExitCode: result.ExitCode, Stderr: result.Stderr,
 	})
-	if errors.Is(commandErr, ErrNoServer) {
-		return false, nil
+	if commandServerClosing(result.Stderr) {
+		return endpointClosing, nil
 	}
-	return false, commandErr
+	if errors.Is(commandErr, ErrNoServer) {
+		return endpointUnreachable, nil
+	}
+	return endpointAnswering, commandErr
 }
 
 // KillSession terminates the session selected by tmux target syntax. Pattern

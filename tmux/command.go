@@ -259,6 +259,19 @@ func commandServerUnreachable(stderr []string) bool {
 	return false
 }
 
+// commandServerClosing detects a connection that was accepted and then
+// dropped: the listener is still open but the daemon behind it is exiting.
+func commandServerClosing(stderr []string) bool {
+	for _, line := range stderr {
+		for _, message := range commandServerGoneMessages {
+			if line == message {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // These exact, locale-independent messages cover a server lost after connect.
 // Treating them like connect failures avoids a race-dependent ErrNoServer result.
 var commandServerGoneMessages = [...]string{

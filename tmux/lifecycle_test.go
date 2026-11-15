@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
@@ -1471,6 +1472,91 @@ func TestServerKillUsesDaemonStateAfterCompletedFailure(t *testing.T) {
 				t.Fatalf("requests = %#v, want kill-server then list-sessions", requests)
 			}
 		})
+	}
+}
+
+// kill-server is answered before the daemon exits, and until it does the
+// daemon accepts a connection and closes it at once, so a client that connects
+// in that gap reads "server exited unexpectedly" rather than "no server
+// running". Kill returns after the gap, so the next command can start a
+// replacement.
+func TestServerKillWaitsForTheDaemonToStopAcceptingConnections(t *testing.T) {
+	t.Parallel()
+
+	ok := versionResponse{result: tmuxcmd.Result{}}
+	closing := versionResponse{result: tmuxcmd.Result{
+		Stderr: []string{"server exited unexpectedly"}, ExitCode: 1,
+	}}
+	absent := versionResponse{result: tmuxcmd.Result{
+		Stderr: []string{"no server running on /tmp/socket"}, ExitCode: 1,
+	}}
+	answering := versionResponse{result: tmuxcmd.Result{Stdout: []string{"0: 1 windows"}}}
+
+	tests := []struct {
+		name      string
+		responses []versionResponse
+		wantOK    bool
+		wantCalls int
+	}{
+		{
+			name:      "an acknowledged kill waits out the closing daemon",
+			responses: []versionResponse{ok, closing, closing, absent},
+			wantOK:    true,
+			wantCalls: 4,
+		},
+		{
+			name:      "a dropped kill reply counts once the socket is quiet",
+			responses: []versionResponse{closing, closing, absent},
+			wantOK:    true,
+			wantCalls: 3,
+		},
+		{
+			// An exiting daemon drops every connection, so an answer comes
+			// from a daemon started since and ends the wait.
+			name:      "a daemon that answers is another daemon",
+			responses: []versionResponse{ok, closing, answering},
+			wantOK:    true,
+			wantCalls: 3,
+		},
+		{
+			name:      "a dropped kill reply with a daemon answering stays a failure",
+			responses: []versionResponse{closing, answering},
+			wantCalls: 2,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			runner := &versionQueueRunner{responses: test.responses}
+			err := serverWithRunner(runner).Kill(context.Background())
+			if (err == nil) != test.wantOK {
+				t.Fatalf("Server.Kill() error = %v, want ok = %v", err, test.wantOK)
+			}
+			if got := runner.callCount(); got != test.wantCalls {
+				t.Fatalf("runner calls = %d, want %d", got, test.wantCalls)
+			}
+		})
+	}
+}
+
+func TestServerKillReportsADaemonThatNeverStops(t *testing.T) {
+	t.Parallel()
+
+	closing := versionResponse{result: tmuxcmd.Result{
+		Stderr: []string{"server exited unexpectedly"}, ExitCode: 1,
+	}}
+	responses := make([]versionResponse, 200)
+	for index := range responses {
+		responses[index] = closing
+	}
+	runner := &versionQueueRunner{responses: responses}
+	err := serverWithRunner(runner).awaitServerStopped(context.Background(), 50*time.Millisecond, nil)
+	if err == nil || !strings.Contains(err.Error(), "still accepting connections") {
+		t.Fatalf("awaitServerStopped() error = %v, want a daemon still accepting connections", err)
+	}
+	if runner.callCount() < 2 {
+		t.Fatalf("runner calls = %d, want the daemon looked at more than once", runner.callCount())
 	}
 }
 
