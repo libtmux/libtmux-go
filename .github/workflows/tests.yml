@@ -131,7 +131,10 @@ jobs:
           cache-dependency-path: ${{ matrix.module }}/go.mod
 
       - name: Install tmux
-        run: ./scripts/apt-get.sh update && ./scripts/apt-get.sh install --yes tmux
+        uses: libtmux/.github/actions/apt-get@30f81842b1e639ea4e25f93f1f2543504178e228
+        with:
+          update: "true"
+          args: install --yes tmux
 
       - name: Create the tmux socket directory
         run: mkdir -p "$TMUX_TMPDIR"
@@ -372,7 +375,10 @@ jobs:
           cache-dependency-path: benchmarks/go.mod
 
       - name: Install tmux
-        run: ./scripts/apt-get.sh update && ./scripts/apt-get.sh install --yes tmux
+        uses: libtmux/.github/actions/apt-get@30f81842b1e639ea4e25f93f1f2543504178e228
+        with:
+          update: "true"
+          args: install --yes tmux
 
       - name: Publish the switch matrix
         continue-on-error: true
@@ -443,13 +449,17 @@ jobs:
         with:
           limit-access-to-actor: true
 
+      - name: Install the libevent that older tmux builds link
+        uses: libtmux/.github/actions/apt-get@30f81842b1e639ea4e25f93f1f2543504178e228
+        with:
+          update: "true"
+          args: install --yes libevent-2.1-7
+
       - name: Test compatible module coverage against tmux ${{ matrix.tmux-version }}
         env:
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
           TMUX_EXPECT: ${{ matrix.expect }}
         run: |
-          ./scripts/apt-get.sh update
-          ./scripts/apt-get.sh install --yes libevent-2.1-7
           export PATH="$TMUX_PREFIX/bin:$PATH"
           actual_version=$(tmux -V)
           # The expected version is a glob: master reports next-X.Y.
@@ -508,14 +518,19 @@ jobs:
         with:
           ref: '3.3a'
 
+      - name: Install the libevent that older tmux builds link
+        if: ${{ matrix.control }}
+        uses: libtmux/.github/actions/apt-get@30f81842b1e639ea4e25f93f1f2543504178e228
+        with:
+          update: "true"
+          args: install --yes libevent-2.1-7
+
       - name: Run the older-daemon tests against tmux ${{ matrix.tmux-version }}
         if: ${{ matrix.control }}
         env:
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
           OLDER_PREFIX: ${{ steps.older.outputs.prefix }}
         run: |
-          ./scripts/apt-get.sh update
-          ./scripts/apt-get.sh install --yes libevent-2.1-7
           export PATH="$TMUX_PREFIX/bin:$PATH"
           export LIBTMUX_OPTIONAL_OLD_TMUX="$OLDER_PREFIX/bin/tmux"
           test "$("$LIBTMUX_OPTIONAL_OLD_TMUX" -V)" = 'tmux 3.3a'
