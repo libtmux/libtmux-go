@@ -2,6 +2,49 @@
   "capabilities": [
     {
       "apis": [
+        "tmux.Session.RunProgram",
+        "tmux.Session.StartProgram"
+      ],
+      "commands": [
+        {
+          "command": "new-window"
+        },
+        {
+          "command": "respawn-pane"
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "program-argv",
+      "name": "Literal program arguments",
+      "since": "3.3a",
+      "summary": "Pass an executable and literal arguments to a terminal process."
+    },
+    {
+      "apis": [
+        "tmux.Session.RunProgram",
+        "tmux.Session.StartProgram"
+      ],
+      "commands": [
+        {
+          "command": "wait-for",
+          "flags": [
+            "-E",
+            "-F",
+            "-l",
+            "-w"
+          ]
+        }
+      ],
+      "error": "tmux.VersionTooLowError",
+      "handling": "refuse",
+      "id": "program-lifetime",
+      "name": "Owned program lifetime",
+      "since": "3.8",
+      "summary": "Run a literal program and refuse destructive operations after its pane is respawned."
+    },
+    {
+      "apis": [
         "tmux.Server.OpenControl",
         "tmux.Session.OpenControl",
         "tmux.Server.NewSessionConnection"

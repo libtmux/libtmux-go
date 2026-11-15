@@ -14,6 +14,7 @@ example prints is named to `go test -skip` instead. The tmux that decides is
 """
 
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -45,7 +46,7 @@ def skip_pattern(module: str, version: str) -> str:
     '^ExampleBuildInto$'
     >>> skip_pattern("workspace", "3.7")
     ''
-    >>> skip_pattern(".", "3.3a").endswith("|^ExamplePane_CaptureToFile$")
+    >>> "^ExamplePane_CaptureToFile$" in skip_pattern(".", "3.3a")
     True
     >>> skip_pattern("examples", "3.3a")
     ''
@@ -55,7 +56,12 @@ def skip_pattern(module: str, version: str) -> str:
         skip = SKIPPED_BEFORE_37.get(module, "")
     if version == "3.3a" and module == ".":
         skip += "|^ExamplePane_CaptureToFile$"
-    return skip
+    release = re.fullmatch(r"(\d+)\.(\d+)([a-z]|-rc\d*)?", version)
+    if module == "." and release:
+        number = (int(release[1]), int(release[2]))
+        if number < (3, 8) or (number == (3, 8) and "-rc" in version):
+            skip += "|^ExampleSession_(RunProgram|StartProgram)$"
+    return skip.removeprefix("|")
 
 
 def tmux_version(binary: str) -> str:

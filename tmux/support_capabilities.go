@@ -1,6 +1,10 @@
 package tmux
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"slices"
+)
 
 // capabilityHandling is what the package does where a capability is missing.
 type capabilityHandling string
@@ -11,11 +15,100 @@ const (
 	handlingRepair   capabilityHandling = "repair"
 )
 
-// capabilityCommand names a tmux command and the flags of it a record
-// depends on.
-type capabilityCommand struct {
-	Command string   `json:"command"`
-	Flags   []string `json:"flags,omitempty"`
+// CapabilityCommand names a tmux command and the flags a feature depends on.
+type CapabilityCommand struct {
+	// Command is the native tmux command name.
+	Command string `json:"command"`
+	// Flags lists the single-letter flags the feature needs.
+	Flags []string `json:"flags,omitempty"`
+}
+
+type capabilityCommand = CapabilityCommand
+
+// CapabilityStatus describes one feature on an observed tmux daemon.
+// Metadata slices belong to the caller. Supported describes a snapshot;
+// operations still check their own daemon before dispatch.
+type CapabilityStatus struct {
+	// ID is the registry's stable feature name.
+	ID string
+	// Name is the human-readable feature name.
+	Name string
+	// Summary describes the supported operation.
+	Summary string
+	// Since is the feature's minimum supported release.
+	Since Version
+	// Current is the observed daemon release, not the client binary's release.
+	Current Version
+	// Supported reports whether Current meets this feature's requirements.
+	Supported bool
+	// Handling is refuse, fallback or repair when the requirement is unmet.
+	Handling string
+	// APIs names dependent public APIs. A call may require several features.
+	APIs []string
+	// Commands names the native commands and flags involved.
+	Commands []CapabilityCommand
+	// Except lists exact releases the feature refuses despite meeting Since.
+	Except []string
+}
+
+// Capabilities lists the feature registry against the connected daemon.
+// It starts no server and returns an error when the endpoint is absent.
+// A materialized handle refuses a replacement daemon. A control connection
+// retains the daemon identity qualified at attachment, for its entire lifetime.
+func (s Server) Capabilities(ctx context.Context) ([]CapabilityStatus, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.connection != nil {
+		if err := s.connection.routeError(ctx, commandServer); err != nil {
+			return nil, err
+		}
+		// A control connection stays on the daemon qualified at attachment.
+		return capabilitiesForVersion(s.daemon.version), nil
+	}
+	identity, err := s.withoutDaemon().probeServerIdentity(ctx, coreVersionIdentityFields())
+	if err != nil {
+		return nil, err
+	}
+	if s.daemon != nil && !sameSnapshotIdentity(*s.daemon, identity) {
+		return nil, ErrDaemonReplaced
+	}
+	return capabilitiesForVersion(identity.version), nil
+}
+
+// Capability looks up a feature ID on the connected daemon.
+// An unknown ID is rejected before probing. The query starts no server.
+func (s Server) Capability(ctx context.Context, id string) (CapabilityStatus, error) {
+	for index, record := range capabilityRegistry {
+		if record.ID == id {
+			statuses, err := s.Capabilities(ctx)
+			if err != nil {
+				return CapabilityStatus{}, err
+			}
+			return statuses[index], nil
+		}
+	}
+	return CapabilityStatus{}, invalidServerCommandRequest("capabilities", "ID", id, "unknown capability")
+}
+
+func capabilitiesForVersion(current Version) []CapabilityStatus {
+	statuses := make([]CapabilityStatus, 0, len(capabilityRegistry))
+	for _, record := range capabilityRegistry {
+		since := registryVersion(record.Since)
+		commands := slices.Clone(record.Commands)
+		for index := range commands {
+			commands[index].Flags = slices.Clone(commands[index].Flags)
+		}
+		statuses = append(statuses, CapabilityStatus{
+			ID: record.ID, Name: record.Name, Summary: record.Summary,
+			Since: since, Current: current,
+			Supported: current.meetsMinimum(since) && current.meetsMinimum(minimumSupportedVersion) &&
+				!slices.Contains(record.Except, current.String()),
+			Handling: string(record.Handling), APIs: slices.Clone(record.APIs),
+			Commands: commands, Except: slices.Clone(record.Except),
+		})
+	}
+	return statuses
 }
 
 // capabilityRecord is one thing a tmux release can do and this package gates
@@ -56,9 +149,23 @@ const versionTooLowAPI = "tmux.VersionTooLowError"
 // needs a release, and a command a release mishandles. It does not hold the
 // flag that one request field needs, such as a popup, search or
 // display-message option, which follows UnsupportedPolicy where the request is
-// built and is documented on the field, nor the floor every API has, the
-// minimum supported release. Those never reach the manifest.
+// built and is documented on the field. The shared minimum remains a separate
+// manifest field; a feature may be available from that minimum.
 var capabilityRegistry = []capabilityRecord{
+	{
+		ID: "program-argv", Name: "Literal program arguments",
+		Summary: "Pass an executable and literal arguments to a terminal process.",
+		Since:   MinimumSupportedVersion, Handling: handlingRefuse, Error: versionTooLowAPI,
+		APIs:     []string{"tmux.Session.RunProgram", "tmux.Session.StartProgram"},
+		Commands: []capabilityCommand{{Command: "new-window"}, {Command: "respawn-pane"}},
+	},
+	{
+		ID: "program-lifetime", Name: "Owned program lifetime",
+		Summary: "Run a literal program and refuse destructive operations after its pane is respawned.",
+		Since:   "3.8", Handling: handlingRefuse, Error: versionTooLowAPI,
+		APIs:     []string{"tmux.Session.RunProgram", "tmux.Session.StartProgram"},
+		Commands: []capabilityCommand{{Command: "wait-for", Flags: []string{"-E", "-F", "-l", "-w"}}},
+	},
 	{
 		ID:      "control-mode",
 		Name:    "Control mode",

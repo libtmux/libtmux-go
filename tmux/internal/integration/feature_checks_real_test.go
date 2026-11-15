@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +32,47 @@ func optionalFeatureTmux(t *testing.T, variable, version string) string {
 		t.Fatalf("optional fixture: %q %v", output, err)
 	}
 	return binary
+}
+
+func TestOptionalManagedProgramRefusesOldDaemonBeforeCreation(t *testing.T) {
+	old := optionalOldTmux(t)
+	client, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(t.TempDir(), "s")
+	versionNativeCommand(t, old, socket, "new-session", "-d", "-s", "keeper", "cat")
+	t.Cleanup(func() { versionNativeCommand(t, old, socket, "kill-server") })
+	var creations atomic.Int32
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary: client, SocketPath: socket, ConfigFile: os.DevNull,
+		CommandObserver: func(trace tmux.CommandTrace) {
+			if trace.Subcommand == "new-window" {
+				creations.Add(1)
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := server.Sessions(t.Context())
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions = %v, %v", sessions, err)
+	}
+	status, err := server.Capability(t.Context(), "program-lifetime")
+	if err != nil || status.Supported || status.Current.String() != "3.3a" {
+		t.Fatalf("old daemon capability = %#v, %v", status, err)
+	}
+	before := versionNativeCommand(t, old, socket, "list-windows", "-F", "#{window_id}:#{window_panes}")
+	if _, err := sessions[0].StartProgram(t.Context(), "cat", nil, tmux.RunOptions{}); !errors.Is(err, tmux.ErrVersionTooLow) {
+		t.Fatalf("StartProgram on old daemon = %v", err)
+	}
+	if got := creations.Load(); got != 0 {
+		t.Fatalf("refused program attempted %d window creations", got)
+	}
+	if after := versionNativeCommand(t, old, socket, "list-windows", "-F", "#{window_id}:#{window_panes}"); after != before {
+		t.Fatalf("refusal changed topology: %q => %q", before, after)
+	}
 }
 
 func TestOptionalExact37BreakPaneKeepsItsNamingContract(t *testing.T) {

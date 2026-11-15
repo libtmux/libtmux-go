@@ -638,3 +638,32 @@ func TestWaitOutcomeOutlivesTheCallerThatReadIt(t *testing.T) {
 		})
 	}
 }
+
+func TestOwningProgramErrorRetainsRecoveryPane(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	running := &Running{pane: Pane{paneID: PaneID("%42")}, lifetime: &programLifetime{gate: make(chan struct{}, 1)}}
+	result, err := waitForRun(ctx, running, nil)
+	if err == nil || result.Pane != PaneID("%42") || result.Status != -1 {
+		t.Fatalf("owning error = %#v, %v", result, err)
+	}
+}
+
+func TestProgramRemovalReportsObserverCloseFailure(t *testing.T) {
+	closeFailure := errors.New("observer shutdown failed")
+	closed := make(chan struct{})
+	close(closed)
+	client := &ControlClient{clientName: ClientName("client-42"), closeDone: closed, closeErr: closeFailure}
+	// Shutdown has finished, preserving the error the owner must report.
+	client.closeOnce.Do(func() {})
+	server := rawVersionServer(t, &versionRunner{binary: "3.8", daemon: "3.8"})
+	pane := Pane{paneID: PaneID("%42"), windowID: WindowID("@42")}
+	lifetime := &programLifetime{
+		session: Session{server: server}, pane: pane, gate: make(chan struct{}, 1),
+		current: &programWitness{client: client, finished: make(chan struct{})},
+	}
+	running := &Running{pane: pane, lifetime: lifetime}
+	if err := running.remove(t.Context()); !errors.Is(err, closeFailure) {
+		t.Fatalf("program removal hid observer close failure: %v", err)
+	}
+}

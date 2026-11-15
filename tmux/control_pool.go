@@ -160,9 +160,9 @@ func (p *controlLanePool) runExclusive(
 		// Closing waits out a command still in flight, which a canceled
 		// caller must not. The pool keeps the client until it has closed,
 		// so closing the pool still ends it.
-		go p.retire(client)
+		go func() { _ = p.retire(client) }()
 	} else {
-		p.retire(client)
+		_ = p.retire(client)
 	}
 	if err != nil {
 		select {
@@ -176,11 +176,12 @@ func (p *controlLanePool) runExclusive(
 }
 
 // retire closes an exclusive client and then forgets it.
-func (p *controlLanePool) retire(client *ControlClient) {
-	_ = client.Close()
+func (p *controlLanePool) retire(client *ControlClient) error {
+	err := client.Close()
 	p.mu.Lock()
 	delete(p.exclusive, client)
 	p.mu.Unlock()
+	return err
 }
 
 // adopt records client as belonging to the pool, unless the pool has stopped.

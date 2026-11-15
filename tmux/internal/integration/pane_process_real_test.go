@@ -6,9 +6,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -229,4 +232,301 @@ func TestPipeTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
 		t.Fatalf("Pipe() error = %v", err)
 	}
 	waitForPanePipeState(ctx, t, server, pane, "1")
+}
+
+//libtmux:real-tmux
+func TestManagedProgramPreservesArguments(t *testing.T) {
+	ctx := t.Context()
+	base := tmuxtest.NewServer(ctx, t)
+	var launches atomic.Int32
+	var badTrace atomic.Bool
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketPath: base.SocketPath(), ConfigFile: base.ConfigFile(), ProcessEnvironment: base.ProcessEnvironment(),
+		CommandObserver: func(trace tmux.CommandTrace) {
+			if trace.Subcommand == "respawn-pane" {
+				launches.Add(1)
+				if trace.ExitCode != 0 || trace.Err != nil {
+					badTrace.Store(true)
+				}
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions: %v %v", sessions, err)
+	}
+	session := sessions[0]
+	capability, err := server.Capability(ctx, "program-argv")
+	if err != nil || !capability.Supported || capability.Since.String() != tmux.MinimumSupportedVersion {
+		t.Fatalf("program capability = %#v, %v", capability, err)
+	}
+	lifetime, err := server.Capability(ctx, "program-lifetime")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := server.Windows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []struct {
+		executable string
+		arguments  []string
+	}{{"", nil}, {"sh", []string{"nul\x00argument"}}} {
+		if _, err := session.StartProgram(ctx, invalid.executable, invalid.arguments, tmux.RunOptions{}); err == nil {
+			t.Fatal("StartProgram accepted invalid argv")
+		}
+	}
+	if !lifetime.Supported {
+		if _, err := session.StartProgram(ctx, "cat", nil, tmux.RunOptions{}); !errors.Is(err, tmux.ErrVersionTooLow) {
+			t.Fatalf("StartProgram below lifetime floor = %v", err)
+		}
+	}
+	after, err := server.Windows(ctx)
+	if err != nil || len(after) != len(before) {
+		t.Fatalf("refused requests changed windows: %v, %v", after, err)
+	}
+	if !lifetime.Supported {
+		legacy, err := session.Run(ctx, "printf legacy", tmux.RunOptions{})
+		if err != nil || !slices.Equal(legacy.Lines, []string{"legacy"}) {
+			t.Fatalf("legacy Run at core floor = %#v, %v", legacy, err)
+		}
+		return
+	}
+	directory := t.TempDir()
+	output := filepath.Join(directory, "argv")
+	cwdOutput := filepath.Join(directory, "cwd")
+	values := []string{"a b", "", "$HOME", "$(exit 99)", "-n", ";", "tail;", "\\;", "line\nbreak", "雪"}
+	arguments := append([]string{"-c", `printf '%s\0' "$@" > "$ARGV_FILE"; pwd > "$CWD_FILE"; printf 'last-line'; exit 7`, "argv"}, values...)
+	result, err := session.RunProgram(ctx, "sh", arguments, tmux.RunOptions{
+		StartDirectory: directory, Environment: map[string]string{"ARGV_FILE": output, "CWD_FILE": cwdOutput},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 7 || strings.Join(result.Lines, "\n") != "last-line" {
+		t.Fatalf("result = %#v", result)
+	}
+	bytes, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Split(strings.TrimSuffix(string(bytes), "\x00"), "\x00"); !slices.Equal(got, values) {
+		t.Fatalf("argv = %q, want %q", got, values)
+	}
+	cwd, err := os.ReadFile(cwdOutput)
+	if err != nil || strings.TrimSpace(string(cwd)) != directory {
+		t.Fatalf("program cwd = %q, %v; want %s", cwd, err, directory)
+	}
+	for _, executable := range []struct{ name, output string }{
+		{"-literal;$HOME", "singleton"}, {"-literal;$HOME\n", "newline"},
+	} {
+		if err := os.WriteFile(filepath.Join(directory, executable.name), []byte("#!/bin/sh\nprintf "+executable.output+"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{directory, ""} {
+			singleton, err := session.RunProgram(ctx, executable.name, nil, tmux.RunOptions{
+				StartDirectory: directory, Environment: map[string]string{"PATH": path},
+			})
+			if err != nil || singleton.Status != 0 || !slices.Equal(singleton.Lines, []string{executable.output}) {
+				t.Fatalf("singleton executable %q with PATH %q = %#v, %v", executable.name, path, singleton, err)
+			}
+		}
+	}
+	running, err := session.StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("literal-input"), Literal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+		t.Fatal(err)
+	}
+	finished, err := running.Wait(ctx)
+	if err != nil || finished.Status != 0 {
+		t.Fatalf("singleton Wait() = %#v, %v", finished, err)
+	}
+	if !slices.Contains(finished.Lines, "literal-input") {
+		t.Fatalf("singleton output = %q", finished.Lines)
+	}
+	if got := launches.Load(); got != 6 || badTrace.Load() {
+		t.Fatalf("program launch traces = %d, invalid outcome %v", got, badTrace.Load())
+	}
+}
+
+//libtmux:real-tmux
+func TestManagedProgramRefusesRespawnedProcess(t *testing.T) {
+	ctx := t.Context()
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, "3.8")
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions: %v %v", sessions, err)
+	}
+	running, err := sessions[0].StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := running.Pane().Respawn(ctx, tmux.RespawnRequest{Command: new("cat"), Kill: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Kill(ctx); !errors.Is(err, tmux.ErrProgramReplaced) {
+		t.Fatalf("Kill after replacement = %v", err)
+	}
+	if _, err := running.Wait(ctx); !errors.Is(err, tmux.ErrProgramReplaced) {
+		t.Fatalf("Wait after replacement = %v", err)
+	}
+	replacement, err := running.Pane().Refresh(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dead, _ := replacement.Dead(); dead {
+		t.Fatal("replacement was killed")
+	}
+}
+
+//libtmux:real-tmux
+func TestManagedProgramKeepReleasesWitnessAfterConcurrentWaits(t *testing.T) {
+	ctx := t.Context()
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, "3.8")
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions: %v %v", sessions, err)
+	}
+	before, err := server.Clients(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	running, err := sessions[0].StartProgram(ctx, "cat", nil, tmux.RunOptions{Keep: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := running.Wait(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled Wait = %v", err)
+	}
+	if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("retained-input"), Literal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+		t.Fatal(err)
+	}
+	type completion struct {
+		result tmux.RunResult
+		err    error
+	}
+	completed := make(chan completion, 2)
+	for range 2 {
+		go func() {
+			result, waitErr := running.Wait(ctx)
+			completed <- completion{result, waitErr}
+		}()
+	}
+	for range 2 {
+		got := <-completed
+		if got.err != nil || got.result.Status != 0 || !slices.Contains(got.result.Lines, "retained-input") {
+			t.Fatalf("Wait = %#v, %v", got.result, got.err)
+		}
+	}
+	after, err := server.Clients(ctx)
+	if err != nil || len(after) != len(before) {
+		t.Fatalf("clients after Keep = %v, %v; before %d", after, err, len(before))
+	}
+	pane, err := running.Pane().Refresh(ctx)
+	if dead, _ := pane.Dead(); err != nil || !dead {
+		t.Fatalf("kept pane = %#v, %v", pane, err)
+	}
+}
+
+//libtmux:real-tmux
+func TestManagedProgramCleanupPreservesAddedPane(t *testing.T) {
+	ctx := t.Context()
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, "3.8")
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions: %v %v", sessions, err)
+	}
+	running, err := sessions[0].StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	added, err := running.Pane().Split(ctx, tmux.SplitPaneRequest{Command: "cat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := running.Wait(ctx); err != nil || result.Status != 0 {
+		t.Fatalf("Wait = %#v, %v", result, err)
+	}
+	if _, err := added.Refresh(ctx); err != nil {
+		t.Fatalf("cleanup removed added pane: %v", err)
+	}
+}
+
+//libtmux:real-tmux
+func TestManagedProgramRefusesRespawnAtDispatch(t *testing.T) {
+	ctx := t.Context()
+	base := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, base, "3.8")
+	realBinary, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	proxy := filepath.Join(directory, "tmux")
+	targetFile := filepath.Join(directory, "target")
+	doneFile := filepath.Join(directory, "respawned")
+	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
+for argument do
+    case "$argument" in __libtmux_program_moved_*) protected=1;; esac
+done
+if [ "$protected" = 1 ] && [ ! -e "$RACE_DONE" ]; then
+    IFS= read -r target < "$RACE_TARGET" || exit
+    : > "$RACE_DONE"
+    "$RACE_REAL" -S "$RACE_SOCKET" respawn-pane -k -t "$target" cat || exit
+fi
+exec "$RACE_REAL" "$@"
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		Binary: proxy, SocketPath: base.SocketPath(), ConfigFile: base.ConfigFile(),
+		ProcessEnvironment: append(base.ProcessEnvironment(), "RACE_REAL="+realBinary,
+			"RACE_SOCKET="+base.SocketPath(), "RACE_TARGET="+targetFile, "RACE_DONE="+doneFile),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := server.Sessions(ctx)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("sessions = %v, %v", sessions, err)
+	}
+	running, err := sessions[0].StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetFile, []byte(running.Pane().ID().String()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Kill(ctx); !errors.Is(err, tmux.ErrProgramReplaced) {
+		t.Fatalf("Kill across dispatch-boundary respawn = %v", err)
+	}
+	if _, err := os.Stat(doneFile); err != nil {
+		t.Fatal("dispatch-boundary respawn did not execute:", err)
+	}
+	replacement, err := running.Pane().Refresh(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dead, _ := replacement.Dead(); dead {
+		t.Fatal("dispatch killed the replacement")
+	}
 }

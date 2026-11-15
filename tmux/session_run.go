@@ -20,7 +20,8 @@ import (
 // capability record.
 var paneExitDrainPipeVersion = Version{raw: "3.7", major: 3, minor: 7}
 
-// RunOptions configures [Session.Run] and [Session.Start]. Its zero value
+// RunOptions configures [Session.Run], [Session.Start], [Session.RunProgram]
+// and [Session.StartProgram]. Its zero value
 // runs the command in a window tmux names, in the session's default directory
 // and environment, and removes that window once the command has finished.
 type RunOptions struct {
@@ -45,6 +46,10 @@ type RunOptions struct {
 // is reported rather than waited out, and rather than passed off as a zero
 // exit status that would call a failed command successful.
 var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded")
+
+// ErrProgramReplaced reports a changed pane generation or loss of its lifetime
+// witness. The owner refuses destructive operations without that evidence.
+var ErrProgramReplaced = errors.New("tmux: program generation or placement was lost")
 
 // RunResult reports how a command finished and what its terminal showed.
 type RunResult struct {
@@ -127,16 +132,104 @@ func (reportedSignal) Signal() {}
 // temporary file that tmux writes and this process reads.
 func (s Session) Run(ctx context.Context, command string, options RunOptions) (RunResult, error) {
 	running, err := s.Start(ctx, command, options)
+	return waitForRun(ctx, running, err)
+}
+
+func waitForRun(ctx context.Context, running *Running, err error) (RunResult, error) {
 	if err != nil {
+		if running != nil && running.lifetime != nil {
+			return RunResult{Status: -1, Pane: running.pane.ID()}, err
+		}
 		return RunResult{}, err
 	}
 	result, err := running.Wait(ctx)
 	if err != nil {
+		if running.lifetime != nil && result.Pane == "" {
+			result = RunResult{Status: -1, Pane: running.pane.ID()}
+		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		_ = running.window.Kill(cleanupCtx)
+		cleanupErr := running.remove(cleanupCtx)
+		if running.lifetime != nil {
+			err = errors.Join(err, cleanupErr)
+		}
 	}
 	return result, err
+}
+
+// RunProgram runs an executable with literal arguments in a new terminal window.
+// It requires the program-lifetime capability (tmux 3.8). Nonzero exits are
+// results; terminal stdout and stderr are merged. Capture and stream limits
+// are those of [RunResult] and [Running.StreamTo].
+//
+// Cancellation attempts bounded pane/PTY cleanup; an application that ignores
+// terminal hangup may survive. Use [Session.StartProgram], [Running.Kill] and
+// [Running.Wait] to observe the main process's exit. Cleanup refuses a changed
+// generation with [ErrProgramReplaced], preserving the replacement.
+// A partial result identifies the intended pane for inspection after failure.
+func (s Session) RunProgram(ctx context.Context, executable string, arguments []string, options RunOptions) (RunResult, error) {
+	running, err := s.StartProgram(ctx, executable, arguments, options)
+	return waitForRun(ctx, running, err)
+}
+
+// StartProgram starts an executable with literal arguments and returns its owner.
+// The executable resolves on the tmux server's PATH in the requested directory.
+// Arguments are copied before I/O; NUL and an empty executable fail before
+// creation. A singleton uses /bin/sh with a fixed positional exec script.
+// Argument values never become shell source.
+//
+// The program-lifetime capability requires tmux 3.8 and a local filesystem
+// that can hard-link the tmux socket. One control client stays open until Wait
+// finishes or ownership is lost; Kill alone does not release that observation.
+// A canceled Wait leaves the program available for another wait. Keep retains
+// the completed pane; cleanup preserves other panes added to its window.
+//
+// Respawn, movement or observation loss makes destructive operations refuse
+// with ErrProgramReplaced. On uncertain launch, a nonnil Running may accompany
+// the error: inspect its Pane before choosing manual recovery. A dropped handle
+// or a crashed controller supplies no automatic application cleanup.
+func (s Session) StartProgram(ctx context.Context, executable string, arguments []string, options RunOptions) (*Running, error) {
+	operands, err := programArguments(executable, arguments)
+	if err != nil {
+		return nil, err
+	}
+	capability, err := s.server.Capability(ctx, "program-lifetime")
+	if err != nil {
+		return nil, err
+	}
+	if !capability.Supported {
+		return nil, &VersionTooLowError{Current: capability.Current, Minimum: capability.Since, Subcommand: "respawn-pane", Feature: capability.ID}
+	}
+	return s.start(ctx, RespawnRequest{}, operands, options)
+}
+
+// The sentinel preserves filename newlines that command substitution trims.
+const singletonProgramExec = `case "$1" in
+-*)
+    p=$(command -v -- "$1" && printf .) || exit 127
+    p=${p%.}
+    p=${p%?}
+    case "$p" in -*) p=./$p;; esac
+    shift
+    exec "$p" "$@"
+    ;;
+*) exec "$@";;
+esac`
+
+func programArguments(executable string, arguments []string) ([]string, error) {
+	if executable == "" {
+		return nil, invalidServerCommandRequest("respawn-pane", "Executable", "", "is required")
+	}
+	operands := append([]string{executable}, arguments...)
+	for index, operand := range operands {
+		if err := validateServerCommandArgument("respawn-pane", fmt.Sprintf("Argv[%d]", index), operand, true); err != nil {
+			return nil, err
+		}
+	}
+	if len(operands) == 1 {
+		return []string{"/bin/sh", "-c", singletonProgramExec, "libtmux-program", executable}, nil
+	}
+	return operands, nil
 }
 
 // Start runs command in a new window of this session and returns once it is
@@ -163,6 +256,10 @@ func (s Session) Start(
 	if command == "" {
 		return nil, invalidServerCommandRequest("respawn-pane", "Command", "", "is required")
 	}
+	return s.start(ctx, RespawnRequest{Command: &command}, nil, options)
+}
+
+func (s Session) start(ctx context.Context, respawn RespawnRequest, operands []string, options RunOptions) (running *Running, err error) {
 	// The command's own exit would destroy the window before remain-on-exit
 	// could be set on it, so the window starts with cat, which holds its
 	// terminal until it is replaced once the pane is armed.
@@ -180,7 +277,14 @@ func (s Session) Start(
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		_ = window.Kill(cleanupCtx)
+		if running != nil && running.lifetime != nil {
+			err = errors.Join(err, running.remove(cleanupCtx))
+		} else {
+			cleanupErr := window.Kill(cleanupCtx)
+			if operands != nil {
+				err = errors.Join(err, cleanupErr)
+			}
+		}
 	}()
 	pane, err := window.ResolveActivePane(ctx)
 	if err != nil {
@@ -212,32 +316,35 @@ func (s Session) Start(
 	if err := pane.SetHook(ctx, "pane-died", "wait-for -S "+channel); err != nil {
 		return nil, err
 	}
-	respawn := RespawnRequest{Command: &command, Kill: true, Environment: options.Environment}
+	respawn.Kill = true
+	respawn.Environment = options.Environment
 	if options.StartDirectory != "" {
 		respawn.StartDirectory = &options.StartDirectory
 	}
-	respawned, err := pane.Respawn(ctx, respawn)
-	if err != nil {
-		return nil, fmt.Errorf("start command: %w", err)
+	var lifetime *programLifetime
+	var respawned Pane
+	if operands == nil {
+		respawned, err = pane.Respawn(ctx, respawn)
+	} else {
+		lifetime, respawned, err = launchProgram(ctx, s, pane, respawn, operands)
 	}
-	return &Running{
-		session:       s,
-		window:        window,
-		pane:          respawned,
-		channel:       channel,
-		keep:          options.Keep,
-		installedPipe: installedPipe,
-	}, nil
+	if lifetime != nil {
+		running = &Running{session: s, window: window, pane: pane, channel: channel, keep: options.Keep, installedPipe: installedPipe, lifetime: lifetime}
+	}
+	if err != nil {
+		return running, fmt.Errorf("start command: %w", err)
+	}
+	return &Running{session: s, window: window, pane: respawned, channel: channel, keep: options.Keep, installedPipe: installedPipe, lifetime: lifetime}, nil
 }
 
-// Running is a command started by [Session.Start]: a real process, already
-// under way, in a pane of its own. [Running.Pane] exposes that pane so its
+// Running is a command started by [Session.Start] or [Session.StartProgram]:
+// a real process in a pane of its own. [Running.Pane] exposes that pane so its
 // output can be streamed with [Pane.OpenObservation] or typed into with
 // [Pane.Writer] while the command runs; [Running.Wait] and [Running.Kill]
 // wait for and stop it. A line printed with nothing separating it from the
 // command's own exit can race tmux's control-mode notification of it and
-// never reach [PaneObservation.Reader]; [RunResult.Lines] from Wait, a plain
-// screen capture rather than that notification stream, always has it.
+// never reach [PaneObservation.Reader]. [RunResult.Lines] from Wait captures
+// the final rendered screen and bounded history.
 type Running struct {
 	session       Session
 	window        Window
@@ -245,6 +352,7 @@ type Running struct {
 	channel       string
 	keep          bool
 	installedPipe bool
+	lifetime      *programLifetime
 	// settle answers how long to let tmux catch up before reporting that it
 	// never recorded an outcome. Nil uses settleLimit; a test supplies one to
 	// drive waitForExit without waiting out a real deadline.
@@ -269,8 +377,9 @@ func (r *Running) Pane() Pane {
 
 // Wait blocks until the command exits, on tmux's own wait-for signal backed by
 // a widening liveness check, and reports its exit status and what its terminal
-// showed. It removes the window Start created unless [RunOptions.Keep] was
-// set. A command whose process tmux never reaps has no outcome to report, and
+// showed. Unless [RunOptions.Keep] was set, Start removes its window and
+// StartProgram removes its owned pane, preserving panes added by others.
+// A command whose process tmux never reaps has no outcome to report, and
 // Wait ends with [ErrOutcomeUnrecorded] rather than the zero status that would
 // make a failed command look successful.
 //
@@ -387,6 +496,9 @@ const signalHandoverDelay = 500 * time.Millisecond
 // came; the liveness check is the second exit, and it backs off so a command
 // that runs for an hour is asked about a handful of times.
 func (r *Running) waitForExit(ctx context.Context) error {
+	if err := r.checkProgram(ctx); err != nil {
+		return err
+	}
 	signaled := make(chan error, 1)
 	waitCtx, endWait := context.WithCancel(ctx)
 	defer endWait()
@@ -404,6 +516,14 @@ func (r *Running) waitForExit(ctx context.Context) error {
 	var settling time.Duration
 	var asked bool
 	for {
+		var changed <-chan struct{}
+		if r.lifetime != nil {
+			var err error
+			changed, err = r.lifetime.changed(ctx)
+			if err != nil {
+				return err
+			}
+		}
 		timer := time.NewTimer(delay)
 		select {
 		case err := <-signaled:
@@ -412,10 +532,19 @@ func (r *Running) waitForExit(ctx context.Context) error {
 		case <-ctx.Done():
 			timer.Stop()
 			return context.Cause(ctx)
+		case <-changed:
+			timer.Stop()
+			if err := r.checkProgram(ctx); err != nil {
+				return err
+			}
+			continue
 		case <-timer.C:
 		}
 		pane, err := r.pane.Refresh(ctx)
 		if err != nil {
+			return err
+		}
+		if err := r.checkProgram(ctx); err != nil {
 			return err
 		}
 		if dead, ok := pane.Dead(); ok && dead {
@@ -537,6 +666,14 @@ func (r *Running) askForAReap(ctx context.Context) {
 // once the outcome is read, and a caller can hold the window indefinitely.
 func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	defer func() {
+		if errors.Is(err, ErrProgramReplaced) {
+			return
+		}
+		if r.keep && r.lifetime != nil {
+			_, releaseErr := r.lifetime.operation(ctx, false)
+			err = errors.Join(err, releaseErr)
+			return
+		}
 		if r.keep {
 			// Nothing else ever stops a compatibility pipe on a kept window,
 			// so it runs on every path out of this function, not only the one
@@ -550,12 +687,19 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		if killErr := r.window.Kill(cleanupCtx); killErr != nil && err == nil {
-			err = fmt.Errorf("remove window: %w", killErr)
+		if killErr := r.remove(cleanupCtx); killErr != nil {
+			if r.lifetime != nil {
+				err = errors.Join(err, fmt.Errorf("remove pane: %w", killErr))
+			} else if err == nil {
+				err = fmt.Errorf("remove window: %w", killErr)
+			}
 		}
 	}()
 	finished, err := r.pane.Refresh(ctx)
 	if err != nil {
+		return RunResult{}, err
+	}
+	if err := r.checkProgram(ctx); err != nil {
 		return RunResult{}, err
 	}
 	result.Pane = finished.ID()
@@ -570,6 +714,9 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	lines, err := captureFinishedScreen(ctx, finished)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("read screen: %w", err)
+	}
+	if err := r.checkProgram(ctx); err != nil {
+		return RunResult{}, err
 	}
 	result.Lines = trimScreen(lines)
 	return result, nil
@@ -665,7 +812,21 @@ func (r *Running) StreamTo(
 // earlier. A pane that no longer exists makes that id resolve empty and Kill
 // a no-op; Kill reports only whether tmux could dispatch the request, not
 // whether a process still existed to receive it.
+//
+// A StartProgram owner first consumes its pending generation witness in the
+// same daemon command group. Respawn or lost observation returns ErrProgramReplaced.
+// tmux expands the process-group ID before dispatching the background signal
+// job; kernel PID reuse and descendants that leave the group remain outside
+// this guarantee. Once Wait has cached completion, Kill has no effect.
 func (r *Running) Kill(ctx context.Context) error {
+	if r.lifetime != nil {
+		if r.exited.Load() {
+			_, err := r.outcome()
+			return err
+		}
+		_, err := r.lifetime.operation(ctx, true, "run-shell", "-b", "-t", r.pane.ID().String(), "--", `[ -n "#{pane_pid}" ] && kill -s KILL -- -#{pane_pid} 2>/dev/null; true`)
+		return err
+	}
 	if _, err := r.session.server.RunShell(ctx, RunShellRequest{
 		TargetPane: r.pane.ID(),
 		Background: true,
@@ -678,6 +839,21 @@ func (r *Running) Kill(ctx context.Context) error {
 		return fmt.Errorf("kill command: %w", err)
 	}
 	return nil
+}
+
+func (r *Running) checkProgram(ctx context.Context) error {
+	if r.lifetime == nil {
+		return nil
+	}
+	return r.lifetime.check(ctx)
+}
+
+func (r *Running) remove(ctx context.Context) error {
+	if r.lifetime == nil {
+		return r.window.Kill(ctx)
+	}
+	_, err := r.lifetime.operation(ctx, false, "kill-pane", "-t", r.pane.ID().String())
+	return err
 }
 
 // trimScreen drops the blank lines tmux pads a screen to its height with.

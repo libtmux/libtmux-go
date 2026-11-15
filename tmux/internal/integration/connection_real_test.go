@@ -592,6 +592,33 @@ func TestRunningKillWorksWhileWaitIsParkedOnOneLane(t *testing.T) {
 	}
 }
 
+//libtmux:real-tmux
+func TestManagedProgramKillWhileWaitUsesOneLane(t *testing.T) {
+	ctx := t.Context()
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, "3.8")
+	connection := openOwnedConnection(ctx, t, server, tmux.ConnectionOptions{Lanes: 1})
+	running, err := connection.Session().StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed := make(chan error, 1)
+	go func() {
+		result, waitErr := running.Wait(ctx)
+		if waitErr == nil && (result.Signal != os.Kill || result.Status != -1) {
+			waitErr = errors.New("Wait did not report SIGKILL")
+		}
+		completed <- waitErr
+	}()
+	awaitClientBeyond(ctx, t, server, 2)
+	if err := running.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-completed; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // tmux ends a waiting client with success when the server exits, so a bound
 // server must learn from outside its own lanes, which die with the server,
 // that the server is gone.

@@ -30,6 +30,7 @@ type controlRequest struct {
 	nonce       string
 	shellOutput bool
 	response    chan controlResponse
+	progress    chan struct{}
 	state       atomic.Uint32
 }
 
@@ -342,6 +343,12 @@ func (c *ControlClient) executeControlRequest(
 			continue
 		}
 		results = append(results, frame.result(request.command))
+		if request.progress != nil {
+			select {
+			case request.progress <- struct{}{}:
+			default:
+			}
+		}
 	}
 }
 

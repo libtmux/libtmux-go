@@ -81,6 +81,10 @@ def test_the_tmux_comes_from_libtmux_tmux_when_set(fakes: Path, tmp_path: Path) 
         (".", "3.4", ["ExampleServer_OpenControl"], ["ExamplePane_CaptureToFile"]),
         (".", "3.6", ["ExampleRunning_StreamTo"], ["ExamplePane_CaptureToFile"]),
         (".", "3.7", [], ["ExampleServer_OpenControl", "ExamplePane_CaptureToFile"]),
+        (".", "3.7c", ["ExampleSession_RunProgram", "ExampleSession_StartProgram"], []),
+        (".", "3.8-rc", ["ExampleSession_RunProgram", "ExampleSession_StartProgram"], []),
+        (".", "3.8", [], ["ExampleSession_RunProgram", "ExampleSession_StartProgram"]),
+        (".", "3.30", [], ["ExampleSession_RunProgram", "ExampleSession_StartProgram"]),
         (".", "3.6", [], ["ExampleServer_Start", "ExampleServer_OpenControlled"]),
         ("workspace", "3.3a", ["ExampleBuildInto"], ["ExampleBuild"]),
         ("workspace", "3.7", [], ["ExampleBuildInto"]),
@@ -93,6 +97,7 @@ def test_the_omitted_examples_follow_the_release(
     """Check each name against the pattern as `go test -skip` reads it."""
     pattern = run_tests.skip_pattern(module, version)
     for name in omitted:
+        assert pattern, name
         assert re.search(pattern, name), name
     for name in kept:
         assert pattern == "" or not re.search(pattern, name), name
