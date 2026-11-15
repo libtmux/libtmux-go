@@ -28,11 +28,16 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ### Development
 
-- The `workspace` tests compare the plan the command builds from each of
-  tmuxp's 23 examples with the structure tmuxp's own loader makes of it, and
-  commit a record of which tmuxp syntax the command supports, derived from
-  what the test observed. The expected files are copied from libtmux-rs.
-  (#161)
+- `scripts/test-module.sh`, `scripts/matrix.sh` and `scripts/ci-plan.sh` are
+  now typed Python with tests, run with uv as
+  `scripts/test-module/run_tests.py`, `scripts/matrix/matrix.py` and
+  `scripts/ci-plan/ci_plan.py`. The `testing-the-mcp-server` skill's driver
+  moved from `references/drive.py` to `scripts/drive-mcp/drive_mcp.py`. A
+  `scripts` CI job formats, lints, type-checks and tests all four.
+- `PARITY.md`, `mcp/PARITY.md`, the Python parity manifest and its tests, the
+  `libtmux:parity` markers, the tmuxp-generated expected outputs under
+  `workspace/testdata/tmuxp`, and the script that compared this MCP server with
+  the Python one are gone. The tmuxp example workspaces stay as test inputs.
 - CI builds tmux and runs `apt-get` through the shared build-tmux and apt-get
   actions of `libtmux/.github`, pinned by commit. The repository no longer
   carries its own `tmux_build.py`, `tmux-releases.toml` or `scripts/apt-get.sh`;
