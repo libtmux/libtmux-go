@@ -31,6 +31,8 @@ subprocess transport, the checked-in generators, and `internal/integration`.
 - Documentation, user-facing text, `CHANGELOG.md`, release notes, commit
   messages, doc comments, and source comments:
   [.github/WRITING.md](.github/WRITING.md)
+- Support scripts: what may stay, their language, layout and checks:
+  [.github/SCRIPTS.md](.github/SCRIPTS.md)
 - Building, testing, linting, the Go floor, the tmux matrix, and pull requests:
   [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)
 - Anything under `mcp/`: [mcp/AGENTS.md](mcp/AGENTS.md)
