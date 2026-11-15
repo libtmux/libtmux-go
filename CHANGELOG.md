@@ -25,6 +25,10 @@ span modules, such as documentation, CI and release tooling, are listed here.
   commit a record of which tmuxp syntax the command supports, derived from
   what the test observed. The expected files are copied from libtmux-rs.
   (#161)
+- CI builds tmux and runs `apt-get` through the shared build-tmux and apt-get
+  actions of `libtmux/.github`, pinned by commit. The repository no longer
+  carries its own `tmux_build.py`, `tmux-releases.toml` or `scripts/apt-get.sh`;
+  a new tmux release's checksum goes to `libtmux/.github`.
 
 ## v0.1.3, workspace/v0.1.3, mcp/v0.1.3 (2026-11-07)
 
