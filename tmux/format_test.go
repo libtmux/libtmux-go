@@ -21,6 +21,16 @@ func TestFormatTemplateUsesSingleEvaluationQuotedFraming(t *testing.T) {
 	}
 }
 
+func TestDecodeFormatRecordsPreservesEscapedWhitespace(t *testing.T) {
+	t.Parallel()
+	output := []byte{'a', '\\', '\n', 'b', '\\', '\t', 'c', '=', '\n'}
+	records, err := decodeFormatRecords(output, mustParseTestVersion(t, "3.8"), []formatField{{name: "pane_start_command_list"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFormatValue(t, records[0], "pane_start_command_list", "a\nb\tc", true)
+}
+
 func TestDecodeFormatRecordsPreservesQuotedValues(t *testing.T) {
 	t.Parallel()
 
