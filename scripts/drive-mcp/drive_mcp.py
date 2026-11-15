@@ -78,17 +78,23 @@ class Connection:
         ]
 
     async def _read_stdout(self, stream: asyncio.StreamReader) -> None:
-        while line := await stream.readline():
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                self.notifications.append({"unparsed": line.decode(errors="replace")[:400]})
-                continue
-            if "id" in message:
-                await self._inbox.put(message)
-            else:
-                self.notifications.append(message)
-        await self._inbox.put(None)
+        try:
+            while line := await stream.readline():
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    self.notifications.append({"unparsed": line.decode(errors="replace")[:400]})
+                    continue
+                if "id" in message:
+                    await self._inbox.put(message)
+                else:
+                    self.notifications.append(message)
+        except ValueError as error:
+            # A line past LINE_LIMIT ends the stream; waiting out the reply
+            # timeout would only hide that.
+            self.notifications.append({"unparsed": str(error)[:400]})
+        finally:
+            await self._inbox.put(None)
 
     async def _read_stderr(self, stream: asyncio.StreamReader) -> None:
         self.stderr = await stream.read()
