@@ -497,8 +497,7 @@ elicitation request, a question the client puts to you. From protocol
 - **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
   `TMUX_PANE` is set to nothing. Unset them instead.
 
-[The contract][contract-known-limits] gives the reason for each, and
-[PARITY.md](PARITY.md) covers the result spellings.
+[The contract][contract-known-limits] gives the reason for each.
 
 ## Troubleshooting
 
@@ -639,7 +638,7 @@ It serves one tmux server over stdin and stdout. Reference:
   with your user's authority, so a client holding [`send_keys`][send_keys] can
   run anything you can.
 - **The Python server's per-call socket.** The socket is chosen once, at
-  launch. [PARITY.md](PARITY.md) lists the other differences.
+  launch.
 
 ## Support and status
 
@@ -660,7 +659,6 @@ It serves one tmux server over stdin and stdout. Reference:
 | [`docs/contracts.md`](docs/contracts.md) | What the server promises beyond this page |
 | [`CHANGELOG.md`](CHANGELOG.md) | What each release of this module changed |
 | [`TOOLS.md`](TOOLS.md) | Every tool's arguments and results |
-| [`PARITY.md`](PARITY.md) | Where this server and the Python one differ |
 | [`MIGRATING.md`](MIGRATING.md) | Settings from earlier releases, and what replaced each |
 | [`cmd/libtmux-mcp`](cmd/libtmux-mcp) | The command a client launches |
 | [`examples/agent-workflow`](examples/agent-workflow) | The program above, as a directory you can run |

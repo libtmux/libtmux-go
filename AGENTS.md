@@ -57,8 +57,6 @@ stated twice, the file listed above is the one that governs.
 
 - [DESIGN.md](DESIGN.md) — the conventions this package holds itself to, and
   the bakeoff decisions behind them
-- [PARITY.md](PARITY.md) — how the surface is checked against the Python
-  library
 - [CHANGELOG.md](CHANGELOG.md), [workspace/CHANGELOG.md](workspace/CHANGELOG.md)
   and [mcp/CHANGELOG.md](mcp/CHANGELOG.md) — one changelog for each published
   module; a change spanning modules goes in the root file

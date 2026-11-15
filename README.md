@@ -1249,7 +1249,6 @@ It opens with a task index and maps each tmux command to its method:
 | [`tmux/docs/contracts.md`](tmux/docs/contracts.md) | What the library promises: the tmux version check |
 | [`examples/`](examples/) | Runnable programs, one per topic, each with a page of notes |
 | [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to, and the bakeoffs behind them |
-| [`PARITY.md`](PARITY.md) | How the surface is checked against the Python libtmux |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
 | [`CHANGELOG.md`](CHANGELOG.md) | What each release of the tmux module changed, and the changes that span modules |
 | [`workspace/CHANGELOG.md`](workspace/CHANGELOG.md) | What each release of `workspace` changed |

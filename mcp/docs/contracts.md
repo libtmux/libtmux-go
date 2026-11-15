@@ -3,8 +3,7 @@
 What `libtmux-mcp` and the `mcp` package promise beyond what the
 [README](../README.md) needs to get a client running. Each section is the
 full text behind a short bullet there. Tool arguments and results are in
-[`TOOLS.md`](../TOOLS.md), and the differences from the Python server are in
-[`PARITY.md`](../PARITY.md).
+[`TOOLS.md`](../TOOLS.md).
 
 ## Which tmux it serves
 
@@ -284,8 +283,7 @@ user's authority.
   `send_keys`, `paste_text`, and
   [`clear_pane_scrollback`][clear_pane_scrollback] return fields such as
   `exit_status`; every other tool returns fields such as `paneId`. Read a
-  tool's schema before relying on a field, and see [PARITY.md](../PARITY.md)
-  for why.
+  tool's schema before relying on a field.
 - **One tmux server for the life of the process.** A client cannot name
   another socket in a call.
 - **An empty `TMUX` counts as set.** Input tools refuse when `TMUX` or
