@@ -77,6 +77,27 @@ def supported_versions(manifest: Path) -> list[str]:
     return versions
 
 
+def available_versions(matrix: Path, supported: list[str]) -> list[str]:
+    """List the supported releases the matrix holds a tmux for, oldest first.
+
+    The manifest orders releases as tmux numbers them, which a text sort of the
+    directory names does not.
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     for name in ("3.10", "3.9", "3.2a"):
+    ...         tmux = Path(root) / name / "bin" / "tmux"
+    ...         tmux.parent.mkdir(parents=True)
+    ...         _ = tmux.write_text("#!/bin/sh\\n")
+    ...         tmux.chmod(0o755)
+    ...     available_versions(Path(root), ["3.9", "3.10"])
+    ['3.9', '3.10']
+    """
+    return [
+        version for version in supported if os.access(matrix / version / "bin" / "tmux", os.X_OK)
+    ]
+
+
 def holds_socket(directory: Path) -> bool:
     """Report whether a socket file sits anywhere under directory."""
     for parent, _, names in os.walk(directory):
@@ -123,11 +144,7 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
     elif environ.get("LIBTMUX_MATRIX_REQUIRED") == "1":
         versions = supported
     else:
-        versions = sorted(
-            candidate.name
-            for candidate in matrix.glob("*/")
-            if os.access(candidate / "bin" / "tmux", os.X_OK) and candidate.name in supported
-        )
+        versions = available_versions(matrix, supported)
     if not versions:
         raise MatrixError(f"{matrix} holds no version with bin/tmux in it")
     for version in versions:
