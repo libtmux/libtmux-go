@@ -163,9 +163,9 @@ func TestTmateIsPinnedLimitedAndConfinedToTheTmuxMatrix(t *testing.T) {
 }
 
 // rawApt matches a line that runs apt or apt-get itself, with or without sudo,
-// flags or VAR=value prefixes, where a command starts. A call through
-// scripts/apt-get.sh does not match: the name must end at a space or at the end
-// of the line.
+// flags or VAR=value prefixes, where a command starts. A step that uses the
+// shared apt-get action has no such line, and a path such as ./tools/apt-get.sh
+// does not match: the name must end at a space or at the end of the line.
 var rawApt = regexp.MustCompile("(?:^|[;&|(!`]|\\b(?:then|do|else)\\s)\\s*(?:(?:sudo|-\\S+|\\w+=\\S*)\\s+)*apt(?:-get)?(?:\\s|$)")
 
 var (
@@ -230,16 +230,16 @@ func rawAptCalls(path, workflow string) []string {
 				continue
 			}
 			problems = append(problems, fmt.Sprintf(
-				"%s:%d (%s) runs %q directly; run it through scripts/apt-get.sh",
+				"%s:%d (%s) runs %q directly; use the libtmux/.github apt-get action",
 				path, i+offset+1, scope, strings.TrimSpace(text)))
 		}
 	}
 	return problems
 }
 
-// The scripts/apt-get.sh wrapper bounds apt-get and rotates a hung mirror, but
-// only for the calls that go through it.
-func TestWorkflowsCallAptOnlyThroughTheWrapper(t *testing.T) {
+// The shared libtmux/.github apt-get action bounds apt-get and rotates a hung
+// mirror, but only for the calls that go through it.
+func TestWorkflowsCallAptOnlyThroughTheAction(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
@@ -287,18 +287,20 @@ jobs:
         run: |
           # sudo apt-get install --yes ignored
           sudo DEBIAN_FRONTEND=noninteractive apt install --yes tmux
-      - name: Through the wrapper
-        run: ./scripts/apt-get.sh update
+      - name: Through the action
+        uses: libtmux/.github/actions/apt-get@0000000000000000000000000000000000000000
+        with:
+          args: update
 `
 	wants := [][]string{
 		{
 			"synthetic.yml:8", "job setup", `step "Install tmux"`,
-			`runs "sudo apt-get update" directly`, "run it through scripts/apt-get.sh",
+			`runs "sudo apt-get update" directly`, "use the libtmux/.github apt-get action",
 		},
 		{
 			"synthetic.yml:12", "job setup", `step "Install libraries"`,
 			`runs "sudo DEBIAN_FRONTEND=noninteractive apt install --yes tmux" directly`,
-			"run it through scripts/apt-get.sh",
+			"use the libtmux/.github apt-get action",
 		},
 	}
 	problems := rawAptCalls("synthetic.yml", workflow)
@@ -314,7 +316,7 @@ jobs:
 	}
 }
 
-func TestRawAptCheckAcceptsTheWrapper(t *testing.T) {
+func TestRawAptCheckAcceptsTheAction(t *testing.T) {
 	t.Parallel()
 
 	for name, text := range map[string]string{
@@ -322,13 +324,14 @@ func TestRawAptCheckAcceptsTheWrapper(t *testing.T) {
   setup:
     steps:
       - name: Install tmux
-        run: ./scripts/apt-get.sh update && ./scripts/apt-get.sh install --yes tmux
+        uses: libtmux/.github/actions/apt-get@0000000000000000000000000000000000000000
+        with:
+          update: "true"
+          args: install --yes tmux
       - name: Install libraries
         run: |
-          ./scripts/apt-get.sh update
           # sudo apt-get is not called here
-          ./scripts/apt-get.sh install --yes libevent-dev \
-            libutempter-dev
+          ./tools/apt-get.sh update
 `,
 		"action.yml": `runs:
   using: composite
@@ -336,12 +339,11 @@ func TestRawAptCheckAcceptsTheWrapper(t *testing.T) {
     - name: Build tmux
       shell: bash
       run: |
-        "$GITHUB_WORKSPACE/scripts/apt-get.sh" update
-        "$GITHUB_WORKSPACE/scripts/apt-get.sh" install --yes bison
+        python3 "$ACTION_PATH/apt_get.py" --args "install --yes bison"
 `,
 	} {
 		if problems := rawAptCalls(name, text); len(problems) != 0 {
-			t.Errorf("%s: the wrapper was refused: %q", name, problems)
+			t.Errorf("%s: the shared action was refused: %q", name, problems)
 		}
 	}
 }

@@ -1,5 +1,5 @@
 name: Build tmux
-description: Restore a cached tmux, validate it, rebuild it when it is rejected, and save a validated build, from a release, tag, branch or commit of github.com/tmux/tmux.
+description: Restore or build a validated tmux with the shared libtmux/.github action, which this wrapper pins once for every job.
 
 inputs:
   ref:
@@ -9,53 +9,13 @@ inputs:
 outputs:
   prefix:
     description: The directory tmux is installed under; its bin/ holds tmux.
-    value: ${{ steps.plan.outputs.prefix }}
+    value: ${{ steps.tmux.outputs.prefix }}
 
 runs:
   using: composite
   steps:
-    # The runner's python3 reads the release pins in .github/tmux-releases.toml
-    # with tomllib, which needs Python 3.11 or newer.
-    #
-    # The dependencies are installed before the cache is validated, on a hit as
-    # well as a miss: a restored tmux links the libraries of the image, and the
-    # validation starts it.
-    - name: Install tmux build and runtime dependencies
-      shell: bash
-      run: |
-        "$GITHUB_WORKSPACE/scripts/apt-get.sh" update
-        "$GITHUB_WORKSPACE/scripts/apt-get.sh" install --yes --no-install-recommends \
-          autoconf automake bison build-essential libevent-dev \
-          libncurses-dev libutempter-dev pkg-config
-
-    # The cache key names the runner image and its version, the architecture,
-    # the compiler and package versions, the source and the build script. The
-    # image comes from the runner's own ImageOS and ImageVersion variables, not
-    # from the `env` context, where ImageOS expands empty on Ubuntu 26.04.
-    - name: Identify the tmux ${{ inputs.ref }} source and build environment
-      id: plan
-      shell: bash
-      env:
-        TMUX_REF: ${{ inputs.ref }}
-      run: python3 "$GITHUB_WORKSPACE/.github/scripts/tmux_build.py" plan "$TMUX_REF"
-
-    - name: Restore tmux ${{ inputs.ref }}
-      id: cache
-      uses: actions/cache/restore@v6
+    - name: Build tmux ${{ inputs.ref }}
+      id: tmux
+      uses: libtmux/.github/actions/build-tmux@b8713f1e820c337d3b0562c4809dd0a11eecb5d3
       with:
-        path: ${{ steps.plan.outputs.prefix }}
-        key: ${{ steps.plan.outputs.key }}
-
-    - name: Validate or rebuild tmux ${{ inputs.ref }}
-      shell: bash
-      env:
-        TMUX_REF: ${{ inputs.ref }}
-        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
-      run: python3 "$GITHUB_WORKSPACE/.github/scripts/tmux_build.py" prepare "$TMUX_REF"
-
-    - name: Save validated tmux ${{ inputs.ref }}
-      if: steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      with:
-        path: ${{ steps.plan.outputs.prefix }}
-        key: ${{ steps.plan.outputs.key }}
+        ref: ${{ inputs.ref }}
