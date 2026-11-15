@@ -20,6 +20,19 @@ span modules, such as documentation, CI and release tooling, are listed here.
 
 ### tmux
 
+- `Session.RunProgram` and `Session.StartProgram` accept an executable and
+  literal arguments, including a singleton executable and empty arguments.
+  They require tmux 3.8.
+  Cancellation closes the pane/PTY; a hangup-ignoring application may survive.
+- `Server.Capability` and `Server.Capabilities` report feature availability
+  against the connected daemon. The queries start no server and distinguish
+  the literal-argument primitive's tmux 3.3a floor from owned lifetime on 3.8.
+- `Running` from `StartProgram` refuses stale destructive operations with
+  `ErrProgramReplaced` and preserves other panes added to its window. Partial
+  owning-run results identify the intended pane after an uncertain launch.
+- Format decoding accepts tmux's quoted newline and tab bytes, preserving
+  arguments containing whitespace when a pane is materialized.
+
 - `Server.Kill` returns once nothing accepts a connection at the socket. tmux
   answers `kill-server` before the daemon exits and drops every connection it
   accepts until then, so a command sent straight after `Kill` could read
