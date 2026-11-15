@@ -26,6 +26,7 @@ exclude-newer = "3 days"
 # directory.
 pythonpath = [
   "scripts/drive-mcp",
+  "scripts/test-module",
 ]
 testpaths = ["scripts"]
 asyncio_mode = "strict"
@@ -43,6 +44,7 @@ target-version = "py312"
 line-length = 100
 src = [
   "scripts/drive-mcp",
+  "scripts/test-module",
 ]
 
 [tool.ruff.lint]
@@ -52,6 +54,7 @@ extend-select = ["ANN", "B", "C4", "I", "PT", "PTH", "RUF", "SIM", "UP"]
 python-version = "3.12"
 extra-paths = [
   "scripts/drive-mcp",
+  "scripts/test-module",
 ]
 
 [tool.ty.src]

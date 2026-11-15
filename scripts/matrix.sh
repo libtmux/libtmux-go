@@ -177,7 +177,7 @@ for version in "${versions[@]}"; do
         directory="$repository_root/$module"
         run_cells=$((run_cells + 1))
         if PATH="$matrix/$version/bin:$PATH" LIBTMUX_TMUX="$matrix/$version/bin/tmux" \
-            "$script_directory/test-module.sh" "$module" -count=1 > "$log" 2>&1; then
+            uv run "$script_directory/test-module/run_tests.py" "$module" -count=1 > "$log" 2>&1; then
             printf '  %-14s ok\n' "$module"
         else
             printf '  %-14s FAILED\n' "$module"

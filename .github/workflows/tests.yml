@@ -130,6 +130,11 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache-dependency-path: ${{ matrix.module }}/go.mod
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
+
       - name: Install tmux
         uses: libtmux/.github/actions/apt-get@30f81842b1e639ea4e25f93f1f2543504178e228
         with:
@@ -162,7 +167,7 @@ jobs:
         run: |
           tmux -V
           go vet ./...
-          "$GITHUB_WORKSPACE/scripts/test-module.sh" "${{ matrix.module }}" -race -count=1 -coverpkg=./... -coverprofile=coverage.out
+          uv run "$GITHUB_WORKSPACE/scripts/test-module/run_tests.py" "${{ matrix.module }}" -race -count=1 -coverpkg=./... -coverprofile=coverage.out
 
       # An artifact name cannot contain a path separator, and one module is
       # nested, so the separator becomes a dash.
@@ -448,6 +453,11 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache-dependency-path: go.mod
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
+
       - name: Build tmux ${{ matrix.tmux-version }}
         id: tmux
         uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
@@ -483,7 +493,7 @@ jobs:
           mkdir -p "$TMUX_TMPDIR"
           for module in . examples workspace mcp benchmarks internal/tools; do
             echo "--- $module: full suite ---"
-            ./scripts/test-module.sh "$module" -count=1
+            uv run scripts/test-module/run_tests.py "$module" -count=1
           done
 
       # These tests skip on every release but the one they exercise, and the
@@ -513,7 +523,7 @@ jobs:
               ;;
           esac
           regex="^($(printf '%s ' $required | sed 's/ $//; s/ /|/g'))\$"
-          ./scripts/test-module.sh . -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/exact.log"
+          uv run scripts/test-module/run_tests.py . -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/exact.log"
           for name in $required; do
             grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/exact.log" || { echo "::error::$name did not run and pass"; exit 1; }
           done
@@ -550,7 +560,7 @@ jobs:
           run_required() {
             module=$1; shift
             regex="^($(printf '%s|' "$@" | sed 's/|$//'))\$"
-            ./scripts/test-module.sh "$module" -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/older.log"
+            uv run scripts/test-module/run_tests.py "$module" -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/older.log"
             for name in "$@"; do
               grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/older.log" || { echo "::error::$name did not run and pass"; exit 1; }
             done

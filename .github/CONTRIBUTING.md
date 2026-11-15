@@ -79,8 +79,9 @@ $ go test \
     ./tmux/internal/integration/
 ```
 
-On supported releases below 3.7, run `scripts/test-module.sh MODULE` from
-any directory, adding ordinary `go test` flags after the module. It omits only
+On supported releases below 3.7, run
+`uv run scripts/test-module/run_tests.py MODULE` from any directory, adding
+ordinary `go test` flags after the module. It omits only
 fixed-output examples for unavailable optional features. The ordinary tests,
 including explicit version refusals, still run. Tests that require a qualified
 control client use `tmuxtest.RequireVersion`; 3.3a workspace and MCP subprocess
