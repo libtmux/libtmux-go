@@ -1,9 +1,10 @@
 # AGENTS.md
 
 Rules for this repository: `libtmux` for Go, a port of the Python library of
-the same name. Nothing here is Python — a convention you recognise from that
-project (uv, ruff, mypy, pytest, doctests, NumPy docstrings) does not apply
-unless a file here says so.
+the same name. The library has no Python; only the support scripts under
+`scripts/` are Python, and [.github/SCRIPTS.md](.github/SCRIPTS.md) governs
+them. Elsewhere, a convention you recognise from that project (uv, ruff, mypy,
+pytest, doctests, NumPy docstrings) does not apply unless a file here says so.
 
 Follow the conventions already in the tree, and keep a change scoped to what
 was asked for.

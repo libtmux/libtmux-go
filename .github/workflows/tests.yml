@@ -93,7 +93,7 @@ jobs:
   required:
     name: required
     if: ${{ always() }}
-    needs: [plan, test, generated, api-diff, lint, windows-resolver, fuzz, benchmarks, tmux-matrix, tmux-rejected]
+    needs: [plan, scripts, test, generated, api-diff, lint, windows-resolver, fuzz, benchmarks, tmux-matrix, tmux-rejected]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -177,6 +177,28 @@ jobs:
           name: ${{ steps.coverage.outputs.name }}
           path: ${{ matrix.module }}/coverage.out
           if-no-files-found: ignore
+
+  # The support scripts under scripts/ are typed Python with tests. The jobs
+  # that call one only run it; this job formats, lints, type-checks and tests
+  # them.
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
+
+      - name: Format, lint, type check and test the scripts
+        run: |
+          uv sync --locked
+          uv run --locked ruff format --check scripts
+          uv run --locked ruff check scripts
+          uv run --locked ty check scripts
+          uv run --locked pytest scripts
 
   # Generated output is checked in, so the check is that regenerating it changes
   # nothing. The Go in the README is generated from the examples, which is what

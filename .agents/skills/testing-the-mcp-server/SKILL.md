@@ -62,13 +62,16 @@ $ export TMUX_TMPDIR=/tmp/libtmux-go-probe && mkdir -p "$TMUX_TMPDIR" && unset T
 
 Fastest and most deterministic, it covers process boundaries the Go tests do
 not: framing, protocol negotiation, and the environment a client actually
-supplies. `references/drive.py` is that driver:
+supplies. `scripts/drive-mcp/drive_mcp.py` is that driver:
 it spawns the binary with an environment it builds rather than inherits, holds
 stdin open, matches replies by id, declines any question the server asks, and
-reads a plan of JSON-RPC calls from stdin.
+reads a plan of JSON-RPC calls from stdin. Run it from the root of this
+checkout:
 
 ```console
-$ ./references/drive.py "$(command -v libtmux-mcp)" TMUX_TMPDIR=/tmp/libtmux-go-probe \
+$ uv run scripts/drive-mcp/drive_mcp.py \
+    "$(command -v libtmux-mcp)" \
+    TMUX_TMPDIR=/tmp/libtmux-go-probe \
     <<< '[{"method":"tools/call","params":{"name":"list_panes","arguments":{}}}]'
 ```
 
@@ -87,10 +90,10 @@ Two rules decide whether it works:
   neither `TMUX` nor `TMUX_PANE`.
 - **Run the driver from inside a pane to reach self-detection at all.** Started
   anywhere else, `isCaller` is null in every reply and every guard that depends
-  on it is untested. `tmux new-window -d "drive.py ..."` on the server under
-  test sets `TMUX` and `TMUX_PANE` for you. Aim a destructive tool at the
-  pane's window, session, and server as well as at the pane: a guard that knows
-  one pane and not what holds it is reached one level up.
+  on it is untested. Start the driver with `tmux new-window -d` on the server
+  under test, which sets `TMUX` and `TMUX_PANE` for you. Aim a destructive tool
+  at the pane's window, session, and server as well as at the pane: a guard
+  that knows one pane and not what holds it is reached one level up.
 
 Pair the wire probe with the exhaustive schema gate:
 

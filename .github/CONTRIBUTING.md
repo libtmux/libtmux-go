@@ -11,9 +11,10 @@ client, which the Go tests do not provide.
 
 ## Getting set up
 
-You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else — the
-core module has no third-party Go dependencies, and tmux is required at
-runtime.
+You need Go 1.26 or newer and tmux 3.3a or newer on `PATH`. Nothing else builds
+or tests the Go modules — the core module has no third-party Go dependencies,
+and tmux is required at runtime. The support scripts under `scripts/` also need
+[uv](https://docs.astral.sh/uv/).
 
 The test harness gives each suite a temporary directory of its own and clears
 `TMUX`, `TMUX_PANE`, and every `LIBTMUX_SOCKET*` variable from the test process.
@@ -172,6 +173,33 @@ The race detector is not optional before anything ships:
 
 ```console
 $ go test -race -count=1 ./...
+```
+
+The support scripts are typed Python under `scripts/`, one directory each with
+its tests, and [SCRIPTS.md](SCRIPTS.md) says what may stay. CI formats, lints,
+type-checks and tests them; run the same four checks after changing one. Format
+them:
+
+```console
+$ uv run ruff format --check scripts
+```
+
+Lint them:
+
+```console
+$ uv run ruff check scripts
+```
+
+Type-check them:
+
+```console
+$ uv run ty check scripts
+```
+
+Test them, with the doctests in each script:
+
+```console
+$ uv run pytest scripts
 ```
 
 One tmux is not enough. The supported range is a claim the README makes, and

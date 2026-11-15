@@ -255,8 +255,8 @@ observation holds, which `list-clients` shows and `session_attached` counts.
 ## What waiting and watching cost
 
 The claims this server makes about not spending a caller's turn, measured
-rather than asserted. Reproduce with `scripts/` or the probe in the testing
-skill; these were taken on the machine named above, against tmux 3.7b.
+rather than asserted. Reproduce with `scripts/drive-mcp` or the probe in the
+testing skill; these were taken on the machine named above, against tmux 3.7b.
 
 | Question | Measured |
 | --- | --- |
