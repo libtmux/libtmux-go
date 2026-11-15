@@ -428,20 +428,9 @@ jobs:
 
       - name: Build tmux ${{ matrix.tmux-version }}
         id: tmux
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
         with:
           ref: ${{ matrix.tmux-version }}
-
-      # The cache regressions start the lane's own tmux, so a build that the
-      # validation would wrongly accept fails here before the module suites run.
-      - name: Test the tmux build and cache regressions
-        env:
-          TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
-        run: |
-          python3 -m venv "$RUNNER_TEMP/tmux-build-tests"
-          "$RUNNER_TEMP/tmux-build-tests/bin/pip" install --quiet pytest==9.2.0
-          export PATH="$TMUX_PREFIX/bin:$PATH"
-          "$RUNNER_TEMP/tmux-build-tests/bin/python" -m pytest -p no:cacheprovider .github/scripts/test_tmux_build.py
 
       - name: Open a tmate session before the tests
         if: ${{ matrix.tmate == 'before-tests' }}
@@ -514,7 +503,7 @@ jobs:
       - name: Build tmux 3.3a for the older-daemon tests
         id: older
         if: ${{ matrix.control }}
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
         with:
           ref: '3.3a'
 
@@ -583,12 +572,12 @@ jobs:
           cache-dependency-path: go.mod
       - name: Build the supported floor tmux
         id: floor
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
         with:
           ref: '3.3a'
       - name: Build the rejected tmux ${{ matrix.rejected-version }}
         id: rejected
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
         with:
           ref: ${{ matrix.rejected-version }}
       # The unpatched 3.3 lane also needs 3.7c, the newer client the
@@ -596,7 +585,7 @@ jobs:
       - name: Build the newer client tmux 3.7c
         id: newer
         if: ${{ matrix.rejected-version == '3.3' }}
-        uses: ./.github/actions/build-tmux
+        uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
         with:
           ref: '3.7c'
       - name: Refuse unsupported daemons before effects

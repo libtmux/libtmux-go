@@ -356,36 +356,20 @@ and it connects only the account that started the run.
 
 ### Native tmux in CI
 
-Every job that needs a tmux uses `.github/actions/build-tmux`. A release uses
-its official archive and the SHA256 pin in `.github/tmux-releases.toml`, and the
-pin is part of the cache identity. A tag, branch or commit resolves once to a
-commit, and that exact commit is fetched. The build follows tmux's
-[release and source-checkout instructions](https://github.com/tmux/tmux/blob/3.8/README#L23-L37).
-Only the installed prefix is cached, each build uses a fresh source tree, and
-it compiles with up to four available processors. To pin a new release,
-download its archive from `https://github.com/tmux/tmux/releases`, compute the
-SHA256, compare it with the release asset's `digest` where GitHub shows one,
-and add the entry to the toml; the script itself does not change.
-
-Cache keys include the actual runner image and image version, architecture,
-compiler and dependency versions, source identity, and build script. The
-dependencies are installed before validation on hits and misses. Every restored
-executable must match its recorded hash and version, start a private daemon,
-and report the same connected version. A failed check discards that job's
-prefix and rebuilds it.
+Every job that needs a tmux uses the shared
+[build-tmux action](https://github.com/libtmux/.github/tree/main/actions/build-tmux)
+of `libtmux/.github`, pinned to a full commit SHA, and every `apt-get` call
+uses its [apt-get action](https://github.com/libtmux/.github/tree/main/actions/apt-get).
+Neither lives in this repository. The build-tmux README covers what the action
+does: the checksum pin of each release, how a tag, branch or commit resolves to
+one commit, the cache identity, and how a restored build is validated. A new
+release's checksum, or a change to either action, goes to that repository; then
+move the pins in `.github/workflows/tests.yml` to the new commit.
 
 A validated installation is saved before the module suites run. GitHub caches
 are immutable: repairing an invalid exact hit fixes the current job but cannot
 overwrite that entry, and a change to the build script invalidates its key for
 later jobs. Never add a broad restore-key fallback for native binaries.
-
-The scripts need Python 3.11 or newer for the standard-library TOML reader.
-Run the cache regressions against an installed tmux from a virtual environment
-with pytest:
-
-```console
-$ python3 -m pytest .github/scripts/test_tmux_build.py
-```
 
 ## Where a test goes
 
