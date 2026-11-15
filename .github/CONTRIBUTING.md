@@ -352,7 +352,7 @@ CI coverage for it is highly limited.
 A push or pull request tests the oldest and the newest supported tmux. The
 whole table, tmux master and the refused releases run for a `v*` tag and for a
 dispatch with `scope=full`. `.github/ci-matrix.txt` lists the releases and Go
-toolchains, and `scripts/ci-plan.sh` turns it into the matrices. The
+toolchains, and `scripts/ci-plan/ci_plan.py` turns it into the matrices. The
 `required` job is the one check that passes only when every planned job did.
 
 Before tagging a release, run the whole table on the release commit and wait

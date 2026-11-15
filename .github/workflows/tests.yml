@@ -6,9 +6,9 @@ name: tests
 # tests fail on one of the pair and pass on the other.
 #
 # A push or pull request runs the oldest and the newest supported tmux. A `v*`
-# tag and a dispatch with scope=full run the whole table. scripts/ci-plan.sh
-# decides, from .github/ci-matrix.txt, and every tmux lane below takes its
-# matrix from that plan.
+# tag and a dispatch with scope=full run the whole table.
+# scripts/ci-plan/ci_plan.py decides, from .github/ci-matrix.txt, and every tmux
+# lane below takes its matrix from that plan.
 on:
   push:
     branches: [master]
@@ -76,6 +76,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
+
       # Inputs reach the script through the environment, never inline.
       - name: Plan the tmux lanes
         id: plan
@@ -85,7 +90,7 @@ jobs:
           INPUT_GO_VERSION: ${{ inputs.go-version }}
           INPUT_OS: ${{ inputs.os }}
           INPUT_TMATE: ${{ inputs.tmate }}
-        run: scripts/ci-plan.sh
+        run: uv run scripts/ci-plan/ci_plan.py
 
   # One check to require. A job the plan left out of scope may be skipped; every
   # other job has to have passed. Matrices shrink through the plan, not through
@@ -99,11 +104,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
+
       - name: Require every planned job to have passed
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
           ALLOW_SKIPPED: ${{ needs.plan.outputs.skip }}
-        run: scripts/ci-plan.sh verify
+        run: uv run scripts/ci-plan/ci_plan.py verify
 
   test:
     needs: plan

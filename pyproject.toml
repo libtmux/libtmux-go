@@ -25,6 +25,7 @@ exclude-newer = "3 days"
 # Each script is a plain module in its own directory, so tests import it by
 # directory.
 pythonpath = [
+  "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/matrix",
   "scripts/test-module",
@@ -44,6 +45,7 @@ addopts = [
 target-version = "py312"
 line-length = 100
 src = [
+  "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/matrix",
   "scripts/test-module",
@@ -55,6 +57,7 @@ extend-select = ["ANN", "B", "C4", "I", "PT", "PTH", "RUF", "SIM", "UP"]
 [tool.ty.environment]
 python-version = "3.12"
 extra-paths = [
+  "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/matrix",
   "scripts/test-module",
