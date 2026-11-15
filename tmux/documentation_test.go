@@ -663,7 +663,11 @@ func TestExampleWorkflowsBuildAndRun(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
+				minimum := tmux.MinimumConnectionVersion
+				if workflow == "run-to-completion" {
+					minimum = "3.8"
+				}
+				tmuxtest.RequireVersion(t.Context(), t, server, minimum)
 			}
 			binary := filepath.Join(t.TempDir(), "example")
 			build := exec.Command("go", "build", "-o", binary, "./"+workflow)

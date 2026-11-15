@@ -86,6 +86,7 @@ Optional features have their own requirements:
 | Operation | Required tmux |
 | --- | --- |
 | Ordinary subprocess operations, polling, workspace builds, MCP startup | 3.3a |
+| Literal argv primitives (`program-argv`) | 3.3a |
 | Named buffer deletion or rename; `CaptureToFile`; MCP `paste_text` staging | 3.4 |
 | Foreground `RunShell` captured client output without `TargetPane` | 3.5 |
 | Native raw `refresh-client -l`, the clipboard query | 3.6a |
@@ -95,10 +96,18 @@ Optional features have their own requirements:
 | Window and session names holding `:` or `.` on exact 3.7 | 3.7a |
 | Native raw `select-layout` with an unparseable layout, or `-o`, on 3.3a | 3.4 |
 | `Window.SelectLayout` with a layout in the JSON shape of `window_layout` | 3.8 |
+| Owned literal programs through `Session.RunProgram` and `StartProgram` (`program-lifetime`) | 3.8 |
 
 [`capabilities.json`](../../capabilities.json) is the full list: each entry names the
 releases affected, the commands and APIs it covers, and whether the library
 refuses or repairs the call. This table follows it.
+`Server.Capabilities(ctx)` returns the feature metadata with support evaluated
+against the connected daemon;
+`Server.Capability(ctx, id)` selects one row. Neither query starts a missing
+server. Discovery is a snapshot: each operation still checks and fences its
+own daemon before effects. A connection keeps the daemon qualified at attach;
+its commands cannot switch to a replacement at the same socket. Public feature
+rows do not include the separate workaround registry.
 
 On exact 3.7, typed `BreakPane` with an explicit name retains its naming repair.
 The restriction does not affect older supported versions. Raw percentage
@@ -183,3 +192,72 @@ is the push-based wait and needs 3.7.
 [tmux-unsupportedpolicy]: https://libtmux.org/en/go/latest/reference/tmux-unsupportedpolicy/
 [tmux-pane-waitfortext]: https://libtmux.org/en/go/latest/reference/tmux-pane-waitfortext/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
+
+## Literal managed programs
+
+`Session.StartProgram` and `RunProgram` take an executable and argument slice.
+Arguments are copied before I/O. Empty arguments, whitespace and shell syntax
+remain data; NUL and an empty executable fail before window creation. The
+executable resolves in the tmux server's PATH and receives the requested
+working directory/environment. A singleton uses a fixed `/bin/sh` exec
+bootstrap; the executable remains a positional argument and becomes the pane
+process. Resolving a leading-dash singleton may give it a resolved path as
+argv[0]; a custom argv[0] is not supported. Application argv never becomes
+shell source. Setup still uses the
+existing placeholder command and tmux's inherited window geometry.
+
+These methods require `program-lifetime`, qualified on tmux 3.8. Retention and
+exit signaling are armed before launch. Launch and a pending `pane-created`
+event waiter share one daemon command group. A later respawn consumes that
+waiter. Cleanup and termination must consume the still-pending waiter in the
+same command group as the destructive operation, so a client-side check does
+not authorize later destruction. `program-argv` records the independently
+available literal-argument primitive at the supported core floor; it alone
+does not enable these owned entry points. Existing `Run` and `Start` keep
+their shell-string behavior and requirements.
+
+The owner holds a control client until `Wait` finishes or ownership is lost;
+termination briefly opens a second witness before retiring the first. Like
+other control clients, it needs a local filesystem that can hard-link the tmux
+socket. A connection-bound owner uses exclusive clients rather than shared
+lanes, so waiting cannot occupy the lane needed for input or `Kill`.
+Closing the connection ends observation; it does not prove application exit.
+
+A canceled `Wait` leaves the owner available for another wait. `RunProgram`
+attempts bounded pane cleanup on cancellation or error, regardless of `Keep`,
+and returns cleanup failures alongside the primary error. Closing the pane's
+PTY does not prove application exit: even the main process may survive if it
+ignores terminal hangup. Use `StartProgram`, explicit `Kill`, and `Wait` when
+the main process's exit must be observed. `Keep` retains a
+completed pane and releases its witness. Cleanup removes only the owned pane,
+preserving panes others added to its window; the window disappears when its
+last pane is removed. Input and resize use `Running.Pane`. Geometry changes
+after launch do not alter what the application saw at startup.
+
+`ErrProgramReplaced` reports respawn, placement change or lost lifetime
+observation. Destructive operations refuse and preserve the replacement. A
+partial `Running` may accompany a launch error; an owning run's partial result
+names its intended pane when known. Inspect that pane before manual recovery,
+and use an explicit `WindowName` when an uncertain creation must be found by
+name. Unknown dispatch is not retried. A dropped handle or crashed controller
+does not clean up the application: keep ownership reachable and call `Kill`
+followed by `Wait`. Shutting down a disposable tmux server also closes PTYs;
+it does not guarantee that HUP-ignoring applications have exited.
+
+`Kill` dispatches SIGKILL to the group ID tmux expands in the protected queue.
+The signal job runs asynchronously. Kernel PID/group reuse before delivery,
+descendants that leave the group, deliberately reused control-client names,
+and user-configured commands/hooks that interfere with ownership are outside
+the guarantee. Native queue serialization protects ordinary command
+interleaving; terminal ownership is not filesystem, network or privilege
+confinement. Pane cleanup closes its terminal and does not attest that every
+descendant has exited.
+
+Stdout and stderr share one terminal. The result is tmux's final rendered
+screen with bounded history, not a byte transcript; missing history is not
+recoverable from it. `StreamTo` retains its late-subscription/exit gap and
+connection-route restriction. For interactive feedback, open `Pane.OpenObservation`
+before triggering output, keep its byte stream separate from the final screen,
+and close it independently of the program owner. A missing executable can
+appear as a nonzero application result; the API has no separate exec-error
+channel.

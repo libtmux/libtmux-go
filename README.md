@@ -1059,16 +1059,35 @@ Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux),
 [libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
 [`CHANGELOG.md`](CHANGELOG.md).
 
-[`Session.Run`][tmux-session-run] runs a command in a window of its own, with
-a terminal. A nonzero exit status arrives in the result:
+[`Session.RunProgram`][tmux-session-runprogram] runs an executable and literal
+arguments in a terminal window. It needs tmux 3.8. Query
+[`Server.Capability`][tmux-server-capability] before choosing this workflow.
+[`Session.Run`][tmux-session-run] takes shell commands on tmux 3.3a or newer.
+
+<!-- docs:run-capability -->
+
+```go
+// Given: ctx context.Context; server tmux.Server
+capability, err := server.Capability(ctx, "program-lifetime")
+if err != nil {
+	return err
+}
+if !capability.Supported {
+	return fmt.Errorf("managed programs require tmux %s", capability.Since)
+}
+```
+
+<!-- docs:end -->
+
+A nonzero program exit status arrives in the result:
 
 <!-- docs:run-to-completion -->
 
 ```go
 // Given: ctx context.Context; session tmux.Session
 // The command runs with a terminal, so test -t holds where a pipe fails.
-command := "test -t 1 && echo stdout is a terminal; exit 3"
-result, err := session.Run(ctx, command, tmux.RunOptions{})
+arguments := []string{"-c", "test -t 1 && echo stdout is a terminal; exit 3"}
+result, err := session.RunProgram(ctx, "sh", arguments, tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
 }
@@ -1082,6 +1101,36 @@ fmt.Println("exited", result.Status)
 
 <!-- docs:checked examples/run-to-completion/output.txt -->
 This prints `screen: stdout is a terminal`, then `exited 3`.
+<!-- docs:end -->
+
+[`Session.StartProgram`][tmux-session-startprogram] returns a `Running` for
+terminal input, observation and explicit termination. This singleton executable
+receives literal input and EOF:
+
+<!-- docs:run-input -->
+
+```go
+// Given: ctx context.Context; session tmux.Session
+terminal, err := session.StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+if err != nil {
+	return err
+}
+if err := terminal.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello terminal"), Literal: true}); err != nil {
+	return err
+}
+if err := terminal.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+	return err
+}
+echoed, err := terminal.Wait(ctx)
+if err != nil {
+	return err
+}
+if echoed.Status != 0 || !slices.Contains(echoed.Lines, "hello terminal") {
+	return fmt.Errorf("unexpected terminal result: %v", echoed)
+}
+fmt.Println("input: hello terminal")
+```
+
 <!-- docs:end -->
 
 ### [`tmuxq`](https://github.com/libtmux/libtmux-go/tree/master/tmuxq): filters for any slice
@@ -1333,6 +1382,9 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
 [tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
+[tmux-session-runprogram]: https://libtmux.org/en/go/latest/reference/tmux-session-runprogram/
+[tmux-session-startprogram]: https://libtmux.org/en/go/latest/reference/tmux-session-startprogram/
+[tmux-server-capability]: https://libtmux.org/en/go/latest/reference/tmux-server-capability/
 [tmux-session-setmouse]: https://libtmux.org/en/go/latest/reference/tmux-session-setmouse/
 [tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
 [tmux-window-kill]: https://libtmux.org/en/go/latest/reference/tmux-window-kill/
