@@ -13,24 +13,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.session.Session.new_window
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:attach:58cb72758f2e
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:direction,start_directory,target_window,window_index,window_name,window_shell:ae7296cf6540
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:direction:9447fa04b73f
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:kill_existing:b33764a0fdfd
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:select_existing:c9a3682abcb6
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:start_directory:bef78f09efe5
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:target_window,window_index:3fc216416bbd
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:target_window:e1d6df638259
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:window_index:268a5a9f5c31
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:window_index:268a5a9f5c31:2
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:window_name:a8ac125187c4
-// libtmux:parity libtmux.session.Session.new_window#parameter-branch:window_shell:dd6ca5846152
-//
-// libtmux:parity libtmux.window.Window.new_window
-//
-//libtmux:real-tmux
 func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -127,7 +109,6 @@ func TestExtendedCreationOptionsAgainstRealTmux(t *testing.T) {
 	})
 }
 
-//libtmux:real-tmux
 func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -246,48 +227,6 @@ func TestSelectExistingWindowIdentityAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.new_pane
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:active_border_style:8d2921e88b8f
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:attach:58cb72758f2e
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:empty:523641206739
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:height:584748e889a5
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:inactive_border_style:8d96621af6a2
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:keep:e4b8e377c591
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:message:4387413839d7
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:shell:613b2dd997a5
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:start_directory:bef78f09efe5
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:style:2fb8c408bf6c
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:target:3fc216416bbd
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:width:c4a3db243018
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:x:c2891f2208b1
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:y:0cf048966732
-// libtmux:parity libtmux.pane.Pane.new_pane#parameter-branch:zoom:629cd868ae3d
-// libtmux:parity libtmux.pane.Pane.new_pane#version-branch:tmux-version:9dfb8df17e6f
-// libtmux:parity libtmux.pane.Pane.split
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:active_border_style,inactive_border_style,keep,message,style:002b9dbf15c8
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:attach:58cb72758f2e
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:direction,percentage,shell,size,start_directory,target:ba24d263cea7
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:direction,percentage,shell,size,start_directory,target:ef0222e93963
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:direction:1e6c737950b2
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:empty:523641206739
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:full_window_split:b63e74e2d163
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:keep:e4b8e377c591
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:percentage,size:6782b0981e74
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:percentage:714e6fb7d801
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:shell:613b2dd997a5
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:size:af48b30c8b98
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:start_directory:bef78f09efe5
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:target:3fc216416bbd
-// libtmux:parity libtmux.pane.Pane.split#parameter-branch:zoom:629cd868ae3d
-// libtmux:parity libtmux.pane.Pane.split#version-branch:tmux-version:c6a18af85027
-// libtmux:parity libtmux.pane.Pane.split#version-branch:tmux-version:c6a18af85027:2
-// libtmux:parity libtmux.pane.Pane.split#warning:39e08b1dd04b
-// libtmux:parity libtmux.pane.Pane.split#warning:c85dca20c257
-// libtmux:parity libtmux.window.Window.new_pane
-//
-//libtmux:real-tmux
 func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -390,8 +329,6 @@ func TestLinkedSplitAndFloatingPaneContextAgainstRealTmux(t *testing.T) {
 // operand that itself starts with "-" as an option to the shell binary
 // itself, a limitation of the shell tmux execs and orthogonal to tmux's own
 // argument parsing, so the process exits almost immediately either way.
-//
-//libtmux:real-tmux
 func TestLifecycleCommandsTreatLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

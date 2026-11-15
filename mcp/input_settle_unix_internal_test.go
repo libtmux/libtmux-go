@@ -68,7 +68,6 @@ func startingPane(ctx context.Context, t *testing.T, pane tmux.Pane) (release fu
 	return release
 }
 
-//libtmux:real-tmux
 func TestRunShellCommandWaitsForAStartingPanesShell(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -99,7 +98,6 @@ func TestRunShellCommandWaitsForAStartingPanesShell(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunShellCommandStillRefusesAPaneWithNoShell(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -121,7 +119,6 @@ func TestRunShellCommandStillRefusesAPaneWithNoShell(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteTextWaitsOutAForegroundCommandThatChanges(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -169,8 +166,6 @@ func TestPasteTextWaitsOutAForegroundCommandThatChanges(t *testing.T) {
 // a shell to the preflight and runs something else by dispatch, as when ssh,
 // sudo, or an editor starts and holds, has not arrived anywhere: the caller
 // inspected a shell and the keys would go to another program.
-//
-//libtmux:real-tmux
 func TestInputRefusesAShellThatGivesWayToAnotherProgram(t *testing.T) {
 	calls := map[string]func(*tools, context.Context, string) error{
 		"send_keys": func(tools *tools, ctx context.Context, paneID string) error {
@@ -238,8 +233,6 @@ func TestInputRefusesAShellThatGivesWayToAnotherProgram(t *testing.T) {
 // its shell, and keys meant for that program, such as a command for a remote
 // host, would run locally. The pane was never starting, so the call is
 // refused.
-//
-//libtmux:real-tmux
 func TestInputRefusesAnOlderPaneWhoseProgramExits(t *testing.T) {
 	calls := map[string]func(*tools, context.Context, string) error{
 		"send_keys": func(tools *tools, ctx context.Context, paneID string) error {

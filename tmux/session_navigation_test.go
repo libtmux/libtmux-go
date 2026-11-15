@@ -8,10 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.session.Session.last_window
-// libtmux:parity libtmux.session.Session.next_window
-// libtmux:parity libtmux.session.Session.previous_window
-// libtmux:parity libtmux.session.Session.select_window
 func TestSessionWindowNavigationReturnsActiveWinlink(t *testing.T) {
 	t.Parallel()
 

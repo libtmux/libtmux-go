@@ -14,9 +14,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.cmd
-// libtmux:parity libtmux.server.Server.cmd#parameter-branch:target:3fc216416bbd
-// libtmux:parity libtmux.common.tmux_cmd
 func TestServerCmdReturnsNonzeroTmuxExitAsData(t *testing.T) {
 	t.Parallel()
 
@@ -62,8 +59,6 @@ func TestServerCmdReturnsExactRawStdout(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.UnknownColorOption
-// libtmux:parity libtmux.exc.UnknownColorOption.__init__
 func TestNewServerRejectsUnknownColorMode(t *testing.T) {
 	t.Parallel()
 
@@ -83,21 +78,6 @@ func TestNewServerRejectsUnknownColorMode(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server
-// libtmux:parity libtmux.server.Server.__init__
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:colors:7fb6bc016235
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:config_file:40b07a1bff37
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:on_init:e39d1da35264
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:socket_name:e12e46656294
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:socket_name_factory:fd647ea9004b
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:socket_path:efa7d1c8b9f2
-// libtmux:parity libtmux.server.Server.__init__#parameter-branch:tmux_bin:547408be225d
-// libtmux:parity libtmux.server.Server.colors
-// libtmux:parity libtmux.server.Server.config_file
-// libtmux:parity libtmux.server.Server.tmux_bin
-// libtmux:parity libtmux.common.tmux_cmd.__init__
-// libtmux:parity libtmux.common.tmux_cmd.__init__#parameter-branch:args,tmux_bin:57c855e4829d
-// libtmux:parity libtmux.common.tmux_cmd.__init__#parameter-branch:tmux_bin:e28268d2d456
 func TestServerBuildsTmuxGlobalArguments(t *testing.T) {
 	t.Parallel()
 
@@ -383,11 +363,6 @@ func TestServerCommandHelperDoesNotReenterTmuxSuite(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.common.raise_if_stderr
-// libtmux:parity libtmux.common.raise_if_stderr#parameter-branch:proc:da0890ac4ef0
-// libtmux:parity libtmux.exc.LibTmuxException
-// libtmux:parity libtmux.exc.LibTmuxException.__init__
-// libtmux:parity libtmux.exc.LibTmuxException.__str__
 func TestCommandResultsAndErrorsOwnTheirSlices(t *testing.T) {
 	t.Parallel()
 

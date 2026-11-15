@@ -12,8 +12,6 @@ import (
 
 // Naming the control client is part of acquisition, so it must not ask tmux
 // with a command whose after-hook a user may have armed.
-//
-//libtmux:real-tmux
 func TestControlAcquisitionFiresNoListClientsHook(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

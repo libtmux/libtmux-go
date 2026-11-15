@@ -324,7 +324,6 @@ func TestPaneInputReservationsUseFullDaemonGenerations(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneInputReservationsCanonicalizeSocketAliases(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -402,7 +401,6 @@ func TestCommandRunDisappearanceIsFailClosed(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandRunPresenceTreatsDeadPaneAsEnded(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -511,7 +509,6 @@ func TestRetainedRunRequiresAuthenticatedCompletion(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -574,7 +571,6 @@ func TestPaneInputPreflightUsesOneFreshSnapshot(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneInputPreflightAuthenticatesLinkedTopology(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -619,7 +615,6 @@ func TestPaneInputPreflightAuthenticatesLinkedTopology(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneInputSourceComesFromGuardSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -649,7 +644,6 @@ func TestPaneInputSourceComesFromGuardSnapshot(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestConfirmCallerInputPreflight(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -789,8 +783,6 @@ func waitForForeground(ctx context.Context, pane tmux.Pane, accept func(string) 
 // markers does. A paste asking for Enter therefore goes unbracketed, and still
 // as one paste at the target rather than a second dispatch synchronize-panes
 // could fan out.
-//
-//libtmux:real-tmux
 func TestPasteTextDropsBracketsWhenItAsksForEnter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -839,7 +831,6 @@ func TestPasteTextDropsBracketsWhenItAsksForEnter(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestConfiguredMembershipResultPaths(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1079,7 +1070,6 @@ func TestConfiguredMembershipResultPaths(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunCommandReservationIsSharedAcrossInstances(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1151,7 +1141,6 @@ func TestRunCommandReservationIsSharedAcrossInstances(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneInputRefusesPlacementTransition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1195,7 +1184,6 @@ func TestPaneInputRefusesPlacementTransition(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestTimedOutRunKeepsThePaneReservedUntilCompletion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1220,7 +1208,6 @@ func TestTimedOutRunKeepsThePaneReservedUntilCompletion(t *testing.T) {
 	requireRunCommandAvailable(ctx, t, instance, target, panes[0])
 }
 
-//libtmux:real-tmux
 func TestDispatchedRunRetainsSetupUntilCompletion(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -1324,7 +1311,6 @@ func requireRunCommandAvailable(
 	}
 }
 
-//libtmux:real-tmux
 func TestRunCommandRepeatsCallerProtectionAtDispatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1367,7 +1353,6 @@ func TestRunCommandRepeatsCallerProtectionAtDispatch(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunCommandRefusesShellIdentityTransition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1407,7 +1392,6 @@ func TestRunCommandRefusesShellIdentityTransition(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunCommandRefusesAnIdenticalShellReplacement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1449,7 +1433,6 @@ func TestRunCommandRefusesAnIdenticalShellReplacement(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSendReservationIsSharedAcrossInstances(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1516,7 +1499,6 @@ func TestSendReservationIsSharedAcrossInstances(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSendReservationCoversFinalPreflight(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1573,7 +1555,6 @@ func TestSendReservationCoversFinalPreflight(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunCommandUsesExactlyTwoFullPreflights(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1616,7 +1597,6 @@ func TestRunCommandUsesExactlyTwoFullPreflights(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestUncertainRunReleasesOnAuthenticatedDisappearance(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -1683,7 +1663,6 @@ func TestUncertainRunReleasesOnAuthenticatedDisappearance(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1755,7 +1734,6 @@ func TestPasteEnterUsesOneTargetOnlyBuffer(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestEmptyPasteIsGuardedAndBufferFree(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1803,7 +1781,6 @@ func TestEmptyPasteIsGuardedAndBufferFree(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteReservationIsSharedAcrossInstances(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1868,7 +1845,6 @@ func TestPasteReservationIsSharedAcrossInstances(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteReservationCoversFinalPreflight(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -1931,7 +1907,6 @@ func TestPasteReservationCoversFinalPreflight(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteRechecksTargetAfterBufferSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1971,7 +1946,6 @@ func TestPasteRechecksTargetAfterBufferSetup(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteRefusesPlacementTransition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -2010,7 +1984,6 @@ func TestPasteRefusesPlacementTransition(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteCleansBufferAfterRequestCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -2067,7 +2040,6 @@ func TestPasteCleansBufferAfterRequestCancellation(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteTextStagesPayloadsBeyondTmuxCommandLimit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

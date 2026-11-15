@@ -11,26 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.pane.Pane.select
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:clear_mark:0cf0a1d8711c
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:direction:9447fa04b73f
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:disable_input:5b2b24acf003
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:enable_input:e988f797bf57
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:keep_zoom:23c6e462a56a
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:last:05d2c0a40f77
-// libtmux:parity libtmux.pane.Pane.select#parameter-branch:mark:36e602b4c9ef
-// libtmux:parity libtmux.window.Window.last_pane
-// libtmux:parity libtmux.window.Window.last_pane#parameter-branch:disable_input:5b2b24acf003
-// libtmux:parity libtmux.window.Window.last_pane#parameter-branch:enable_input:e988f797bf57
-// libtmux:parity libtmux.window.Window.last_pane#parameter-branch:keep_zoom:23c6e462a56a
-// libtmux:parity libtmux.window.Window.rotate
-// libtmux:parity libtmux.window.Window.rotate#parameter-branch:downward:0beae2e8c039
-// libtmux:parity libtmux.window.Window.rotate#parameter-branch:keep_zoom:23c6e462a56a
-// libtmux:parity libtmux.window.Window.rotate#parameter-branch:upward:ea13c5db4ddd
-// libtmux:parity libtmux.window.Window.select_pane
-// libtmux:parity libtmux.window.Window.select_pane#parameter-branch:target_pane:3be4cb81af8c
-//
-//libtmux:real-tmux
 func TestWindowPaneSelectionAndRotationAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -109,43 +89,6 @@ func TestWindowPaneSelectionAndRotationAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.break_pane
-// libtmux:parity libtmux.pane.Pane.break_pane#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.pane.Pane.break_pane#parameter-branch:window_name:0a86cd63c46b
-// libtmux:parity libtmux.pane.Pane.break_pane#version-branch:tmux-version:1386f8bb27d6
-// libtmux:parity libtmux.pane.Pane.break_pane#version-branch:window_name:88c9ad7200b2
-// libtmux:parity libtmux.pane.Pane.join
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:before:5990b635f38a
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:full_window:62388c4a7919
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:size:af48b30c8b98
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:target:53fdfe9b4804
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:target:c91485f0a60d
-// libtmux:parity libtmux.pane.Pane.join#parameter-branch:vertical:a9339036a786
-// libtmux:parity libtmux.pane.Pane.move
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:before:5990b635f38a
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:full_window:62388c4a7919
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:size:af48b30c8b98
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:target:53fdfe9b4804
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:target:c91485f0a60d
-// libtmux:parity libtmux.pane.Pane.move#parameter-branch:vertical:a9339036a786
-// libtmux:parity libtmux.pane.Pane.swap
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:keep_zoom:23c6e462a56a
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:move_down,move_up,target:0f855a26299d
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:move_down,move_up,target:53172b056010
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:move_down,move_up:d5215a90100b
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:move_down:988ea1aca8e5
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:move_up:065020e6f746
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:target:3fc216416bbd
-// libtmux:parity libtmux.pane.Pane.swap#parameter-branch:target:53fdfe9b4804
-// libtmux:parity libtmux.window.Window.swap
-// libtmux:parity libtmux.window.Window.swap#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.window.Window.swap#parameter-branch:target:c91485f0a60d
-// libtmux:parity libtmux.window.Window.swap#parameter-branch:target:c91485f0a60d:2
-//
-//libtmux:real-tmux
 func TestPaneTopologyAndLinkedContextAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

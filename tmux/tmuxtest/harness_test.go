@@ -285,10 +285,6 @@ func TestFailureGuidanceHelper(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pytest_plugin.TestServer
-// libtmux:parity libtmux.pytest_plugin.server
-//
-//libtmux:real-tmux
 func TestNewServerIssuesShortIsolatedSocketAndConfig(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	socketPath := server.SocketPath()

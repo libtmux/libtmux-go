@@ -10,12 +10,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.clients
-// libtmux:parity libtmux.server.Server.panes
-// libtmux:parity libtmux.server.Server.sessions
-// libtmux:parity libtmux.server.Server.windows
-//
-//libtmux:real-tmux
 func TestServerHierarchyListsMaterializeRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	mustRealCommand(t, server, "new-session", "-d", "-s", "beta", "-n", "own")

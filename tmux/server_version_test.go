@@ -17,9 +17,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.common.get_version
-// libtmux:parity libtmux.common.get_version#parameter-branch:tmux_bin:f9311ed1c2fc
-// libtmux:parity libtmux.common.get_version_str
 func TestServerVersionCachesSuccessfulProbe(t *testing.T) {
 	t.Parallel()
 
@@ -388,11 +385,6 @@ func TestSnapshotIdentityUsesProbedOpenBSDCapabilities(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.common.TMUX_MIN_VERSION
-// libtmux:parity libtmux.common.has_minimum_version
-// libtmux:parity libtmux.common.has_minimum_version#parameter-branch:raises:3ae9164dc384
-// libtmux:parity libtmux.common.has_minimum_version#version-branch:tmux_bin:aecdd0e3d066
-// libtmux:parity libtmux.exc.VersionTooLow
 func TestServerRequireVersionReturnsConcreteTooLowError(t *testing.T) {
 	t.Parallel()
 

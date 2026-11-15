@@ -15,8 +15,6 @@ import (
 // A marker in a command a caller just typed is on screen as the shell's echo
 // of it, before the command runs. Reporting that as a match tells an agent the
 // command finished when it has not started.
-//
-//libtmux:real-tmux
 func TestWaitForTextSeparatesAnEchoFromOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -78,8 +76,6 @@ func TestWaitForTextSeparatesAnEchoFromOutput(t *testing.T) {
 // types a marker without Enter. The kernel's echo of those literal keys is
 // genuinely new output on the notification stream after the wait began
 // watching, and must still not end the wait - the command has not run.
-//
-//libtmux:real-tmux
 func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -189,8 +185,6 @@ func TestWaitForTextNeverMatchesUnsubmittedInputTypedAfterAttaching(t *testing.T
 // identically to the pre-Enter call. pendingInputOnly is the discriminator -
 // true while the marker is only this server's own unsubmitted input, false
 // once it has actually run - and entryNote explains either state in words.
-//
-//libtmux:real-tmux
 func TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -267,8 +261,6 @@ func TestWaitForTextAlreadyOnScreenDistinguishesPendingFromRealOutput(t *testing
 // the baseline" trigger. A cursor taken before a command ran finds that
 // command's output immediately, rather than timing out waiting for it to
 // happen again.
-//
-//libtmux:real-tmux
 func TestWaitForTextResumesFromARealCursor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -328,8 +320,6 @@ func TestWaitForTextResumesFromARealCursor(t *testing.T) {
 // A client that reads only a result's content, not its structured content,
 // must still learn that a wait ran out. An empty text block reads as a call
 // that returned nothing, which a timed-out wait otherwise produced.
-//
-//libtmux:real-tmux
 func TestWaitForTextTimeoutSaysSoInContent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

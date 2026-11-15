@@ -12,58 +12,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.default_hook_scope
-// libtmux:parity libtmux.session.Session.default_hook_scope
-// libtmux:parity libtmux.constants.HOOK_SCOPE_FLAG_MAP
-// libtmux:parity libtmux.pane.Pane.default_hook_scope
-// libtmux:parity libtmux.window.Window.default_hook_scope
-// libtmux:parity libtmux.hooks.HooksMixin
-// libtmux:parity libtmux.hooks.HooksMixin.__init__
-// libtmux:parity libtmux.hooks.HooksMixin.default_hook_scope
-// libtmux:parity libtmux.hooks.HooksMixin.hooks
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#parameter-branch:global_:bcf3b5284452
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#parameter-branch:hook,scope:d3faaf781f06
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#parameter-branch:scope:1b144cf5c43d
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#parameter-branch:scope:b959adc22e97
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:append:945ab72cb247
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:append:e358cfe094c6
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:g,global_:bcf3b5284452
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:g,global_:fabe8cef3aca
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:g:03e14ffa90c7
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:hook,scope,value:d3faaf781f06
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:run:374168ca78de
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:run:c822680ccb58
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:scope:1b144cf5c43d
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:scope:b959adc22e97
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:unset:2bfd66177de3
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:unset:fcb96f7ba797
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#warning:abb8cfc75660
-// libtmux:parity libtmux.hooks.HooksMixin.set_hooks
-// libtmux:parity libtmux.hooks.HooksMixin.set_hooks#parameter-branch:clear_existing:563b7a5e5f56
-// libtmux:parity libtmux.hooks.HooksMixin.set_hooks#parameter-branch:values:45898433e258
-// libtmux:parity libtmux.hooks.HooksMixin.show_hook
-// libtmux:parity libtmux.hooks.HooksMixin.show_hook#parameter-branch:global_,hook,scope:4704725be4dd
-// libtmux:parity libtmux.hooks.HooksMixin.show_hook#parameter-branch:global_,hook,scope:52fe2fc27f5b
-// libtmux:parity libtmux.hooks.HooksMixin.show_hook#parameter-branch:hook:f9e8cb29bf68
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:global_:746212d66b3a
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:scope:1b144cf5c43d
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:scope:b959adc22e97
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:global_:bcf3b5284452
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:global_:fabe8cef3aca
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:hook,scope:d3faaf781f06
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:scope:1b144cf5c43d
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:scope:b959adc22e97
-// libtmux:parity libtmux.options.OptionsMixin.show_option
-// libtmux:parity libtmux.options.OptionsMixin.show_option#parameter-branch:g:03e14ffa90c7
-// libtmux:parity libtmux.options.OptionsMixin.show_options
 func TestHookOperationsBuildExactScopeArguments(t *testing.T) {
 	t.Parallel()
 
@@ -560,14 +508,6 @@ func TestSingleHookMutationsPreserveUnknownPassThrough(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#version-branch:scope:034bf64d8814
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#warning:21a25a5f2e9b
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#version-branch:scope:034bf64d8814
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#warning:21a25a5f2e9b
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#version-branch:scope:034bf64d8814
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#warning:21a25a5f2e9b
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#version-branch:scope:034bf64d8814
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#warning:21a25a5f2e9b
 func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 	t.Parallel()
 
@@ -647,14 +587,6 @@ func TestHookMutationPreflightUsesCachedVersionForChangingScopes(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.constants.Hooks.from_stdout
-// libtmux:parity libtmux._internal.constants.Hooks.from_stdout#parameter-branch:value:8045c0e2d5f6
-// libtmux:parity libtmux.hooks.HookDict
-// libtmux:parity libtmux.hooks.HookValues
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:scope:1b144cf5c43d
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:scope:b959adc22e97
 func TestHooksDecodeBareEmptyIndexedValuesAndSparseHoles(t *testing.T) {
 	t.Parallel()
 
@@ -1166,22 +1098,6 @@ func TestHookMutationTreatsStderrAtZeroExitAsFailure(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#parameter-branch:global_:bcf3b5284452
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:g,global_:bcf3b5284452
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:g,global_:fabe8cef3aca
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#parameter-branch:g:03e14ffa90c7
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#warning:abb8cfc75660
-// libtmux:parity libtmux.hooks.HooksMixin.set_hooks
-// libtmux:parity libtmux.hooks.HooksMixin.set_hooks#parameter-branch:clear_existing:563b7a5e5f56
-// libtmux:parity libtmux.hooks.HooksMixin.set_hooks#parameter-branch:values:45898433e258
-// libtmux:parity libtmux.hooks.HooksMixin.show_hook#parameter-branch:global_,hook,scope:4704725be4dd
-// libtmux:parity libtmux.hooks.HooksMixin.show_hook#parameter-branch:global_,hook,scope:52fe2fc27f5b
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#parameter-branch:global_:746212d66b3a
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:global_:bcf3b5284452
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#parameter-branch:global_:fabe8cef3aca
-// libtmux:parity libtmux.options.OptionsMixin.show_option
-// libtmux:parity libtmux.options.OptionsMixin.show_option#parameter-branch:g:03e14ffa90c7
-// libtmux:parity libtmux.options.OptionsMixin.show_options
 func TestGlobalScopeHookOperationsBuildExactArguments(t *testing.T) {
 	t.Parallel()
 

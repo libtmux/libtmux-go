@@ -8,21 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.window.Window.link
-// libtmux:parity libtmux.window.Window.link#parameter-branch:after:a740f436c48a
-// libtmux:parity libtmux.window.Window.link#parameter-branch:before:5990b635f38a
-// libtmux:parity libtmux.window.Window.link#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.window.Window.link#parameter-branch:kill_existing:b33764a0fdfd
-// libtmux:parity libtmux.window.Window.link#parameter-branch:target_index:f03376e081e2
-// libtmux:parity libtmux.window.Window.link#parameter-branch:target_session:038cfaf9ec8b
-// libtmux:parity libtmux.window.Window.move_window
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:after:a740f436c48a
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:before:5990b635f38a
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:kill_target:fe59a815083c
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:no_select:8c2e5e8989eb
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:renumber:cb7da9c46286
-// libtmux:parity libtmux.window.Window.unlink
-// libtmux:parity libtmux.window.Window.unlink#parameter-branch:kill_if_last:5944d5de9da2
 func TestWindowLinkUnlinkMoveBuildExactWinlinkArguments(t *testing.T) {
 	t.Parallel()
 

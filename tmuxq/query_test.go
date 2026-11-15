@@ -12,15 +12,6 @@ type testValue struct {
 	Label   *string
 }
 
-// libtmux:parity libtmux._internal.query_list.QueryList
-// libtmux:parity libtmux._internal.query_list.QueryList.__eq__
-// libtmux:parity libtmux._internal.query_list.QueryList.__eq__#parameter-branch:other:777566d3a56b
-// libtmux:parity libtmux._internal.query_list.QueryList.__eq__#parameter-branch:other:997aec5c41fe
-// libtmux:parity libtmux._internal.query_list.QueryList.__init__
-// libtmux:parity libtmux._internal.query_list.QueryList.__init__#parameter-branch:items:f37f2336fb55
-// libtmux:parity libtmux._internal.query_list.QueryList.data
-// libtmux:parity libtmux._internal.query_list.QueryList.items
-// libtmux:parity libtmux._internal.query_list.QueryList.pk_key
 func TestWhereReturnsFreshValuesAndDiscardsPredicateMutation(t *testing.T) {
 	t.Parallel()
 
@@ -57,10 +48,6 @@ func TestWhereEvaluatesEveryValue(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.query_list.QueryList.get
-// libtmux:parity libtmux._internal.query_list.QueryList.get#parameter-branch:default:376d5f510564
-// libtmux:parity libtmux._internal.query_list.QueryList.get#parameter-branch:kwargs,matcher:4086b7fdd4bc
-// libtmux:parity libtmux._internal.query_list.QueryList.get#parameter-branch:kwargs,matcher:f47a3e6ef2c5
 func TestFirstReturnsOriginalValueAndStops(t *testing.T) {
 	t.Parallel()
 
@@ -85,12 +72,6 @@ func TestFirstReturnsOriginalValueAndStops(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.query_list.PKRequiredException
-// libtmux:parity libtmux._internal.query_list.PKRequiredException.__init__
-// libtmux:parity libtmux._internal.query_list.QueryList.get
-// libtmux:parity libtmux._internal.query_list.QueryList.get#parameter-branch:default:376d5f510564
-// libtmux:parity libtmux._internal.query_list.QueryList.get#parameter-branch:kwargs,matcher:4086b7fdd4bc
-// libtmux:parity libtmux._internal.query_list.QueryList.get#parameter-branch:kwargs,matcher:f47a3e6ef2c5
 func TestExactlyOneClassifiesCardinality(t *testing.T) {
 	t.Parallel()
 

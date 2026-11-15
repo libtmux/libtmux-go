@@ -14,8 +14,6 @@ import (
 // Each time a pane's history fills, tmux discards its oldest tenth and
 // renumbers what is left. A run must still return what it printed once that
 // starts, and say when tmux discarded the start of it.
-//
-//libtmux:real-tmux
 func TestRunShellCommandReadsOutputOnceTheHistoryFills(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -75,8 +73,6 @@ func lastLine(lines []string) string {
 // A terminal that does not echo shows no wrapper line to find the output
 // after. Once the history is nearly full, a short command must still come
 // back as only what it printed.
-//
-//libtmux:real-tmux
 func TestRunShellCommandReadsOutputWithoutEchoOnceTheHistoryFills(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -147,8 +143,6 @@ func fullHistoryPane(
 
 // A full history must not change what a run returns. Blank rows the command
 // printed are its output, whichever way the output was read back.
-//
-//libtmux:real-tmux
 func TestRunShellCommandKeepsBlankRowsOnceTheHistoryFills(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -184,8 +178,6 @@ func TestRunShellCommandKeepsBlankRowsOnceTheHistoryFills(t *testing.T) {
 
 // A run that times out in a pane whose history is full reports what the
 // command printed so far, as a run that finished would, or says it cannot.
-//
-//libtmux:real-tmux
 func TestRunShellCommandReturnsPartialOutputOnceTheHistoryFills(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()

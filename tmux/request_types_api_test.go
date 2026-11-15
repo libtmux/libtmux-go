@@ -11,10 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:filter_expression:741088570e6e
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.show_messages#parameter-branch:target_client:9bd26a6f1edf
 func TestRequestTargetAndFilterTypesCompile(_ *testing.T) {
 	client := tmux.ClientName("client")
 	pane := tmux.PaneID("%1")

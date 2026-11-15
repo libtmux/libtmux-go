@@ -51,7 +51,6 @@ func ignoringHangups(ctx context.Context, t *testing.T, pane tmux.Pane) {
 	tmuxtest.WaitForShellReady(ctx, t, pane)
 }
 
-//libtmux:real-tmux
 func TestATimedOutRunTakesAnInterruptFromSendKeys(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -71,7 +70,6 @@ func TestATimedOutRunTakesAnInterruptFromSendKeys(t *testing.T) {
 	requireRunCommandAvailable(ctx, t, instance, target, panes[0])
 }
 
-//libtmux:real-tmux
 func TestRespawnEndsATimedOutRun(t *testing.T) {
 	for _, hangups := range []string{"signaled", "ignored"} {
 		t.Run(hangups, func(t *testing.T) {
@@ -97,7 +95,6 @@ func TestRespawnEndsATimedOutRun(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunShellCommandReportsAnInterrupt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -147,8 +144,6 @@ func TestRunShellCommandReportsAnInterrupt(t *testing.T) {
 // A run whose shell goes away records no status. The call waiting on it
 // must say so, rather than wait out its timeout and report the command as
 // still running.
-//
-//libtmux:real-tmux
 func TestRunShellCommandReportsAShellThatWentAway(t *testing.T) {
 	for _, hangups := range []string{"signaled", "ignored"} {
 		t.Run(hangups, func(t *testing.T) {
@@ -205,8 +200,6 @@ func testRunShellCommandReportsAShellThatWentAway(t *testing.T, ignoreHangups bo
 
 // A run that times out still says what the command printed so far, which is
 // what a caller needs to decide whether to wait for it.
-//
-//libtmux:real-tmux
 func TestATimedOutRunReturnsWhatItPrintedSoFar(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

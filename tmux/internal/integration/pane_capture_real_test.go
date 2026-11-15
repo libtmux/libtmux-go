@@ -15,7 +15,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestCaptureBytesPreservesRealTmuxFraming(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -44,37 +43,6 @@ func TestCaptureBytesPreservesRealTmuxFraming(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.capture_pane
-// libtmux:parity libtmux.pane.Pane.capture_pane#overload:0653b86df0b2
-// libtmux:parity libtmux.pane.Pane.capture_pane#overload:32a22433af94
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:alternate_screen:e91ecf2dceb1
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:end:303ee00bfa76
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:escape_non_printable:02b7db7578ad
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:escape_sequences:d40b84a4c7b9
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:hyperlinks:55a95c0433ba
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:join_wrapped:c9ba0c8a5e01
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:line_flags:06dd6ad5ce57
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:line_numbers:f20035bc8efc
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:mode_screen:b2ec82b89b59
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:pending:c991f82d2f68
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:preserve_trailing:f6e6a717b592
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:quiet:8573bc8befe4
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:start:e400519f5cf8
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:to_buffer:23593cb2f5d5
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:to_buffer:23593cb2f5d5:2
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:trim_trailing:5505ae431ffc
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:1cded5d69f99
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:c6a18af85027
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:c6a18af85027:2
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:c6a18af85027:3
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:03c1f413095c
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:0c19eb697b50
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:2922a48ac870
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:2ec07ea00289
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:4aee8ceaa034
-//
-//libtmux:real-tmux
 func TestPaneCaptureAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -262,8 +230,6 @@ func requireCaptureCommandSuccess(
 // The shell echoes a command before it produces output, so substring matches
 // can return early. The command delays output long enough to observe this
 // deterministically; whole-line matching distinguishes it.
-//
-//libtmux:real-tmux
 func TestCaptureShowsTheShellEchoBeforeTheOutput(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

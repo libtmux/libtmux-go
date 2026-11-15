@@ -13,8 +13,6 @@ import (
 
 // Invalid layouts must never reach tmux 3.3a, which exits the server and destroys
 // unrelated sessions instead of returning an error.
-//
-//libtmux:real-tmux
 func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -117,8 +115,6 @@ func TestSelectLayoutRefusesWhatWouldKillTheServer(t *testing.T) {
 // server: "tile" applies exactly like "tiled" applies, on whatever tmux is on
 // PATH, and an ambiguous prefix is refused client-side, naming its
 // candidates, without ever reaching tmux or disturbing the server.
-//
-//libtmux:real-tmux
 func TestSelectLayoutAcceptsAUniquePresetPrefix(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -181,7 +177,6 @@ func TestSelectLayoutAcceptsAUniquePresetPrefix(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestLayoutPreflightControlPlanRetainsKeeper(t *testing.T) {
 	server := tmuxtest.NewServer(t.Context(), t)
 	sessions, err := server.Sessions(t.Context())
@@ -239,7 +234,6 @@ func TestLayoutPreflightControlPlanRetainsKeeper(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestLayoutPreflightBoundMissingDaemonPreservesFailure(t *testing.T) {
 	server := tmuxtest.NewServer(t.Context(), t)
 	sessions, err := server.Sessions(t.Context())
@@ -267,7 +261,6 @@ func TestLayoutPreflightBoundMissingDaemonPreservesFailure(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestLayoutPreflightColdAndEmptyDaemon(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{})
 	version, err := server.Version(t.Context())
@@ -304,8 +297,6 @@ func TestLayoutPreflightColdAndEmptyDaemon(t *testing.T) {
 
 // The gates that open at 3.8 open there: tmux 3.8 reports the JSON layout and
 // the new format fields, and the library accepts the layout it reported.
-//
-//libtmux:real-tmux
 func TestThreeEightGatesOpenAtThreeEight(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

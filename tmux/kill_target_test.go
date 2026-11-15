@@ -8,7 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.kill_session
 func TestServerKillSessionPreservesTmuxSelector(t *testing.T) {
 	t.Parallel()
 
@@ -24,10 +23,6 @@ func TestServerKillSessionPreservesTmuxSelector(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.session.Session.kill_window
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:3fc216416bbd
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:8f6d7a09cc34
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:c12246bcb583
 func TestSessionKillWindowPreservesCurrentStringAndIndexTargets(t *testing.T) {
 	t.Parallel()
 
@@ -138,11 +133,6 @@ func TestTargetedKillMethodsRejectInvalidRequestsBeforeExecution(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.kill_session
-// libtmux:parity libtmux.session.Session.kill_window
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:3fc216416bbd
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:8f6d7a09cc34
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:c12246bcb583
 func TestTargetedKillMethodsUseStderrOnlyCompletionPolicy(t *testing.T) {
 	t.Parallel()
 

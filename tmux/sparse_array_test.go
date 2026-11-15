@@ -21,7 +21,6 @@ func TestSparseArrayZeroValueIsEmptyAndReturnsFreshSlices(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.sparse_array.is_sparse_array_list
 func TestNewSparseArraySortsEntriesAndRejectsInvalidIndices(t *testing.T) {
 	array, err := tmux.NewSparseArray(
 		tmux.SparseEntry[string]{Index: 8, Value: "eight"},
@@ -51,9 +50,6 @@ func TestNewSparseArraySortsEntriesAndRejectsInvalidIndices(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.sparse_array.SparseArray
-// libtmux:parity libtmux._internal.sparse_array.SparseArray.add
-// libtmux:parity libtmux._internal.sparse_array.SparseArray.append
 func TestSparseArrayFunctionalUpdatesDoNotMutateEarlierValues(t *testing.T) {
 	var empty tmux.SparseArray[string]
 	first, err := empty.Append("zero")
@@ -103,8 +99,6 @@ func TestSparseArrayFunctionalUpdatesDoNotMutateEarlierValues(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.sparse_array.SparseArray.as_list
-// libtmux:parity libtmux._internal.sparse_array.SparseArray.iter_values
 func TestSparseArrayProjectionsAndIterationPreserveOwnership(t *testing.T) {
 	array, err := tmux.NewSparseArray(
 		tmux.SparseEntry[string]{Index: 0, Value: "zero"},

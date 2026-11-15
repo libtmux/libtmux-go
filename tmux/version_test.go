@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// libtmux:parity libtmux._compat.LegacyVersion
-// libtmux:parity libtmux._compat.LegacyVersion.__init__
-// libtmux:parity libtmux._compat.LegacyVersion.__repr__
-// libtmux:parity libtmux._compat.LegacyVersion.__str__
 func TestParseVersionPreservesTokenAndComponents(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +47,6 @@ func TestParseVersionPreservesTokenAndComponents(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._compat.LegacyVersion.__hash__
 func TestVersionIsComparableValue(t *testing.T) {
 	t.Parallel()
 
@@ -96,11 +91,6 @@ func TestParseVersionRejectsMalformedTokens(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.common.has_gt_version
-// libtmux:parity libtmux.common.has_gte_version
-// libtmux:parity libtmux.common.has_lt_version
-// libtmux:parity libtmux.common.has_lte_version
-// libtmux:parity libtmux.common.has_version
 func TestVersionCompareUsesNumericCoreAndDevelopmentOrder(t *testing.T) {
 	t.Parallel()
 
@@ -137,7 +127,6 @@ func TestVersionCompareUsesNumericCoreAndDevelopmentOrder(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.common.TMUX_MAX_VERSION
 func TestMaximumTestedVersionMatchesMasterNumericCore(t *testing.T) {
 	t.Parallel()
 
@@ -158,21 +147,6 @@ func TestMaximumTestedVersionMatchesMasterNumericCore(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._compat.LegacyCmpKey
-// libtmux:parity libtmux._compat.LegacyVersion.__eq__
-// libtmux:parity libtmux._compat.LegacyVersion.__eq__#parameter-branch:other:823699310e32
-// libtmux:parity libtmux._compat.LegacyVersion.__eq__#parameter-branch:other:92d07012c4d3
-// libtmux:parity libtmux._compat.LegacyVersion.__lt__
-// libtmux:parity libtmux._compat.LegacyVersion.__lt__#parameter-branch:other:823699310e32
-// libtmux:parity libtmux._compat.LegacyVersion.__lt__#parameter-branch:other:92d07012c4d3
-// libtmux:parity libtmux._compat.LegacyVersion._key
-// libtmux:parity libtmux._compat.LooseVersion
-// libtmux:parity libtmux._compat._legacy_cmpkey
-// libtmux:parity libtmux._compat._legacy_version_component_re
-// libtmux:parity libtmux._compat._legacy_version_replacement_map
-// libtmux:parity libtmux._compat._parse_version_parts
-// libtmux:parity libtmux._vendor._structures#version-ordering-sentinels
-// libtmux:parity libtmux._vendor.version#tmux-version-semantics
 func TestVersionCompareReleasePreservesLegacySuffixOrder(t *testing.T) {
 	t.Parallel()
 

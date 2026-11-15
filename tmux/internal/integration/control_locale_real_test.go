@@ -13,8 +13,6 @@ import (
 
 // The registration poll needs a printable separator because tmux rewrites
 // control characters for clients without a UTF-8 locale.
-//
-//libtmux:real-tmux
 func TestControlClientOpensWithoutAUTF8Locale(t *testing.T) {
 	t.Parallel()
 
@@ -70,8 +68,6 @@ func environmentWithoutALocale(t *testing.T) []string {
 // tmux replaces every non-ASCII byte it writes to a command or control client
 // whose locale does not name UTF-8, so without asking for UTF-8 a session
 // named café reads back as caf_ with no error at all.
-//
-//libtmux:real-tmux
 func TestTextSurvivesAServerWithoutAUTF8Locale(t *testing.T) {
 	t.Parallel()
 

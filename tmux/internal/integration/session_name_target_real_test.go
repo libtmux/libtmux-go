@@ -13,8 +13,6 @@ import (
 
 // Exact matching does not override tmux's $, @, and % identifier syntax, so a
 // name resembling an identifier must never resolve to another object.
-//
-//libtmux:real-tmux
 func TestASessionNamedLikeAnIdentifierDoesNotReachAnotherSession(t *testing.T) {
 	t.Parallel()
 
@@ -80,8 +78,6 @@ func TestASessionNamedLikeAnIdentifierDoesNotReachAnotherSession(t *testing.T) {
 // TestReplacingASessionKillsTheOneItFound covers the other half of the same
 // hazard: the session to replace is found by name, and killing it by that name
 // sends the string back through tmux's ladder, where an identifier outranks it.
-//
-//libtmux:real-tmux
 func TestReplacingASessionKillsTheOneItFound(t *testing.T) {
 	t.Parallel()
 

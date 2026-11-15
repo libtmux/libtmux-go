@@ -146,8 +146,8 @@ comment that records an invariant, protocol constraint, platform quirk, or
 upstream workaround.
 
 Tool directives are exempt and must not be reformatted:
-`//go:build`, `//go:generate`, `//nolint:`, `//libtmux:real-tmux`, and
-`//libtmux:parity`. Generated-doc and example markers are also exempt:
+`//go:build`, `//go:generate`, and `//nolint:`. Generated-doc and example
+markers are also exempt:
 `// docs:<name>`, `// docs:end`, and `// Output:`.
 
 ## Error messages

@@ -16,8 +16,6 @@ import (
 // unlocking again hands the mutex to the next real locker. tmux 3.8 drops the
 // wait of a client that has gone (tmux issue 5614), so there the first release
 // frees the channel and nothing is owed.
-//
-//libtmux:real-tmux
 func TestAnAbandonedLockWaitLeavesTheChannelUsable(t *testing.T) {
 	t.Parallel()
 

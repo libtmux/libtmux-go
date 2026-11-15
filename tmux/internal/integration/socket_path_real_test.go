@@ -19,7 +19,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestLayoutPreflightPreservesLiveSocketPermissionFailure(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses directory permissions")
@@ -58,8 +57,6 @@ func TestLayoutPreflightPreservesLiveSocketPermissionFailure(t *testing.T) {
 // tmux keeps its sockets in TMUX_TMPDIR/tmux-<uid> and refuses that directory
 // if others can reach it. tmux 3.2a reports "error creating"; 3.3a and newer use
 // three other diagnostics, so the test exercises the installed version.
-//
-//libtmux:real-tmux
 func TestADirectoryTmuxRefusesReadsAsNoServer(t *testing.T) {
 	t.Parallel()
 
@@ -119,8 +116,6 @@ func TestADirectoryTmuxRefusesReadsAsNoServer(t *testing.T) {
 
 // TestAnAbsentSocketDirectoryStillReadsAsNoServer keeps the ordinary case
 // beside the refused one: nothing there at all is the same answer.
-//
-//libtmux:real-tmux
 func TestAnAbsentSocketDirectoryStillReadsAsNoServer(t *testing.T) {
 	t.Parallel()
 
@@ -144,7 +139,6 @@ func TestAnAbsentSocketDirectoryStillReadsAsNoServer(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNamedSocketExecutionKeepsConstructorFallback(t *testing.T) {
 	t.Parallel()
 
@@ -246,8 +240,6 @@ func secondTempDirCallBasename(t *testing.T) string {
 // starts is the one a bare tmux command reaches. The suite's sandbox puts that
 // command's socket inside the suite root, and a bare client in the test's
 // environment must find the session there.
-//
-//libtmux:real-tmux
 func TestAServerWithNoSocketReachesWhatABareTmuxReaches(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -276,8 +268,6 @@ func TestAServerWithNoSocketReachesWhatABareTmuxReaches(t *testing.T) {
 
 // LIBTMUX_SOCKET and LIBTMUX_SOCKET_PATH steer a server that names no socket,
 // and the default socket stays empty.
-//
-//libtmux:real-tmux
 func TestEnvironmentSocketVariablesSteerAServerThatNamesNoSocket(t *testing.T) {
 	root := defaultSandboxSocketDirectory(t)
 	pathSocket := filepath.Join(os.Getenv("TMUX_TMPDIR"), "viapath")

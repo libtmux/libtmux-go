@@ -20,8 +20,6 @@ import (
 // to an underscore. [tmux.Version.AtLeast] compares feature level, treating
 // 3.7 and 3.7a alike, so it cannot gate this -- the actual creation result
 // does, and the test skips on either outcome rather than assuming one.
-//
-//libtmux:real-tmux
 func TestKillSessionAddressesADottedName(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

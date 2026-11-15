@@ -8,18 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.session.Session.__exit__
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:all_except:6a69b96ddb2d
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:all_except:6a69b96ddb2d:2
-// libtmux:parity libtmux.session.Session.kill
-// libtmux:parity libtmux.pane.Pane.__exit__
-// libtmux:parity libtmux.pane.Pane.kill
-// libtmux:parity libtmux.pane.Pane.kill#parameter-branch:all_except:6a69b96ddb2d
-// libtmux:parity libtmux.pane.Pane.kill#parameter-branch:all_except:6a69b96ddb2d:2
-// libtmux:parity libtmux.window.Window.__exit__
-// libtmux:parity libtmux.window.Window.kill
-// libtmux:parity libtmux.window.Window.kill#parameter-branch:all_except:6a69b96ddb2d
-// libtmux:parity libtmux.window.Window.kill#parameter-branch:all_except:6a69b96ddb2d:2
 func TestKillOptionsBuildExactTargetsAndPythonOrder(t *testing.T) {
 	t.Parallel()
 
@@ -88,7 +76,6 @@ func TestSessionKillRejectsConflictingModesBeforeExecution(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.session.Session.kill
 func TestKillFamilyIgnoresCompletedNonzeroWithoutStderr(t *testing.T) {
 	t.Parallel()
 
@@ -149,9 +136,6 @@ func TestKillFamilyIgnoresCompletedNonzeroWithoutStderr(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:group:7704a4e4922f
-// libtmux:parity libtmux.session.Session.kill#version-branch:tmux-version:c6a18af85027
-// libtmux:parity libtmux.session.Session.kill#warning:8abad26b205f
 func TestSessionKillGroupWarnsAndOmitsBefore37(t *testing.T) {
 	t.Parallel()
 
@@ -183,7 +167,6 @@ func TestSessionKillGroupWarnsAndOmitsBefore37(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:clear:a18e02300191
 func TestSessionKillWithoutGroupSkipsVersionProbe(t *testing.T) {
 	t.Parallel()
 

@@ -18,8 +18,6 @@ import (
 // terminal answers. Literal refresh-client with -l is refused on those releases
 // before it is sent, in every spelling tmux resolves to the command and inside
 // a command list, and the attached client and the server survive.
-//
-//libtmux:real-tmux
 func TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

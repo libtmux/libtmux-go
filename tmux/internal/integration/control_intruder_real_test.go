@@ -15,8 +15,6 @@ import (
 // tmux emits guard blocks for both control-channel commands and client-binding
 // commands. Only flag-1 blocks are replies; consuming flag-0 blocks permanently
 // shifts later replies.
-//
-//libtmux:real-tmux
 func TestKeysThatRunACommandDoNotShiftTheReplies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

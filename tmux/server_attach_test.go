@@ -21,10 +21,6 @@ func TestStartServerUsesNoVersionProbe(t *testing.T) {
 	assertInteractiveRequests(t, runner, [][]string{{"start-server"}})
 }
 
-// libtmux:parity libtmux.server.Server.attach_session
-// libtmux:parity libtmux.session.Session.attach
-// libtmux:parity libtmux.session.Session.attach#parameter-branch:exit_:ec1dc0f87e55
-// libtmux:parity libtmux.session.Session.attach#parameter-branch:flags_:68f4c159cd01
 func TestServerAttachSessionBuildsExactStreamingRequest(t *testing.T) {
 	t.Parallel()
 

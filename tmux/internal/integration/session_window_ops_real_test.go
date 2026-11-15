@@ -18,12 +18,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.session.Session.last_window
-// libtmux:parity libtmux.session.Session.next_window
-// libtmux:parity libtmux.session.Session.previous_window
-// libtmux:parity libtmux.session.Session.select_window
-//
-//libtmux:real-tmux
 func TestSessionWindowNavigationAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -73,25 +67,6 @@ func TestSessionWindowNavigationAgainstRealTmux(t *testing.T) {
 	assertRealActiveWindow(t, active, session.ID(), third.ID())
 }
 
-// libtmux:parity libtmux.window.Window.next_layout
-// libtmux:parity libtmux.window.Window.previous_layout
-// libtmux:parity libtmux.window.Window.resize
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:adjustment:73daa10a3099
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:adjustment_direction:e4a3795db9a4
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:expand,shrink:d624172d273f
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:expand:163401d681e1
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:height,width:a104fc5529e1
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:height:3fde596c5d4b
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:shrink:fd4b5f4dd805
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:width:84d6a1e76504
-// libtmux:parity libtmux.window.Window.select_layout
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:layout,next_layout,previous_layout,spread:0fa948c7463a
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:layout:2a9f9e28d66a
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:next_layout:e5241b7cc5f9
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:previous_layout:146fb5ba152c
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:spread:ef0ecf84f4e8
-//
-//libtmux:real-tmux
 func TestWindowLayoutAndResizeAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -195,7 +170,6 @@ func TestWindowLayoutAndResizeAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWindowResizeUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -284,7 +258,6 @@ func TestWindowResizeUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWindowSelectLayoutUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -370,12 +343,6 @@ func TestWindowSelectLayoutUsesReceiverWinlinkAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.reset
-// libtmux:parity libtmux.window.Window.rename_window
-// libtmux:parity libtmux.window.Window.select
-// libtmux:parity libtmux.window.Window.split
-//
-//libtmux:real-tmux
 func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -678,23 +645,6 @@ func TestWindowHighLevelOperationsUseReceiverWinlinkAgainstRealTmux(t *testing.T
 	}
 }
 
-// libtmux:parity libtmux.window.Window.link
-// libtmux:parity libtmux.window.Window.link#parameter-branch:after:a740f436c48a
-// libtmux:parity libtmux.window.Window.link#parameter-branch:before:5990b635f38a
-// libtmux:parity libtmux.window.Window.link#parameter-branch:detach:3c117da5d4e8
-// libtmux:parity libtmux.window.Window.link#parameter-branch:kill_existing:b33764a0fdfd
-// libtmux:parity libtmux.window.Window.link#parameter-branch:target_index:f03376e081e2
-// libtmux:parity libtmux.window.Window.link#parameter-branch:target_session:038cfaf9ec8b
-// libtmux:parity libtmux.window.Window.move_window
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:after:a740f436c48a
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:before:5990b635f38a
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:kill_target:fe59a815083c
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:no_select:8c2e5e8989eb
-// libtmux:parity libtmux.window.Window.move_window#parameter-branch:renumber:cb7da9c46286
-// libtmux:parity libtmux.window.Window.unlink
-// libtmux:parity libtmux.window.Window.unlink#parameter-branch:kill_if_last:5944d5de9da2
-//
-//libtmux:real-tmux
 func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -811,7 +761,6 @@ func TestWindowLinkUnlinkAndMoveAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -873,8 +822,6 @@ func TestWindowUnlinkTargetsDuplicateWinlinkByIndexAgainstRealTmux(t *testing.T)
 
 // A record held across a renumber must reach its own window or report it
 // gone; the index it was read at now names a different window.
-//
-//libtmux:real-tmux
 func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -933,7 +880,6 @@ func TestRecordsSurviveWindowRenumberAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSessionLastWindowErrorAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1013,7 +959,6 @@ func hasExactRealWindow(
 	return false
 }
 
-//libtmux:real-tmux
 func TestSessionRunReportsStatusAndScreen(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1067,7 +1012,6 @@ func TestSessionRunReportsStatusAndScreen(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("Darwin drains the controlling terminal before process exit")
@@ -1135,7 +1079,6 @@ func TestCommandWaitDrainsOutputAfterProcessExit(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandStartPreservesAnExistingOutputPipe(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -1169,8 +1112,6 @@ func TestCommandStartPreservesAnExistingOutputPipe(t *testing.T) {
 // request that the unguarded call below refuses at tmux's own parser -
 // rename-window/rename-session have no flag using that letter, so "unknown
 // flag -d" comes from tmux itself, before anything is renamed.
-//
-//libtmux:real-tmux
 func TestRenameTreatsLeadingDashNameAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

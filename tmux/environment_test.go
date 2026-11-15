@@ -10,22 +10,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.common.EnvironmentMixin
-// libtmux:parity libtmux.common.EnvironmentMixin.__init__
-// libtmux:parity libtmux.common.EnvironmentMixin.cmd
-// libtmux:parity libtmux.common.EnvironmentMixin.getenv
-// libtmux:parity libtmux.common.EnvironmentMixin.remove_environment
-// libtmux:parity libtmux.common.EnvironmentMixin.remove_environment#parameter-branch:name:85085d7ed332
-// libtmux:parity libtmux.common.EnvironmentMixin.remove_environment#parameter-branch:name:a43f11265825
-// libtmux:parity libtmux.common.EnvironmentMixin.set_environment
-// libtmux:parity libtmux.common.EnvironmentMixin.set_environment#parameter-branch:expand_format:3634369442f2
-// libtmux:parity libtmux.common.EnvironmentMixin.set_environment#parameter-branch:hidden:1ee18a21f74c
-// libtmux:parity libtmux.common.EnvironmentMixin.set_environment#parameter-branch:name,value:85085d7ed332
-// libtmux:parity libtmux.common.EnvironmentMixin.set_environment#parameter-branch:name,value:a43f11265825
-// libtmux:parity libtmux.common.EnvironmentMixin.show_environment
-// libtmux:parity libtmux.common.EnvironmentMixin.unset_environment
-// libtmux:parity libtmux.common.EnvironmentMixin.unset_environment#parameter-branch:name:85085d7ed332
-// libtmux:parity libtmux.common.EnvironmentMixin.unset_environment#parameter-branch:name:a43f11265825
 func TestEnvironmentOperationsBuildScopeSpecificArguments(t *testing.T) {
 	t.Parallel()
 
@@ -268,8 +252,6 @@ func TestShowEnvironmentPreservesRawValueStates(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.VariableUnpackingError
-// libtmux:parity libtmux.exc.VariableUnpackingError.__init__
 func TestShowEnvironmentRejectsMalformedOutput(t *testing.T) {
 	t.Parallel()
 

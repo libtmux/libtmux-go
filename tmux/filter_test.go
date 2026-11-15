@@ -17,13 +17,6 @@ type filterGraph struct {
 	client   Client
 }
 
-// libtmux:parity libtmux.server.Server.attached_sessions
-// libtmux:parity libtmux._internal.query_list.QueryList.filter
-// libtmux:parity libtmux._internal.query_list.QueryList.filter#parameter-branch:matcher:e534581b46ea
-// libtmux:parity libtmux._internal.query_list.QueryList.filter#parameter-branch:matcher:f2118d1b65fa
-// libtmux:parity libtmux._internal.query_list.keygetter
-// libtmux:parity libtmux._internal.query_list.keygetter#parameter-branch:obj:18e64e25404d
-// libtmux:parity libtmux._internal.query_list.keygetter#parameter-branch:obj:87ee45124d16
 func TestGeneratedPredicateIntegratesWithTmuxq(t *testing.T) {
 	t.Parallel()
 
@@ -46,9 +39,6 @@ func TestGeneratedPredicateIntegratesWithTmuxq(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.attached_sessions
-// libtmux:parity libtmux._internal.query_list.QueryList.items
-// libtmux:parity libtmux._internal.query_list.QueryList.pk_key
 func TestGeneratedFiltersCoverCuratedModelFields(t *testing.T) {
 	t.Parallel()
 
@@ -108,12 +98,6 @@ func TestGeneratedScalarOperatorsComposeWithAnd(t *testing.T) {
 	assertClientFilter(t, ClientFilter{NameRegex: `^/dev/pts/`}, graph.client, true)
 }
 
-// libtmux:parity libtmux._internal.query_list.QueryList.filter
-// libtmux:parity libtmux._internal.query_list.QueryList.filter#parameter-branch:matcher:e534581b46ea
-// libtmux:parity libtmux._internal.query_list.QueryList.filter#parameter-branch:matcher:f2118d1b65fa
-// libtmux:parity libtmux._internal.query_list.keygetter
-// libtmux:parity libtmux._internal.query_list.keygetter#parameter-branch:obj:18e64e25404d
-// libtmux:parity libtmux._internal.query_list.keygetter#parameter-branch:obj:87ee45124d16
 func TestGeneratedFilterCompositionAndDifferentialReference(t *testing.T) {
 	t.Parallel()
 
@@ -427,9 +411,6 @@ func TestGeneratedValidationRejectsInvalidFiltersBeforeCompilation(t *testing.T)
 	}
 }
 
-// libtmux:parity libtmux._internal.query_list.parse_lookup
-// libtmux:parity libtmux._internal.query_list.parse_lookup#parameter-branch:lookup,path:5623e853fec0
-// libtmux:parity libtmux._internal.query_list.parse_lookup#parameter-branch:lookup,path:a9600799e8b8
 func TestLegacyLookupsLowerIntoGeneratedCriteria(t *testing.T) {
 	t.Parallel()
 
@@ -513,37 +494,6 @@ func TestLegacyLookupsLowerIntoGeneratedCriteria(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.query_list.lookup_contains
-// libtmux:parity libtmux._internal.query_list.lookup_contains#parameter-branch:data,rhs:37dfa954f91c
-// libtmux:parity libtmux._internal.query_list.lookup_endswith
-// libtmux:parity libtmux._internal.query_list.lookup_endswith#parameter-branch:data,rhs:6e73fdda4e85
-// libtmux:parity libtmux._internal.query_list.lookup_exact
-// libtmux:parity libtmux._internal.query_list.lookup_icontains
-// libtmux:parity libtmux._internal.query_list.lookup_icontains#parameter-branch:data,rhs:37dfa954f91c
-// libtmux:parity libtmux._internal.query_list.lookup_icontains#parameter-branch:data:3c3be71141f9
-// libtmux:parity libtmux._internal.query_list.lookup_icontains#parameter-branch:data:58e0683d3d5e
-// libtmux:parity libtmux._internal.query_list.lookup_iendswith
-// libtmux:parity libtmux._internal.query_list.lookup_iendswith#parameter-branch:data,rhs:6e73fdda4e85
-// libtmux:parity libtmux._internal.query_list.lookup_iexact
-// libtmux:parity libtmux._internal.query_list.lookup_iexact#parameter-branch:data,rhs:6e73fdda4e85
-// libtmux:parity libtmux._internal.query_list.lookup_in
-// libtmux:parity libtmux._internal.query_list.lookup_in#parameter-branch:data,rhs:3b71c1caafc3
-// libtmux:parity libtmux._internal.query_list.lookup_in#parameter-branch:data,rhs:3b71c1caafc3:2
-// libtmux:parity libtmux._internal.query_list.lookup_in#parameter-branch:data,rhs:4237c192c7b9
-// libtmux:parity libtmux._internal.query_list.lookup_in#parameter-branch:rhs:8e63455d8bb7
-// libtmux:parity libtmux._internal.query_list.lookup_iregex
-// libtmux:parity libtmux._internal.query_list.lookup_iregex#parameter-branch:data,rhs:19f42a7a9f0f
-// libtmux:parity libtmux._internal.query_list.lookup_istartswith
-// libtmux:parity libtmux._internal.query_list.lookup_istartswith#parameter-branch:data,rhs:6e73fdda4e85
-// libtmux:parity libtmux._internal.query_list.lookup_nin
-// libtmux:parity libtmux._internal.query_list.lookup_nin#parameter-branch:data,rhs:3b71c1caafc3
-// libtmux:parity libtmux._internal.query_list.lookup_nin#parameter-branch:data,rhs:3b71c1caafc3:2
-// libtmux:parity libtmux._internal.query_list.lookup_nin#parameter-branch:data,rhs:4237c192c7b9
-// libtmux:parity libtmux._internal.query_list.lookup_nin#parameter-branch:rhs:8e63455d8bb7
-// libtmux:parity libtmux._internal.query_list.lookup_regex
-// libtmux:parity libtmux._internal.query_list.lookup_regex#parameter-branch:data,rhs:19f42a7a9f0f
-// libtmux:parity libtmux._internal.query_list.lookup_startswith
-// libtmux:parity libtmux._internal.query_list.lookup_startswith#parameter-branch:data,rhs:6e73fdda4e85
 func TestLegacyStringLookupOperatorsPreserveTheirPredicates(t *testing.T) {
 	t.Parallel()
 
@@ -584,8 +534,6 @@ func TestLegacyStringLookupOperatorsPreserveTheirPredicates(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.query_list.OpNotFound
-// libtmux:parity libtmux._internal.query_list.OpNotFound.__init__
 func TestLegacyLookupsRejectUnsupportedDynamicCriteria(t *testing.T) {
 	t.Parallel()
 

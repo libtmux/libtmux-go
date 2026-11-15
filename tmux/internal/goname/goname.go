@@ -1,5 +1,5 @@
-// Package goname defines the exported Go spelling shared by generators and
-// parity checks for tmux and Python lower_snake_case names.
+// Package goname defines the exported Go spelling of tmux lower_snake_case
+// names.
 package goname
 
 import "strings"

@@ -11,8 +11,6 @@ import (
 
 // The description is what an agent reads before it calls the tool, so it names
 // both paths and every ending the reply can carry.
-//
-//libtmux:real-tmux
 func TestWaitForTextDescriptionStatesItsPathsAndEndings(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

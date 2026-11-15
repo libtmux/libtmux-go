@@ -163,7 +163,6 @@ func TestBuildIntoRequiresAMaterializedSession(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildOwnsTheConnectionAfterItsColdBootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -253,7 +252,6 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 	for _, test := range []struct {
 		name          string
@@ -339,7 +337,6 @@ func TestBuildReportsSessionDestroyedByDetachPolicy(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -431,8 +428,6 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 }
 
 // Long-lived pane commands prevent teardown from racing topology assertions.
-//
-//libtmux:real-tmux
 func TestBuildCreatesTheDescribedHierarchy(t *testing.T) {
 	server, ctx := testServer(t)
 	parsed, err := workspace.Parse([]byte(`
@@ -485,7 +480,6 @@ windows:
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildAppliesEnvironmentAndOptions(t *testing.T) {
 	server, ctx := testServer(t)
 	parsed, err := workspace.Parse([]byte(`
@@ -518,7 +512,6 @@ windows:
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildRunsEveryTmuxpExampleThatThisModuleSupports(t *testing.T) {
 	examples, err := filepath.Glob(os.ExpandEnv("$HOME/work/python/tmuxp/examples/*.yaml"))
 	if err != nil || len(examples) == 0 {
@@ -1200,7 +1193,6 @@ func TestAFailureWithNoLineDoesNotClaimLineZero(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildRebalancesSoAWindowFitsADefaultTerminal(t *testing.T) {
 	server, ctx := testServer(t)
 	panes := make([]workspace.Pane, 8)
@@ -1232,7 +1224,6 @@ func TestBuildRebalancesSoAWindowFitsADefaultTerminal(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildIntoSendsCommandsLiterallyAndSuppressesHistory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -1300,7 +1291,6 @@ exec "$LIBTMUX_WORKSPACE_REAL_TMUX" "$@"
 	}
 }
 
-//libtmux:real-tmux
 func TestBuildIntoAppliesOptionsInNameOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)

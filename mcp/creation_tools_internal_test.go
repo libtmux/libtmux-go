@@ -12,7 +12,6 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-//libtmux:real-tmux
 func TestCreateWindowPreservesIdentityAfterPostCreationFailure(t *testing.T) {
 	for _, test := range []struct {
 		name          string
@@ -91,7 +90,6 @@ func TestCreateWindowPreservesIdentityAfterPostCreationFailure(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCreateSessionReportsPartialIdentityAfterRefreshFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -8,18 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.exc.PaneError
-// libtmux:parity libtmux.pane.Pane.resize
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:adjustment:73daa10a3099
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:adjustment_direction:e4a3795db9a4
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:height,width:a104fc5529e1
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:height:3fde596c5d4b
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:height:555e479dfb49
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:mouse:61c1f4bb05bb
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:trim_below:39d89b9f4f73
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:width:483866c13c9b
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:width:84d6a1e76504
-// libtmux:parity libtmux.pane.Pane.resize#parameter-branch:zoom:629cd868ae3d
 func TestResizePaneBuildsOneModeOfLiteralArguments(t *testing.T) {
 	t.Parallel()
 
@@ -118,9 +106,6 @@ func TestResizePaneBuildsOneModeOfLiteralArguments(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.PaneAdjustmentDirectionRequiresAdjustment
-// libtmux:parity libtmux.exc.RequiresDigitOrPercentage
-// libtmux:parity libtmux.exc.RequiresDigitOrPercentage.__init__
 func TestResizePaneRejectsInvalidModesBeforeExecution(t *testing.T) {
 	t.Parallel()
 
@@ -257,8 +242,6 @@ func TestResizePaneReturnsReceiverWhenRefreshFails(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.set_height
-// libtmux:parity libtmux.pane.Pane.set_width
 func TestPaneSetWidthAndHeightDelegateToCellResize(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +280,6 @@ func TestPaneSetWidthAndHeightDelegateToCellResize(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.set_title
 func TestSetTitleUsesLiteralTitleAndRefreshes(t *testing.T) {
 	t.Parallel()
 

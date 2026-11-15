@@ -11,7 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestEnvironmentOperationsPreserveScopesAndStates(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)

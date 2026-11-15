@@ -15,8 +15,6 @@ import (
 // The sweep in surface_schema_test.go calls each tool once with something to
 // report, which is the path where the slice is never nil. These are the same
 // tools asked a question whose honest answer is nothing.
-//
-//libtmux:real-tmux
 func TestEmptyCollectionsAnswerTheirSchema(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

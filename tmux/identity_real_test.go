@@ -10,7 +10,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestMaterializedSessionRejectsAliasedDaemonReplacementMarker(t *testing.T) {
 	const (
 		aliasSideEffect      = "@libtmux_guard_alias_side_effect"

@@ -13,23 +13,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.pytest_plugin.session
-// libtmux:parity libtmux.pytest_plugin.session#parameter-branch:server,session_params:3a530ffbbbed
-// libtmux:parity libtmux.pytest_plugin.session#parameter-branch:server,session_params:ec162c3347ab
-// libtmux:parity libtmux.pytest_plugin.session#parameter-branch:server:5fc231b86772
-// libtmux:parity libtmux.pytest_plugin.session#parameter-branch:server:8ad3a8d74bbe
-// libtmux:parity libtmux.test.constants.TEST_SESSION_PREFIX
-// libtmux:parity libtmux.test.random.RandomStrSequence
-// libtmux:parity libtmux.test.random.RandomStrSequence.__init__
-// libtmux:parity libtmux.test.random.RandomStrSequence.__iter__
-// libtmux:parity libtmux.test.random.RandomStrSequence.__next__
-// libtmux:parity libtmux.test.random.get_test_session_name
-// libtmux:parity libtmux.test.random.get_test_session_name#parameter-branch:prefix,server:8ad3a8d74bbe
-// libtmux:parity libtmux.test.random.namer
-// libtmux:parity libtmux.test.temporary.temp_session
-// libtmux:parity libtmux.test.temporary.temp_session#parameter-branch:kwargs:9c91ecbfa909
-//
-//libtmux:real-tmux
 func TestNewSessionGeneratesNameAndCleansRenamedStableID(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	var sessionID tmux.SessionID
@@ -52,14 +35,6 @@ func TestNewSessionGeneratesNameAndCleansRenamedStableID(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.test.random.get_test_window_name
-// libtmux:parity libtmux.test.random.get_test_window_name#parameter-branch:prefix,session:12596eafc990
-// libtmux:parity libtmux.test.random.get_test_window_name#parameter-branch:prefix:c6c5d89619fb
-// libtmux:parity libtmux.test.temporary.temp_window
-// libtmux:parity libtmux.test.temporary.temp_window#parameter-branch:args,kwargs,session:008448c3406a
-// libtmux:parity libtmux.test.temporary.temp_window#parameter-branch:kwargs:84abc0994f12
-//
-//libtmux:real-tmux
 func TestNewWindowGeneratesNameAndCleansMovedStableID(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -88,7 +63,6 @@ func TestNewWindowGeneratesNameAndCleansMovedStableID(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestTemporaryResourceCleanupToleratesAlreadyMissingObjects(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -110,11 +84,6 @@ func TestTemporaryResourceCleanupToleratesAlreadyMissingObjects(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.test.temporary.temp_session#parameter-branch:kwargs,server:6b88852e945b
-// libtmux:parity libtmux.test.temporary.temp_window#parameter-branch:args,kwargs,session:edd0f97da67b
-// libtmux:parity libtmux.test.temporary.temp_window#parameter-branch:args,kwargs,session:f9e445ed642b
-//
-//libtmux:real-tmux
 func TestTemporaryResourceHelpersPreserveExplicitNames(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

@@ -139,8 +139,6 @@ func assertInvalidParams(t *testing.T, err error) {
 
 // A read goes through the tool's own dispatcher, so it returns what the tool
 // returns, and it is meant for the caller's own cache alone.
-//
-//libtmux:real-tmux
 func TestResourceReadsAnswerWhatTheirToolsAnswer(t *testing.T) {
 	for _, version := range resourceProtocols {
 		t.Run(version, func(t *testing.T) {

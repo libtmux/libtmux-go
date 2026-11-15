@@ -16,7 +16,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestNewServerWithOptionsStartsOnlyWhenRequested(t *testing.T) {
 	var socketPath string
 	var pid int
@@ -47,14 +46,6 @@ func TestNewServerWithOptionsStartsOnlyWhenRequested(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pytest_plugin.USING_ZSH
-// libtmux:parity libtmux.pytest_plugin.config_file
-// libtmux:parity libtmux.pytest_plugin.home_path
-// libtmux:parity libtmux.pytest_plugin.home_user_name
-// libtmux:parity libtmux.pytest_plugin.user_path
-// libtmux:parity libtmux.pytest_plugin.zshrc
-//
-//libtmux:real-tmux
 func TestNewServerWithOptionsAddsConfigToIsolationFile(t *testing.T) {
 	home := t.TempDir()
 	if err := os.WriteFile(
@@ -81,19 +72,6 @@ func TestNewServerWithOptionsAddsConfigToIsolationFile(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pytest_plugin.session_params
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.__enter__
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.__exit__
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.__init__
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.set
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.set#parameter-branch:envvar:74a054b54827
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.unset
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.unset#parameter-branch:envvar:2a375064c963
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.unset#parameter-branch:envvar:966f4756e8e1
-// libtmux:parity libtmux.test.environment.EnvironmentVarGuard.unset#parameter-branch:envvar:ffbf91f5b8a1
-//
-//libtmux:real-tmux
 func TestNewServerWithOptionsCopiesInputsAndPreservesEmptyEnvironment(t *testing.T) {
 	config := []byte("set -g @copy_probe before\n")
 	environment := []string{"LIBTMUX_COPY_PROBE=before"}
@@ -130,9 +108,6 @@ func TestNewServerWithOptionsCopiesInputsAndPreservesEmptyEnvironment(t *testing
 	}
 }
 
-// libtmux:parity libtmux.pytest_plugin.clear_env
-//
-//libtmux:real-tmux
 func TestNewServerWithOptionsScrubsInheritedTmuxEnvironment(t *testing.T) {
 	t.Setenv("LIBTMUX_INHERITED_PROBE", "kept")
 	t.Setenv("TMUX", "/tmp/foreign,123,0")

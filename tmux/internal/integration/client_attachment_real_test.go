@@ -11,11 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.client.Client.attached_pane
-// libtmux:parity libtmux.client.Client.attached_session
-// libtmux:parity libtmux.client.Client.attached_window
-//
-//libtmux:real-tmux
 func TestClientResolveAttachmentTracksSwitchAndDetachAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

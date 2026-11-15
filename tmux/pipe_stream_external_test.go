@@ -44,7 +44,6 @@ func randomPayload(size int) []byte {
 	return payload
 }
 
-//libtmux:real-tmux
 func TestBufferStreamRoundTripsBinaryData(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -87,7 +86,6 @@ func TestBufferStreamRoundTripsBinaryData(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneCaptureToStreamsScreen(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -115,7 +113,6 @@ func TestPaneCaptureToStreamsScreen(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneCaptureToAddressesItsOwnPane(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -152,7 +149,6 @@ func TestPaneCaptureToAddressesItsOwnPane(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestBufferStreamUnderConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

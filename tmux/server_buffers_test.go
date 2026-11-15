@@ -12,21 +12,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.delete_buffer
-// libtmux:parity libtmux.server.Server.delete_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.list_buffers
-// libtmux:parity libtmux.server.Server.list_buffers#parameter-branch:filter:dad5b2f428ff
-// libtmux:parity libtmux.server.Server.list_buffers#parameter-branch:format_string:7284ef554e76
-// libtmux:parity libtmux.server.Server.load_buffer
-// libtmux:parity libtmux.server.Server.load_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.save_buffer
-// libtmux:parity libtmux.server.Server.save_buffer#parameter-branch:append:03665a1a84bd
-// libtmux:parity libtmux.server.Server.save_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.set_buffer
-// libtmux:parity libtmux.server.Server.set_buffer#parameter-branch:append:03665a1a84bd
-// libtmux:parity libtmux.server.Server.set_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.show_buffer
-// libtmux:parity libtmux.server.Server.show_buffer#parameter-branch:buffer_name:5c7057988ea3
 func TestServerBufferCommandsBuildExactArguments(t *testing.T) {
 	t.Parallel()
 

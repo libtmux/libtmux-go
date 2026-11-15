@@ -15,13 +15,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.formatter_prefix
-//
-// libtmux:parity libtmux.formats.PANE_FORMATS
-//
-// libtmux:parity libtmux.window.Window.linked_sessions
-//
-//libtmux:real-tmux
 func TestSnapshotMatchesLinkedRealTmuxGraph(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	sharedName := "dev|equals=percent% slash\\ space␞-開発"
@@ -116,8 +109,6 @@ func TestSnapshotMatchesLinkedRealTmuxGraph(t *testing.T) {
 // list-windows -a, list-panes -a, and list-clients with "no current target"
 // once no session exists to resolve implicitly, even though list-sessions
 // itself succeeds empty and the server is not otherwise broken.
-//
-//libtmux:real-tmux
 func TestSnapshotOnZeroSessionServerIsEmptyNotAnError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

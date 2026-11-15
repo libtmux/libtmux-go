@@ -82,8 +82,6 @@ func TestConnectionRowsHaveTheirOwnMinimum(t *testing.T) {
 }
 
 // TestMatrixAnswersAgree requires equivalent results within each workload.
-//
-//libtmux:real-tmux
 func TestMatrixAnswersAgree(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -111,8 +109,6 @@ func TestMatrixAnswersAgree(t *testing.T) {
 }
 
 // TestMatrixCostsDifferAsDocumented guards the lane-specific cost claims.
-//
-//libtmux:real-tmux
 func TestMatrixCostsDifferAsDocumented(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()

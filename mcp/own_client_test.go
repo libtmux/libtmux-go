@@ -14,8 +14,6 @@ import (
 
 // The MCP server reads tmux through a control client of its own, and tmux
 // counts it as attached; a detached session read as watched by someone.
-//
-//libtmux:real-tmux
 func TestListingsLeaveOutTheServersOwnClient(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -79,8 +77,6 @@ func TestListingsLeaveOutTheServersOwnClient(t *testing.T) {
 // any tmux daemon has ever started there - list_sessions's own note points
 // agents at get_server_info to find it, so it must be true with no server
 // alive as well as with one.
-//
-//libtmux:real-tmux
 func TestGetServerInfoReportsSocketPathBeforeAnyServerStarts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -109,8 +105,6 @@ func TestGetServerInfoReportsSocketPathBeforeAnyServerStarts(t *testing.T) {
 // daemon with exit-empty off keeps after its last session ends - must answer
 // get_server_info and let create_session bootstrap the first session, not fail
 // every call with tmux's "no current target".
-//
-//libtmux:real-tmux
 func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -165,8 +159,6 @@ func TestGetServerInfoAndCreateSessionOnALiveEmptyDaemon(t *testing.T) {
 // each open a separate observation client of their own while they run, and
 // a raw list-clients on that server sees them - a detached session must not
 // read as attached just because this process is watching it.
-//
-//libtmux:real-tmux
 func TestListingsLeaveOutEveryOwnObservationClient(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -286,8 +278,6 @@ func call(ctx context.Context, t *testing.T, session *sdk.ClientSession, name st
 
 // get_server_info is where an agent learns what the server asks of tmux, so it
 // states the floor beside the version it found.
-//
-//libtmux:real-tmux
 func TestServerInfoReportsTheTmuxFloor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

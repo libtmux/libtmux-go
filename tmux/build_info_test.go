@@ -15,9 +15,6 @@ func callerFile() (uintptr, string, bool) {
 	return pc, filename, ok
 }
 
-// libtmux:parity libtmux#export:__version__
-// libtmux:parity libtmux.__about__.__version__
-// libtmux:parity libtmux.common.get_libtmux_version
 func TestPackageVersionReadsGoModuleBuildMetadata(t *testing.T) {
 	t.Parallel()
 

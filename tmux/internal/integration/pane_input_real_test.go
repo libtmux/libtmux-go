@@ -28,7 +28,6 @@ func TestPaneCaptureHasLineRequiresExactLine(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSendKeysLiteralCaptureWorkflowAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -78,33 +77,6 @@ func TestSendKeysLiteralCaptureWorkflowAgainstRealTmux(t *testing.T) {
 	waitForPaneCaptureSuffix(ctx, t, pane, leadingDashCommand)
 }
 
-// libtmux:parity libtmux.pane.Pane.clear
-// libtmux:parity libtmux.pane.Pane.clear_history
-// libtmux:parity libtmux.pane.Pane.clear_history#parameter-branch:reset_hyperlinks:d6bb66101896
-// libtmux:parity libtmux.pane.Pane.clear_history#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.clear_history#warning:ce7f518adef8
-// libtmux:parity libtmux.pane.Pane.enter
-// libtmux:parity libtmux.pane.Pane.send_keys
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:cmd:a9656802b58e
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:copy_mode_cmd,enter:ee0d792d6bbf
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:copy_mode_cmd:9f129ac517ed
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:expand_formats:0d7cebbeb84e
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:hex_keys:4cb2f6b6e23a
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:key_name:7147ea786c39
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:literal:399069e0cc76
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:repeat,reset:07cb45e98f89
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:repeat:9bfe1e965020
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:reset:503246936ad1
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:suppress_history:b5886e41a787
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.pane.Pane.send_keys#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.send_keys#version-branch:tmux-version:4ec38997c7f9:2
-// libtmux:parity libtmux.pane.Pane.send_keys#warning:095c3f7fa507
-// libtmux:parity libtmux.pane.Pane.send_keys#warning:d7989c95c9e0
-// libtmux:parity libtmux.pane.Pane.send_prefix
-// libtmux:parity libtmux.pane.Pane.send_prefix#parameter-branch:secondary:b3326a61afb3
-//
-//libtmux:real-tmux
 func TestPaneInputAndHistoryAgainstRealTmux(t *testing.T) {
 	baseServer := tmuxtest.NewServer(context.Background(), t)
 	warnings := make([]tmux.Warning, 0, 1)

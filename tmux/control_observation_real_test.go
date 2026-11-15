@@ -13,8 +13,6 @@ import (
 // tmux sends a control client the output of every pane in its session. An
 // observation keeps only its own pane's, so a busy sibling cannot fill its
 // queue and end it, however long the observation is held between waits.
-//
-//libtmux:real-tmux
 func TestPaneObservationKeepsOnlyItsPanesOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

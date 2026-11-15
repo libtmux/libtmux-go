@@ -14,63 +14,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.display_message
-// libtmux:parity libtmux.server.Server.display_message#overload:150116cee586
-// libtmux:parity libtmux.server.Server.display_message#overload:d28d6ff0f270
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:all_formats:212a3f752cda
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:cmd,delay,format_string,target_client:da0890ac4ef0
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:cmd:e8816765af61
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:delay:0b3ab3dbe007
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:format_string:7284ef554e76
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:get_text:b70b1882775d
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:get_text:b70b1882775d:2
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:no_expand:fdf65ac06ee0
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:notify:546eb0a1d914
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.display_message#parameter-branch:verbose:414278ee0d55
-// libtmux:parity libtmux.server.Server.display_message#version-branch:tmux-version:5bb2ac269d05
-// libtmux:parity libtmux.server.Server.display_message#warning:25890e6f203b
-// libtmux:parity libtmux.server.Server.display_message#warning:fe1b297a0f22
-//
-// libtmux:parity libtmux.pane.Pane.display_message
-// libtmux:parity libtmux.pane.Pane.display_message#overload:327bb68aa279
-// libtmux:parity libtmux.pane.Pane.display_message#overload:54e4d39e840a
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:all_formats:212a3f752cda
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:cmd,delay,format_string,target_client:da0890ac4ef0
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:cmd:e8816765af61
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:delay:0b3ab3dbe007
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:format_string:7284ef554e76
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:get_text:b70b1882775d
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:get_text:b70b1882775d:2
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:no_expand:fdf65ac06ee0
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:notify:546eb0a1d914
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:update_pane:36478bb48351
-// libtmux:parity libtmux.pane.Pane.display_message#parameter-branch:verbose:414278ee0d55
-// libtmux:parity libtmux.pane.Pane.display_message#version-branch:tmux-version:1cded5d69f99
-// libtmux:parity libtmux.pane.Pane.display_message#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.display_message#warning:25890e6f203b
-// libtmux:parity libtmux.pane.Pane.display_message#warning:26e3948d3d8c
-// libtmux:parity libtmux.pane.Pane.display_message#warning:fe1b297a0f22
-// libtmux:parity libtmux.window.Window.display_message
-// libtmux:parity libtmux.window.Window.display_message#overload:150116cee586
-// libtmux:parity libtmux.window.Window.display_message#overload:d28d6ff0f270
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:all_formats:212a3f752cda
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:cmd,delay,format_string,target_client:da0890ac4ef0
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:cmd:e8816765af61
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:delay:0b3ab3dbe007
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:format_string:7284ef554e76
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:get_text:b70b1882775d
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:get_text:b70b1882775d:2
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:no_expand:fdf65ac06ee0
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:notify:546eb0a1d914
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.window.Window.display_message#parameter-branch:verbose:414278ee0d55
-// libtmux:parity libtmux.window.Window.display_message#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.window.Window.display_message#warning:25890e6f203b
-// libtmux:parity libtmux.window.Window.display_message#warning:fe1b297a0f22
-//
-//libtmux:real-tmux
 func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 	base := tmuxtest.NewServer(context.Background(), t)
 	warnings := make([]tmux.Warning, 0, 2)
@@ -243,14 +186,6 @@ func TestDisplayMessageScopesAndVersionFlagsAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.clear_prompt_history
-// libtmux:parity libtmux.server.Server.clear_prompt_history#parameter-branch:prompt_type:83546fba116e
-// libtmux:parity libtmux.server.Server.clear_prompt_history#version-branch:tmux-version:d9801479e597
-// libtmux:parity libtmux.server.Server.show_prompt_history
-// libtmux:parity libtmux.server.Server.show_prompt_history#parameter-branch:prompt_type:83546fba116e
-// libtmux:parity libtmux.server.Server.show_prompt_history#version-branch:tmux-version:d9801479e597
-//
-//libtmux:real-tmux
 func TestPromptHistoryVersionGateAndTypesAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -326,7 +261,6 @@ func TestPromptHistoryVersionGateAndTypesAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPromptHistoryReportsAbsentServerAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -17,11 +17,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.has_session
-// libtmux:parity libtmux.server.Server.has_session#parameter-branch:exact:17992787d42b
-// libtmux:parity libtmux.session.Session.rename_session
-//
-//libtmux:real-tmux
 func TestLifecycleOperationsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -107,25 +102,6 @@ func TestLifecycleOperationsAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.new_session
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:attach:58cb72758f2e
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:client_flags,session_name,start_directory,window_command,window_name,x,y:73e7c644693b
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:client_flags:54ec301cbb32
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:detach_others:6edab05acbf1
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:kill_session:84e924322fc0
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:no_size:4872209d09e2
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:session_name:ab485de610f3
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:session_name:ab485de610f3:2
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:session_name:ab485de610f3:3
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:session_name:e704ec4d7e25
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:start_directory:bef78f09efe5
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:window_command:9439fd3d9eb2
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:window_name:52160acf82b3
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:x:c2891f2208b1
-// libtmux:parity libtmux.server.Server.new_session#parameter-branch:y:0cf048966732
-//
-//libtmux:real-tmux
 func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -314,7 +290,6 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	realBinary, err := exec.LookPath("tmux")
@@ -356,7 +331,6 @@ func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNewSessionKeepsTheSocketSelectedByTMUX(t *testing.T) {
 	primary := tmuxtest.NewServer(context.Background(), t)
 	root := t.TempDir()
@@ -495,8 +469,6 @@ func assertHasSession(
 // Start documents. tmux reads exit-empty as the server starts, and a later
 // command cannot turn it off because that command needs the very server the
 // setting exists to keep alive.
-//
-//libtmux:real-tmux
 func TestStartKeepsAnEmptyServerOnlyThroughTheConfigFile(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

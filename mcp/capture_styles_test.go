@@ -13,8 +13,6 @@ import (
 
 // TestCaptureStylesIsOptIn checks that styles is opt-in on capture_pane and snapshot_pane. Off, the
 // lines are plain; on, the capture-pane -e escapes come through.
-//
-//libtmux:real-tmux
 func TestCaptureStylesIsOptIn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

@@ -95,8 +95,6 @@ func TestParseControlNotificationRejectsMalformedOutputEscapes(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.constants.Hooks.from_stdout
-// libtmux:parity libtmux._internal.constants.Hooks.from_stdout#parameter-branch:value:8045c0e2d5f6
 func TestParseControlNotificationCoversPinnedWireVocabulary(t *testing.T) {
 	t.Parallel()
 

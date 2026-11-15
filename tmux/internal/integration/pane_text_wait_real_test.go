@@ -103,7 +103,6 @@ func awaitOutcome(t *testing.T, done <-chan textWaitOutcome) textWaitOutcome {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextMatchesOutputAfterEntry(t *testing.T) {
 	ctx := testContext(t)
 	_, pane := textWaitPane(ctx, t, "sleep 1; printf 'late-NEEDLE\\n'; exec sleep 60", 0, 0, "")
@@ -122,7 +121,6 @@ func TestWaitForTextMatchesOutputAfterEntry(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReadsBeforeFirstSleep(t *testing.T) {
 	ctx := testContext(t)
 	_, pane := textWaitPane(ctx, t, "printf 'ready-NEEDLE\\n'; exec sleep 60", 0, 0, "")
@@ -143,7 +141,6 @@ func TestWaitForTextReadsBeforeFirstSleep(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextJoinsWrappedRows(t *testing.T) {
 	ctx := testContext(t)
 	line := strings.Repeat("a", 77) + "NEEDLE" + strings.Repeat("b", 67)
@@ -161,7 +158,6 @@ func TestWaitForTextJoinsWrappedRows(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReadsOnlyTheVisibleScreen(t *testing.T) {
 	ctx := testContext(t)
 	_, pane := textWaitPane(ctx, t,
@@ -196,7 +192,6 @@ func TestWaitForTextReadsOnlyTheVisibleScreen(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReportsAKilledPane(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf 'before-kill\\n'; exec sleep 60", 0, 0, "")
@@ -227,7 +222,6 @@ func TestWaitForTextReportsAKilledPane(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReportsAnExitedPaneKeptOnScreen(t *testing.T) {
 	ctx := testContext(t)
 	_, pane := textWaitPane(ctx, t, "printf '\\n\\nexited-output\\n'; sleep 1", 0, 0, "set -g remain-on-exit on\n")
@@ -244,7 +238,6 @@ func TestWaitForTextReportsAnExitedPaneKeptOnScreen(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextMatchesBeforeDeath(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf '\\n\\nlast-words\\n'; sleep 1", 0, 0, "set -g remain-on-exit on\n")
@@ -269,7 +262,6 @@ func TestWaitForTextMatchesBeforeDeath(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReportsAKilledServer(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf 'before-kill\\n'; exec sleep 60", 0, 0, "")
@@ -294,7 +286,6 @@ func TestWaitForTextReportsAKilledServer(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReportsAKilledServerWithAStoppedClient(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf 'before-kill\\n'; exec sleep 60", 0, 0, "")
@@ -351,7 +342,6 @@ func TestWaitForTextReportsAKilledServerWithAStoppedClient(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextCancelDoesNotWaitOutTheInterval(t *testing.T) {
 	ctx := testContext(t)
 	_, pane := textWaitPane(ctx, t, "printf 'quiet\\n'; exec sleep 60", 0, 0, "")
@@ -407,7 +397,6 @@ func hookCounts(
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextRunsOnlyTheCaptureHook(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf 'hooked\\n'; exec sleep 60", 0, 0, "")
@@ -450,7 +439,6 @@ func TestWaitForTextRunsOnlyTheCaptureHook(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReadsOncePerHookAtEntry(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf 'hooked\\n'; exec sleep 60", 0, 0, "")
@@ -470,7 +458,6 @@ func TestWaitForTextReadsOncePerHookAtEntry(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextRejectsEmptyTextBeforeAnyCommand(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "exec sleep 60", 0, 0, "")
@@ -488,7 +475,6 @@ func TestWaitForTextRejectsEmptyTextBeforeAnyCommand(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextRefusesAConnectionBoundServer(t *testing.T) {
 	ctx := testContext(t)
 	server := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{})
@@ -517,7 +503,6 @@ func TestWaitForTextRefusesAConnectionBoundServer(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextReturnsTheDeadlineWhileAMatchingReadIsInFlight(t *testing.T) {
 	ctx := testContext(t)
 	server, pane := textWaitPane(ctx, t, "printf 'late-match\\n'; exec sleep 60", 0, 0, "")

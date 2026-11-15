@@ -2,10 +2,6 @@ package tmux
 
 import "testing"
 
-// libtmux:parity libtmux.pane.Pane.at_bottom
-// libtmux:parity libtmux.pane.Pane.at_left
-// libtmux:parity libtmux.pane.Pane.at_right
-// libtmux:parity libtmux.pane.Pane.at_top
 func TestPanePositionAccessorsConvertPresentFlagsAndPreserveAbsence(t *testing.T) {
 	t.Parallel()
 

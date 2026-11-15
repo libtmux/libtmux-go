@@ -13,8 +13,6 @@ import (
 // A caller that stops waiting on a command leaves its lane busy until tmux
 // finishes it. A later caller must take a lane that is free, not queue behind
 // that one.
-//
-//libtmux:real-tmux
 func TestConnectionLeavesABusyLaneOutUntilItIsFree(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -56,8 +54,6 @@ func TestConnectionLeavesABusyLaneOutUntilItIsFree(t *testing.T) {
 
 // tmux 3.6 moves the lanes of a destroyed session to another one. A command
 // that opens a client of its own must follow, not attach to the dead session.
-//
-//libtmux:real-tmux
 func TestConnectionBlockingCommandSurvivesItsSessionBeingKilled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -105,8 +101,6 @@ func TestConnectionBlockingCommandSurvivesItsSessionBeingKilled(t *testing.T) {
 
 // A canceled blocking command returns at its deadline. Closing the client it
 // ran on waits out the command in flight, and the caller must not wait for it.
-//
-//libtmux:real-tmux
 func TestConnectionBlockingCommandReturnsAtItsDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

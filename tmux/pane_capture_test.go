@@ -33,25 +33,6 @@ func TestCaptureLineAndBoundaryValues(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.capture_pane
-// libtmux:parity libtmux.pane.Pane.capture_pane#overload:0653b86df0b2
-// libtmux:parity libtmux.pane.Pane.capture_pane#overload:32a22433af94
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:alternate_screen:e91ecf2dceb1
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:end:303ee00bfa76
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:escape_non_printable:02b7db7578ad
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:escape_sequences:d40b84a4c7b9
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:hyperlinks:55a95c0433ba
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:join_wrapped:c9ba0c8a5e01
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:line_flags:06dd6ad5ce57
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:line_numbers:f20035bc8efc
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:mode_screen:b2ec82b89b59
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:pending:c991f82d2f68
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:preserve_trailing:f6e6a717b592
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:quiet:8573bc8befe4
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:start:e400519f5cf8
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:to_buffer:23593cb2f5d5
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:to_buffer:23593cb2f5d5:2
-// libtmux:parity libtmux.pane.Pane.capture_pane#parameter-branch:trim_trailing:5505ae431ffc
 func TestCapturePaneBuildsExactArguments(t *testing.T) {
 	t.Parallel()
 

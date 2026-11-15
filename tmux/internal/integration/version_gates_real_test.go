@@ -73,8 +73,6 @@ var gatedFlags = []gatedFlag{
 
 // Advertised flags and version gates must agree. A later gate needs a recorded
 // tmux failure because parsing a flag does not mean the server survives it.
-//
-//libtmux:real-tmux
 func TestNoFlagIsWithheldFromATmuxThatOffersIt(t *testing.T) {
 	t.Parallel()
 

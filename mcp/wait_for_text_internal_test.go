@@ -86,7 +86,6 @@ func TestPaneWaitSurfacesAnIndependentDeadline(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForTextTimeoutIncludesPaneSetup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -146,7 +145,6 @@ func TestWaitForTextTimeoutIncludesPaneSetup(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestInstanceCloseJoinsTimedOutPaneObservations(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

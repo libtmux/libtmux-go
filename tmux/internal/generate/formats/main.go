@@ -488,8 +488,7 @@ func parseVersion(raw string) (major, minor, patch, development, candidate int, 
 }
 
 // accessorName converts a tmux format token to its generated Go accessor name
-// using the module-wide naming convention, so generated accessors and the
-// parity omission guard derive the same spelling from the same rules.
+// using the module-wide naming convention.
 func accessorName(name string) string {
 	return goname.Exported(name)
 }

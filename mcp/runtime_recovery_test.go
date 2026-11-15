@@ -17,8 +17,6 @@ import (
 // the process itself keeps serving, and the next create_session starts a new
 // server rather than every future tool call reliving the same stale failure
 // forever.
-//
-//libtmux:real-tmux
 func TestMCPSurvivesItsTmuxServerExiting(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

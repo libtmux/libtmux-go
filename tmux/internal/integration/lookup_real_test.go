@@ -14,10 +14,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.pane.Pane.from_pane_id
-// libtmux:parity libtmux.window.Window.from_window_id
-//
-//libtmux:real-tmux
 func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	initial := mustRealSnapshot(t, server)
@@ -83,14 +79,6 @@ func TestLiveWindowAndPaneResolutionUsesTmuxCanonicalWinlink(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.session
-// libtmux:parity libtmux.pane.Pane.window
-// libtmux:parity libtmux.session.Session.active_pane
-// libtmux:parity libtmux.session.Session.active_window
-// libtmux:parity libtmux.window.Window.active_pane
-// libtmux:parity libtmux.window.Window.session
-//
-// libtmux:real-tmux
 func TestLiveRelationshipResolversAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	initial := mustRealSnapshot(t, server)
@@ -233,8 +221,6 @@ func realCanonicalWinlink(t *testing.T, server tmux.Server, target string) (tmux
 // those rows project have to be kept once: a window that appeared twice is as
 // ambiguous to a relation lookup as two different windows, and the pane comes
 // back unable to name where it lives.
-//
-//libtmux:real-tmux
 func TestResolvedPaneNavigatesFromAWindowOfSeveralPanes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -287,8 +273,6 @@ func TestResolvedPaneNavigatesFromAWindowOfSeveralPanes(t *testing.T) {
 }
 
 // A person names a session; only this package's records carry its id.
-//
-//libtmux:real-tmux
 func TestSessionByNameFindsAndReportsAbsence(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

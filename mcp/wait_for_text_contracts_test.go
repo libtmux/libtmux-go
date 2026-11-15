@@ -135,8 +135,6 @@ const tickLoop = "while :; do echo tick-output; sleep 0.1; done"
 // A match split across a wrapped row is found. The line is longer than the
 // pane is wide, and the command that prints it is built so that its own echo
 // does not contain the pattern.
-//
-//libtmux:real-tmux
 func TestWaitForTextMatchesAcrossAWrappedRow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -154,8 +152,6 @@ func TestWaitForTextMatchesAcrossAWrappedRow(t *testing.T) {
 }
 
 // A pane killed mid-wait ends the wait as paneDied with what it wrote first.
-//
-//libtmux:real-tmux
 func TestWaitForTextReportsAKilledPaneAsDied(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -178,8 +174,6 @@ func TestWaitForTextReportsAKilledPaneAsDied(t *testing.T) {
 // A pane whose program exited stays in its window under remain-on-exit, and
 // reading it raises no error. The wait still ends as paneDied, with the output
 // the program wrote first, instead of running to its timeout.
-//
-//libtmux:real-tmux
 func TestWaitForTextReportsAnExitedRemainedPaneAsDied(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -205,8 +199,6 @@ func TestWaitForTextReportsAnExitedRemainedPaneAsDied(t *testing.T) {
 }
 
 // A killed server answers like a dead pane, not with a transport error.
-//
-//libtmux:real-tmux
 func TestWaitForTextReportsAKilledServerAsDied(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -228,8 +220,6 @@ func TestWaitForTextReportsAKilledServerAsDied(t *testing.T) {
 // control client that is stopped keeps the server alive while the wait's own
 // stream ends. The answer must come from asking about the pane, and arrive
 // without waiting for the stopped client.
-//
-//libtmux:real-tmux
 func TestWaitForTextReportsDiedWhileAStoppedClientHoldsTheServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -272,8 +262,6 @@ func TestWaitForTextReportsDiedWhileAStoppedClientHoldsTheServer(t *testing.T) {
 
 // A control stream that ends while the pane lives is a lost stream, not a dead
 // pane. Only the control path has a stream to lose.
-//
-//libtmux:real-tmux
 func TestWaitForTextReportsADroppedStreamOnALivePane(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

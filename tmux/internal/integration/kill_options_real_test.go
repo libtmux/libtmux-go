@@ -12,14 +12,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.pane.Pane.kill
-// libtmux:parity libtmux.pane.Pane.kill#parameter-branch:all_except:6a69b96ddb2d
-// libtmux:parity libtmux.pane.Pane.kill#parameter-branch:all_except:6a69b96ddb2d:2
-// libtmux:parity libtmux.window.Window.kill
-// libtmux:parity libtmux.window.Window.kill#parameter-branch:all_except:6a69b96ddb2d
-// libtmux:parity libtmux.window.Window.kill#parameter-branch:all_except:6a69b96ddb2d:2
-//
-//libtmux:real-tmux
 func TestKillOthersAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -78,14 +70,6 @@ func killOptionsWindow(snapshot tmux.Snapshot, sessionID tmux.SessionID, windowI
 	return tmux.Window{}, false
 }
 
-// libtmux:parity libtmux.session.Session.__exit__
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:group:7704a4e4922f
-// libtmux:parity libtmux.session.Session.kill#version-branch:tmux-version:c6a18af85027
-// libtmux:parity libtmux.session.Session.kill#warning:8abad26b205f
-//
-// libtmux:parity libtmux.session.Session.kill
-//
-//libtmux:real-tmux
 func TestSessionKillGroupCompatibilityAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -137,11 +121,6 @@ func TestSessionKillGroupCompatibilityAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.session.Session.kill
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:all_except:6a69b96ddb2d
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:all_except:6a69b96ddb2d:2
-//
-//libtmux:real-tmux
 func TestSessionKillAllExceptAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -169,9 +148,6 @@ func TestSessionKillAllExceptAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.session.Session.kill#parameter-branch:clear:a18e02300191
-//
-//libtmux:real-tmux
 func TestSessionClearAlertsLeavesSessionAndCurrentWindowAliveAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -261,13 +237,6 @@ func killOptionsActivityFlag(t *testing.T, session tmux.Session, windowID tmux.W
 	return false
 }
 
-// libtmux:parity libtmux.server.Server.kill_session
-// libtmux:parity libtmux.session.Session.kill_window
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:3fc216416bbd
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:8f6d7a09cc34
-// libtmux:parity libtmux.session.Session.kill_window#parameter-branch:target_window:c12246bcb583
-//
-//libtmux:real-tmux
 func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -328,7 +297,6 @@ func TestTargetedSessionAndWindowKillsAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWindowKillOthersUsesLinkedReceiverSessionAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

@@ -18,7 +18,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestParseControlNotificationAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -76,7 +75,6 @@ func TestParseControlNotificationAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNotificationStreamZeroOptionsRetainsStructureWithoutPaneOutput(t *testing.T) {
 	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
 		FixedShell:     true,
@@ -154,7 +152,6 @@ func (r controlNotificationReader) Read(data []byte) (int, error) {
 	return r.control.Read(r.ctx, data)
 }
 
-//libtmux:real-tmux
 func TestNotificationStreamPauseAfterArmsTheServerHold(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -203,7 +200,6 @@ func TestNotificationStreamPauseAfterArmsTheServerHold(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNotificationStreamSubscribeReportsAFormatWhenItChanges(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -255,7 +251,6 @@ func TestNotificationStreamSubscribeReportsAFormatWhenItChanges(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNotificationStreamUnsubscribeStopsAName(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -285,8 +280,6 @@ func TestNotificationStreamUnsubscribeStopsAName(t *testing.T) {
 // BacklogBytes sizes the bound on what a stream holds while nobody reads: a
 // pane that prints well past it ends reads with the typed overflow error,
 // reporting the limit that was asked for.
-//
-//libtmux:real-tmux
 func TestNotificationStreamBacklogBytesBoundsWhatTheStreamHolds(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -352,8 +345,6 @@ func TestNotificationStreamBacklogBytesBoundsWhatTheStreamHolds(t *testing.T) {
 
 // One errors.Is(err, ErrControlClosed) covers a stream the caller closed and
 // one whose server went away.
-//
-//libtmux:real-tmux
 func TestNotificationStreamEndsMatchErrControlClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

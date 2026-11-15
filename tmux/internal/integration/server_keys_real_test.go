@@ -14,22 +14,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.bind_key
-// libtmux:parity libtmux.server.Server.bind_key#parameter-branch:key_table:d53f04d1b8ed
-// libtmux:parity libtmux.server.Server.bind_key#parameter-branch:note:f3fa07adb3fd
-// libtmux:parity libtmux.server.Server.bind_key#parameter-branch:repeat:f439cc0551df
-// libtmux:parity libtmux.server.Server.list_keys
-// libtmux:parity libtmux.server.Server.list_keys#parameter-branch:format_:b99004c71fa4
-// libtmux:parity libtmux.server.Server.list_keys#parameter-branch:key_table:d53f04d1b8ed
-// libtmux:parity libtmux.server.Server.list_keys#version-branch:tmux-version:157b9dba160f
-// libtmux:parity libtmux.server.Server.list_keys#warning:afabcd354447
-// libtmux:parity libtmux.server.Server.unbind_key
-// libtmux:parity libtmux.server.Server.unbind_key#parameter-branch:all_keys:74326c3756f4
-// libtmux:parity libtmux.server.Server.unbind_key#parameter-branch:key:c85749129f8e
-// libtmux:parity libtmux.server.Server.unbind_key#parameter-branch:key_table:d53f04d1b8ed
-// libtmux:parity libtmux.server.Server.unbind_key#parameter-branch:quiet:8573bc8befe4
-//
-//libtmux:real-tmux
 func TestBindListAndUnbindKeyAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -140,7 +124,6 @@ func TestBindListAndUnbindKeyAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestListKeysSingleBindingCompatibilityAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -173,7 +156,6 @@ func TestListKeysSingleBindingCompatibilityAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestBindEmptyNoOpCommandAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -222,8 +204,6 @@ func TestBindEmptyNoOpCommandAgainstRealTmux(t *testing.T) {
 // typed call reaches tmux at all ([tmux.ErrCommand]) rather than being
 // rejected before send, with the raw calls above supplying the wire-level
 // evidence for what tmux does with the guard.
-//
-//libtmux:real-tmux
 func TestKeyCommandsTreatLeadingDashKeyOrNameAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -295,15 +275,6 @@ func TestKeyCommandsTreatLeadingDashKeyOrNameAsPositionalAgainstRealTmux(t *test
 	})
 }
 
-// libtmux:parity libtmux.server.Server.list_clients
-// libtmux:parity libtmux.server.Server.list_commands
-// libtmux:parity libtmux.server.Server.list_commands#parameter-branch:command_name:a5ecee67e253
-// libtmux:parity libtmux.server.Server.show_messages
-// libtmux:parity libtmux.server.Server.show_messages#parameter-branch:jobs:674b7b889698
-// libtmux:parity libtmux.server.Server.show_messages#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.show_messages#parameter-branch:terminals:d731ae9a0080
-//
-//libtmux:real-tmux
 func TestServerListingsAndMessagesAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

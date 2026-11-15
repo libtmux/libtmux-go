@@ -11,7 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestRunShellCommandIgnoresInheritedShellState(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -56,8 +55,6 @@ func TestRunShellCommandIgnoresInheritedShellState(t *testing.T) {
 // A shell with no line editor draws its prompt after the echo of keys typed
 // before it was ready, so the wrapper starts on a row holding the prompt.
 // The output must not carry it.
-//
-//libtmux:real-tmux
 func TestRunShellCommandLeavesOutAPromptDrawnAfterTheKeys(t *testing.T) {
 	// A history limit of one line is full from the start, which sends the
 	// read through its recovery from a full history.

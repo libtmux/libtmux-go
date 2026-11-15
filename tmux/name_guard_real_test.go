@@ -13,8 +13,6 @@ import (
 // Exactly tmux 3.7 rejects a colon or period in a window name and mishandles
 // the command; the library refuses it there before any effect. Every other
 // release leaves the name to tmux.
-//
-//libtmux:real-tmux
 func TestExact37RefusesWindowNamesWithColonOrPeriod(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -87,8 +85,6 @@ func TestExact37RefusesWindowNamesWithColonOrPeriod(t *testing.T) {
 }
 
 // A control connection carries the same name guard as Server.Cmd.
-//
-//libtmux:real-tmux
 func TestExact37ConnectionCallRefusesNamesWithColonOrPeriod(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

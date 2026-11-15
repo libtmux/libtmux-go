@@ -8,10 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.clients
-// libtmux:parity libtmux.server.Server.panes
-// libtmux:parity libtmux.server.Server.sessions
-// libtmux:parity libtmux.server.Server.windows
 func TestServerHierarchyListsReportFailures(t *testing.T) {
 	t.Parallel()
 

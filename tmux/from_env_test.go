@@ -9,11 +9,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.from_env
-// libtmux:parity libtmux._internal.env.TMUX
-// libtmux:parity libtmux._internal.env.socket_path_from_env
-// libtmux:parity libtmux._internal.env.socket_path_from_env#parameter-branch:env:0b9565d05bf8
-// libtmux:parity libtmux._internal.env.socket_path_from_env#parameter-branch:env:536dade749bb
 func TestNewServerFromEnvRightSplitsCommaSocketWithoutExecution(t *testing.T) {
 	t.Parallel()
 
@@ -48,7 +43,6 @@ func TestNewServerFromEnvDoesNotValidateStalePIDOrSessionComponents(t *testing.T
 	}
 }
 
-// libtmux:parity libtmux._internal.env.resolve_env
 func TestNewServerFromEnvSnapshotsProcessEnvironmentOnce(t *testing.T) {
 	t.Parallel()
 
@@ -77,7 +71,6 @@ func TestNewServerFromEnvSnapshotsProcessEnvironmentOnce(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.env.resolve_env#parameter-branch:env:a03c3102158d
 func TestNewServerFromEnvOverridesOneProcessSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -193,9 +186,6 @@ func TestDiscoveryEnvironmentUsesPlatformNameSemantics(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.NotInsideTmux
-// libtmux:parity libtmux.exc.NotInsideTmux.__init__
-// libtmux:parity libtmux.exc.NotInsideTmux.__init__#parameter-branch:variable:8ec7f3be64dc
 func TestNewServerFromEnvRejectsMalformedValuesWithoutDisclosingThem(t *testing.T) {
 	t.Parallel()
 
@@ -233,9 +223,6 @@ func TestNewServerFromEnvRejectsMalformedValuesWithoutDisclosingThem(t *testing.
 	}
 }
 
-// libtmux:parity libtmux._internal.env.TMUX_PANE
-// libtmux:parity libtmux._internal.env.pane_id_from_env
-// libtmux:parity libtmux._internal.env.pane_id_from_env#parameter-branch:env:1437a3b4f272
 func TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure(t *testing.T) {
 	t.Parallel()
 
@@ -261,11 +248,6 @@ func TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure(t *test
 	}
 }
 
-// libtmux:parity libtmux.session.Session.from_env
-// libtmux:parity libtmux.session.Session.from_env#parameter-branch:env:496823e938f7
-// libtmux:parity libtmux.pane.Pane.from_env
-// libtmux:parity libtmux.window.Window.from_env
-// libtmux:parity libtmux.window.Window.from_env#parameter-branch:env:d6354f13d1ea
 func TestDiscoverEnvironmentHierarchyUsesOneTargetedListingAndConnectsParents(t *testing.T) {
 	t.Parallel()
 
@@ -415,7 +397,6 @@ func TestDiscoverEnvironmentHierarchySurfacesClosingProbeFailures(t *testing.T) 
 	}
 }
 
-// libtmux:parity libtmux._internal.env.pane_id_from_env#parameter-branch:env:22987a3707d3
 func TestPaneEnvironmentAcceptsAnyNonemptyPercentTargetAndLetsTmuxClassifyIt(t *testing.T) {
 	t.Parallel()
 

@@ -17,7 +17,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -164,7 +163,6 @@ func TestControlClientCommandsNotificationsAndReconnectAgainstRealTmux(t *testin
 	}
 }
 
-//libtmux:real-tmux
 func TestControlClientSurvivesItsStartupSession(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -199,7 +197,6 @@ func TestControlClientSurvivesItsStartupSession(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestControlClientReplyFenceAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -264,7 +261,6 @@ func TestControlClientReplyFenceAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -364,7 +360,6 @@ func TestControlClientCanceledCallDrainsBeforeReuseAgainstRealTmux(t *testing.T)
 	}
 }
 
-//libtmux:real-tmux
 func TestControlClientPreservesCommandArgumentBytesAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -406,7 +401,6 @@ func TestControlClientPreservesCommandArgumentBytesAgainstRealTmux(t *testing.T)
 	}
 }
 
-//libtmux:real-tmux
 func TestControlClientReconnectsAfterWaitWithoutLosingExitNotification(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -458,7 +452,6 @@ func TestControlClientReconnectsAfterWaitWithoutLosingExitNotification(t *testin
 	}
 }
 
-//libtmux:real-tmux
 func TestControlClientDemultiplexesPaneOutputAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

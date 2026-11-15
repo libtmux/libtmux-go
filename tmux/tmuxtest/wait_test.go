@@ -75,8 +75,6 @@ func TestWaitForPropagatesCanceledContextWithoutChecking(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.test.retry.retry_until
-// libtmux:parity libtmux.test.retry.retry_until#parameter-branch:fun:7bb9650c5445
 func TestWaitForRetriesUntilTrueWithCallerContext(t *testing.T) {
 	t.Parallel()
 
@@ -98,11 +96,6 @@ func TestWaitForRetriesUntilTrueWithCallerContext(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.test.constants.RETRY_INTERVAL_SECONDS
-// libtmux:parity libtmux.test.constants.RETRY_TIMEOUT_SECONDS
-// libtmux:parity libtmux.test.retry.retry_until#parameter-branch:raises:3ae9164dc384
-// libtmux:parity libtmux.test.retry.retry_until#parameter-branch:seconds:944b973d96b8
-// libtmux:parity libtmux.exc.WaitTimeout
 func TestWaitForReturnsDeadlineWhileConditionRemainsFalse(t *testing.T) {
 	t.Parallel()
 

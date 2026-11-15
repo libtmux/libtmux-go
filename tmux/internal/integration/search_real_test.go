@@ -12,21 +12,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.search_panes
-// libtmux:parity libtmux.server.Server.search_sessions
-// libtmux:parity libtmux.server.Server.search_windows
-// libtmux:parity libtmux.neo.fetch_objs#parameter-branch:filter:dad5b2f428ff
-// libtmux:parity libtmux.session.Session.panes
-// libtmux:parity libtmux.session.Session.search_panes
-// libtmux:parity libtmux.session.Session.search_windows
-// libtmux:parity libtmux.session.Session.windows
-//
-// libtmux:parity libtmux.window.Window.panes
-// libtmux:parity libtmux.window.Window.search_panes
-//
-// libtmux:parity libtmux.neo.fetch_objs#parameter-branch:list_extra_args:36ea1fcdc1b4
-//
-//libtmux:real-tmux
 func TestRawSearchMethodsFilterRealTmuxListings(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	mustRealCommand(t, server, "new-window", "-d", "-t", "work", "-n", "needle")

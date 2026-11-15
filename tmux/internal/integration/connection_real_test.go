@@ -30,7 +30,6 @@ func requireNoDetachOnDestroy(t *testing.T, server tmux.Server) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNewSessionConnectionQualifiesColdDaemonBeforeAttach(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -113,7 +112,6 @@ exec "$LIBTMUX_CONNECTION_REAL_TMUX" "$@"
 	}
 }
 
-//libtmux:real-tmux
 func TestNewSessionConnectionRetainsGuardedCreator(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -158,7 +156,6 @@ func TestNewSessionConnectionRetainsGuardedCreator(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestConnectionOwnsTerminalControlLanes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -208,7 +205,6 @@ func TestConnectionOwnsTerminalControlLanes(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestConnectionSurvivesAttachedSessionDestruction(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -243,7 +239,6 @@ func TestConnectionSurvivesAttachedSessionDestruction(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNewSessionConnectionSurvivesCreatedSessionDestruction(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -291,7 +286,6 @@ func TestNewSessionConnectionSurvivesCreatedSessionDestruction(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -349,7 +343,6 @@ func TestConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNewSessionConnectionAtomicallyRejectsDaemonReplacement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -443,7 +436,6 @@ func awaitClientBeyond(ctx context.Context, t *testing.T, server tmux.Server, la
 	}
 }
 
-//libtmux:real-tmux
 func TestConnectionServesCommandsAfterACanceledWaitFor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -467,8 +459,6 @@ func TestConnectionServesCommandsAfterACanceledWaitFor(t *testing.T) {
 // A foreground run-shell or if-shell holds its client until the shell command
 // finishes, and tmux cannot cancel it once sent. Canceling one must leave the
 // connection's only lane free for the next command.
-//
-//libtmux:real-tmux
 func TestConnectionServesCommandsAfterACanceledShellCommand(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -518,7 +508,6 @@ func TestConnectionServesCommandsAfterACanceledShellCommand(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestConnectionCloseEndsAParkedWaitFor(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -543,7 +532,6 @@ func TestConnectionCloseEndsAParkedWaitFor(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSessionRunWorksOnAConnection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -571,7 +559,6 @@ func TestSessionRunWorksOnAConnection(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunningKillWorksWhileWaitIsParkedOnOneLane(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -608,8 +595,6 @@ func TestRunningKillWorksWhileWaitIsParkedOnOneLane(t *testing.T) {
 // tmux ends a waiting client with success when the server exits, so a bound
 // server must learn from outside its own lanes, which die with the server,
 // that the server is gone.
-//
-//libtmux:real-tmux
 func TestConnectionBlockingCommandReportsAServerKilledUnderIt(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -665,8 +650,6 @@ func TestConnectionBlockingCommandReportsAServerKilledUnderIt(t *testing.T) {
 
 // A connection closed under a parked call says nothing about the server, which
 // is healthy, so the call must not read as a server that exited.
-//
-//libtmux:real-tmux
 func TestConnectionClosedUnderABlockingCommandIsNotAGoneServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -694,8 +677,6 @@ func TestConnectionClosedUnderABlockingCommandIsNotAGoneServer(t *testing.T) {
 // Once the connection's own session is gone, a blocking call must still
 // return at its deadline with that deadline as the error, and must attach to
 // the session its lanes moved to rather than try the dead one first.
-//
-//libtmux:real-tmux
 func TestConnectionBlockingCommandAfterItsSessionDied(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -737,8 +718,6 @@ func TestConnectionBlockingCommandAfterItsSessionDied(t *testing.T) {
 // read as the result and never as protocol. Lines that imitate guards are
 // the case that matters: they must come back as text and leave the lane
 // usable.
-//
-//libtmux:real-tmux
 func TestConnectionRunShellReturnsItsOutput(t *testing.T) {
 	for _, test := range []struct {
 		name    string
@@ -795,8 +774,6 @@ func TestConnectionRunShellReturnsItsOutput(t *testing.T) {
 
 // A branch that fails fails like it does on an unbound server, instead of
 // breaking the control stream.
-//
-//libtmux:real-tmux
 func TestConnectionIfShellReportsAFailedBranch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

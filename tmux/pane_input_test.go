@@ -180,19 +180,6 @@ func TestSendKeysTerminatesOptionsBeforeOperands(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.send_keys
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:cmd:a9656802b58e
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:copy_mode_cmd,enter:ee0d792d6bbf
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:copy_mode_cmd:9f129ac517ed
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:expand_formats:0d7cebbeb84e
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:hex_keys:4cb2f6b6e23a
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:key_name:7147ea786c39
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:literal:399069e0cc76
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:repeat,reset:07cb45e98f89
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:repeat:9bfe1e965020
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:reset:503246936ad1
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:suppress_history:b5886e41a787
-// libtmux:parity libtmux.pane.Pane.send_keys#parameter-branch:target_client:9bd26a6f1edf
 func TestSendKeysBuildsFlagsInPythonOrder(t *testing.T) {
 	t.Parallel()
 
@@ -327,10 +314,6 @@ func TestSendKeysRejectsInvalidRequestsBeforeExecution(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.send_keys#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.send_keys#version-branch:tmux-version:4ec38997c7f9:2
-// libtmux:parity libtmux.pane.Pane.send_keys#warning:095c3f7fa507
-// libtmux:parity libtmux.pane.Pane.send_keys#warning:d7989c95c9e0
 func TestSendKeysVersionGatesClientAndKeyName(t *testing.T) {
 	t.Parallel()
 
@@ -508,8 +491,6 @@ func TestSendKeysSurfacesCompletedAndTransportFailures(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.pane.Pane.clear
-// libtmux:parity libtmux.pane.Pane.enter
 func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 	t.Parallel()
 
@@ -552,8 +533,6 @@ func TestEnterAndClearUseSendKeysRawSemantics(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.pane.Pane.send_prefix
-// libtmux:parity libtmux.pane.Pane.send_prefix#parameter-branch:secondary:b3326a61afb3
 func TestSendPrefixBuildsExactArgumentsAndRejectsUnknownKey(t *testing.T) {
 	t.Parallel()
 
@@ -657,10 +636,6 @@ func TestDocumentedPaneInputFailuresRedactPayloads(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.clear_history
-// libtmux:parity libtmux.pane.Pane.clear_history#parameter-branch:reset_hyperlinks:d6bb66101896
-// libtmux:parity libtmux.pane.Pane.clear_history#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.clear_history#warning:ce7f518adef8
 func TestClearHistoryVersionGatesHyperlinkReset(t *testing.T) {
 	t.Parallel()
 
@@ -712,7 +687,6 @@ func TestClearHistoryVersionGatesHyperlinkReset(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.reset
 func TestResetUsesOneTrustedTwoTargetCommandList(t *testing.T) {
 	t.Parallel()
 

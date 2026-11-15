@@ -78,9 +78,6 @@ repository now, and a module boundary is what keeps that true: an example
 reaching for a dependency cannot put it in the tmux module's `go.mod`, which is
 the module whose claim is that it has none.
 
-The parity manifest lives in `tmux/internal/parity` because `//go:embed` cannot
-reach outside the directory of the package that embeds it.
-
 ## Package shape
 
 | Package | Responsibility |
@@ -104,8 +101,8 @@ generated filters name all four. Splitting along those types would require a
 shared package holding most of the model anyway, or interfaces standing in for
 concrete values the compatibility contract keeps concrete. Navigability is
 therefore a naming and view-type problem rather than a packaging one. Each
-record carries the accessors for its own kind, which is the surface the parity
-manifest binds, named without the scope prefix tmux repeats in every field.
+record carries the accessors for its own kind, named without the scope prefix
+tmux repeats in every field.
 `Formats` is the second view, and the only one where a field from another
 scope appears: a pane's `Formats` answers `SessionName`, which `Pane` itself
 does not.
@@ -200,9 +197,7 @@ retain their scope prefix. The remaining words are capitalized by
 `lower_snake_case`-to-Go convention: known initialisms take their fully
 capitalized form and unseparated compounds are split, so `pane_id` becomes
 `Pane.ID`, `client_utf8` becomes `Client.UTF8`, and `client_readonly` becomes
-`Client.ReadOnly`. Generated accessors and the parity omission guard both call
-it, so a name the generator produces and a name the guard reserves cannot
-diverge. The format specification records explicit names for
+`Client.ReadOnly`. The format specification records explicit names for
 semantic collisions, including count formats that would otherwise collide
 with hierarchy traversal. Generated comments begin with the Go identifier and
 include the exact `#{tmux_format}` spelling, scope, and version floor. No
@@ -293,15 +288,6 @@ Each entry is a lexical accident rather than a category: a verb that cannot
 stand alone, a collision with an established Go name, and a command name that is
 not verb-plus-object. A command that hits one of these joins the table with its
 reason; the procedure itself does not acquire a clause.
-
-Part of this surface is guarded twice. The parity omission guard converts each
-omitted Python name with `internal/goname` and reserves that spelling, which
-already rejects `Pane.ResizePane`, `Pane.SelectPane`, `Server.KillServer`,
-`Session.AttachSession`, `Session.KillSession`, `Window.KillWindow`,
-`Window.SelectWindow`, and `Window.SplitWindow`. That coverage is a side effect
-of Python's deprecations rather than a policy, so it says nothing about a
-command with no Python history, such as tmux 3.7's `new-pane`. The receiver-noun
-guard is what covers those.
 
 ## Operation parameters
 

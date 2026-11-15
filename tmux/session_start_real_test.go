@@ -30,7 +30,6 @@ func oneSession(ctx context.Context, t *testing.T, server tmux.Server) tmux.Sess
 	return sessions[0]
 }
 
-//libtmux:real-tmux
 func TestCommandStartWaitReportsStatus(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -81,7 +80,6 @@ func matchingLines(lines, want []string) []string {
 	return matched
 }
 
-//libtmux:real-tmux
 func TestCommandStreamsWhileRunning(t *testing.T) {
 	// This test requires a control client. Pane.OpenObservation opens one
 	// (through Server.OpenControl) regardless of how the pane's Session was
@@ -238,7 +236,6 @@ func streamUntilWaitCompletes(
 	return result, lines, waitErr
 }
 
-//libtmux:real-tmux
 func TestCommandStreamUntilWaitCompletes(t *testing.T) {
 	// Both commands below sleep briefly after their last echo instead of
 	// exiting right on top of it: a line printed with nothing separating it
@@ -330,7 +327,6 @@ func reportsDeadSignal(ctx context.Context, t *testing.T, server tmux.Server) bo
 	return version.AtLeast(minimum)
 }
 
-//libtmux:real-tmux
 func TestCommandKillStopsIt(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -364,7 +360,6 @@ func TestCommandKillStopsIt(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandKillOnFinishedCommandIsANoOp(t *testing.T) {
 	// Kill resolves its target through the pane, at the moment tmux runs the
 	// signal, rather than trusting a process id read earlier: a pane already
@@ -387,7 +382,6 @@ func TestCommandKillOnFinishedCommandIsANoOp(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandWaitIsSafeRepeatedAndConcurrent(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -426,7 +420,6 @@ func TestCommandWaitIsSafeRepeatedAndConcurrent(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandWaitRetriesAfterContextCancellation(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -456,7 +449,6 @@ func TestCommandWaitRetriesAfterContextCancellation(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSessionRunUnchanged(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -536,7 +528,6 @@ func settleGoroutines(baseline int) int {
 	return last
 }
 
-//libtmux:real-tmux
 func TestCommandLeavesNoGoroutines(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -606,7 +597,6 @@ func (b *syncedBuffer) Lines() []string {
 	return slices.Clone(b.lines)
 }
 
-//libtmux:real-tmux
 func TestCommandStreamToCopiesOutputAndTheOutcome(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -649,7 +639,6 @@ func TestCommandStreamToCopiesOutputAndTheOutcome(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandStreamToKillsWhileStreaming(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -685,7 +674,6 @@ func TestCommandStreamToKillsWhileStreaming(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandStreamToRejectsANilDestination(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -705,7 +693,6 @@ func TestCommandStreamToRejectsANilDestination(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandWaitEndsWhenTheSignalIsLost(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -760,7 +747,6 @@ func (w *blockingWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-//libtmux:real-tmux
 func TestCommandStreamToDoesNotHangOnAStuckDestination(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)

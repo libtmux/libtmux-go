@@ -9,11 +9,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.pane.Pane.respawn
-// libtmux:parity libtmux.pane.Pane.respawn#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.pane.Pane.respawn#parameter-branch:kill:c73eb1e87efe
-// libtmux:parity libtmux.pane.Pane.respawn#parameter-branch:shell:613b2dd997a5
-// libtmux:parity libtmux.pane.Pane.respawn#parameter-branch:start_directory:d91549582997
 func TestPaneRespawnUsesExactLinkedTargetAndReturnsRefreshedPane(t *testing.T) {
 	t.Parallel()
 
@@ -73,13 +68,6 @@ func TestPaneRespawnReturnsReceiverWhenRefreshFails(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.paste_buffer
-// libtmux:parity libtmux.pane.Pane.paste_buffer#parameter-branch:bracket:f0ca1fd9e751
-// libtmux:parity libtmux.pane.Pane.paste_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.pane.Pane.paste_buffer#parameter-branch:delete_after:c39a94610567
-// libtmux:parity libtmux.pane.Pane.paste_buffer#parameter-branch:linefeed_separator:e71619e032d9
-// libtmux:parity libtmux.pane.Pane.paste_buffer#parameter-branch:no_vis:5a188285cf0c
-// libtmux:parity libtmux.pane.Pane.paste_buffer#parameter-branch:separator:70ecb771763a
 func TestPasteBufferBuildsPythonOrderedArguments(t *testing.T) {
 	t.Parallel()
 
@@ -147,8 +135,6 @@ func TestPasteBufferPreservesNilAndEmptyValues(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.paste_buffer#version-branch:tmux-version:c6a18af85027
-// libtmux:parity libtmux.pane.Pane.paste_buffer#warning:7e6d34b02246
 func TestPasteBufferVersionGatesNoVis(t *testing.T) {
 	t.Parallel()
 
@@ -333,11 +319,6 @@ func TestPasteBufferUsesPythonCompletedErrorPolicy(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.pipe
-// libtmux:parity libtmux.pane.Pane.pipe#parameter-branch:command:581de879aee9
-// libtmux:parity libtmux.pane.Pane.pipe#parameter-branch:input_only:09d5057c767b
-// libtmux:parity libtmux.pane.Pane.pipe#parameter-branch:output_only:3a41f8d69dcf
-// libtmux:parity libtmux.pane.Pane.pipe#parameter-branch:toggle:fecb07ce0a7c
 func TestPipeBuildsPythonOrderedArgumentsAndRedactsCompletedErrors(t *testing.T) {
 	t.Parallel()
 

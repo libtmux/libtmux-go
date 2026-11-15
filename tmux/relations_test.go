@@ -7,14 +7,6 @@ import (
 	"testing"
 )
 
-// libtmux:parity libtmux.session.Session.active_pane
-// libtmux:parity libtmux.session.Session.active_window
-// libtmux:parity libtmux.exc.NoActiveWindow
-// libtmux:parity libtmux.exc.NoActiveWindow.__init__
-// libtmux:parity libtmux.exc.NoWindowsExist
-// libtmux:parity libtmux.exc.NoWindowsExist.__init__
-// libtmux:parity libtmux.window.Window.active_pane
-// libtmux:parity libtmux.window.Window.linked_sessions
 func TestSnapshotActiveRelationsAndLinkedSessions(t *testing.T) {
 	t.Parallel()
 
@@ -75,12 +67,6 @@ func TestZeroModelRelationsReturnCommaOKFalseAndFreshEmpty(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.session
-// libtmux:parity libtmux.pane.Pane.window
-// libtmux:parity libtmux.session.Session.active_pane
-// libtmux:parity libtmux.session.Session.active_window
-// libtmux:parity libtmux.window.Window.active_pane
-// libtmux:parity libtmux.window.Window.session
 func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 	t.Parallel()
 
@@ -178,10 +164,6 @@ func TestLiveRelationshipResolversHydrateExactGraph(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.exc.MultipleActiveWindows
-// libtmux:parity libtmux.exc.MultipleActiveWindows.__init__
-// libtmux:parity libtmux.exc.NoActiveWindow
-// libtmux:parity libtmux.exc.NoActiveWindow.__init__
 func TestLiveRelationshipResolversPreserveCardinalityAndOptionalPanes(t *testing.T) {
 	t.Parallel()
 

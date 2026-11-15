@@ -15,8 +15,6 @@ import (
 
 // The version check runs before every command on an unbound handle, so a probe that
 // fires a user's hook has effects before any refusal.
-//
-//libtmux:real-tmux
 func TestVersionCheckFiresNoUserHooks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -90,8 +88,6 @@ func TestVersionCheckFiresNoUserHooks(t *testing.T) {
 
 // The probe reads the socket path back through tmux's own parser, so bytes the
 // parser treats specially must survive on every release.
-//
-//libtmux:real-tmux
 func TestVersionCheckRecoversUnusualSocketPaths(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -123,8 +119,6 @@ func TestVersionCheckRecoversUnusualSocketPaths(t *testing.T) {
 // An unbound handle reuses its checked daemon, so a daemon that is replaced or
 // gone must be noticed by the fence and the next command must still start or
 // find the new one.
-//
-//libtmux:real-tmux
 func TestVersionCheckCacheSurvivesDaemonReplacement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

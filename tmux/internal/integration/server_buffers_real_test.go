@@ -16,7 +16,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestShowBufferBytesPreservesRealTmuxData(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -52,23 +51,6 @@ func TestShowBufferBytesPreservesRealTmuxData(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.delete_buffer
-// libtmux:parity libtmux.server.Server.delete_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.list_buffers
-// libtmux:parity libtmux.server.Server.list_buffers#parameter-branch:filter:dad5b2f428ff
-// libtmux:parity libtmux.server.Server.list_buffers#parameter-branch:format_string:7284ef554e76
-// libtmux:parity libtmux.server.Server.load_buffer
-// libtmux:parity libtmux.server.Server.load_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.save_buffer
-// libtmux:parity libtmux.server.Server.save_buffer#parameter-branch:append:03665a1a84bd
-// libtmux:parity libtmux.server.Server.save_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.set_buffer
-// libtmux:parity libtmux.server.Server.set_buffer#parameter-branch:append:03665a1a84bd
-// libtmux:parity libtmux.server.Server.set_buffer#parameter-branch:buffer_name:5c7057988ea3
-// libtmux:parity libtmux.server.Server.show_buffer
-// libtmux:parity libtmux.server.Server.show_buffer#parameter-branch:buffer_name:5c7057988ea3
-//
-//libtmux:real-tmux
 func TestServerBuffersAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -153,7 +135,6 @@ func TestServerBuffersAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestServerBuffersPreserveTerminalSemicolonsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -192,7 +173,6 @@ func TestServerBuffersPreserveTerminalSemicolonsAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestServerBufferPathsPreserveLexicalSymlinkComponentsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -15,8 +15,6 @@ import (
 
 // tmux refuses a command larger than one client message, and says why. The
 // reason must survive the redaction that hides what was typed.
-//
-//libtmux:real-tmux
 func TestAnOversizedSendSaysTheCommandIsTooLong(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -34,8 +32,6 @@ func TestAnOversizedSendSaysTheCommandIsTooLong(t *testing.T) {
 
 // A Writer types whatever it is given, however large, so io.Copy works. Text
 // outside printable ASCII costs more of tmux's 16 KiB per byte than ASCII.
-//
-//libtmux:real-tmux
 func TestPaneWriterTypesAnyAmountWhole(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

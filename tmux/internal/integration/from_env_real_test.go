@@ -12,14 +12,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.session.Session.from_env
-// libtmux:parity libtmux.session.Session.from_env#parameter-branch:env:496823e938f7
-//
-// libtmux:parity libtmux.pane.Pane.from_env
-// libtmux:parity libtmux.window.Window.from_env
-// libtmux:parity libtmux.window.Window.from_env#parameter-branch:env:d6354f13d1ea
-//
-//libtmux:real-tmux
 func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
@@ -62,7 +54,6 @@ func TestFromEnvDiscoversRealPaneAndContainingHierarchy(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneFromEnvReportsMissingPaneOnLiveServer(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	result := mustRealCommand(t, server, "split-window", "-d", "-P", "-F", "#{pane_id}")

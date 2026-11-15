@@ -46,7 +46,6 @@ type surfaceStep struct {
 	mayFail bool
 }
 
-//libtmux:real-tmux
 func TestEveryToolAnswersTheSchemaItPublishes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -137,8 +136,6 @@ func TestEveryToolAnswersTheSchemaItPublishes(t *testing.T) {
 // the option alone. libtmux-go refuses that write before tmux runs, which is
 // what makes it loud here; this reads the value back through the surface so a
 // setter that stops taking effect fails even if the refusal is ever relaxed.
-//
-//libtmux:real-tmux
 func TestSettersChangeWhatTheyReport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -449,8 +446,6 @@ func surfaceSweep() []surfaceStep {
 // A mistyped filter or argument name must say what was wrong and what would
 // have been right, because the caller is an agent that cannot see the schema
 // it already read.
-//
-//libtmux:real-tmux
 func TestMistakesNameTheirRemedy(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -553,8 +548,6 @@ func TestMistakesNameTheirRemedy(t *testing.T) {
 
 // A tool the server was not started with is unknown to the client, which then
 // has no way to learn that a setting would grant it.
-//
-//libtmux:real-tmux
 func TestAnUngrantedToolNamesItsToolset(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -584,8 +577,6 @@ func TestAnUngrantedToolNamesItsToolset(t *testing.T) {
 
 // A call refused for a blank required id is still a call, and the audit
 // record must show it as refused.
-//
-//libtmux:real-tmux
 func TestABlankIDRefusalIsAudited(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

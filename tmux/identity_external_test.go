@@ -62,12 +62,6 @@ func TestMaterializedIdentityFieldsArePrivate(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.neo.Obj.client_name
-// libtmux:parity libtmux.neo.Obj.pane_id
-// libtmux:parity libtmux.neo.Obj.pane_index
-// libtmux:parity libtmux.neo.Obj.session_id
-// libtmux:parity libtmux.neo.Obj.window_id
-// libtmux:parity libtmux.neo.Obj.window_index
 func TestMaterializedIdentityMethodSignaturesCompile(t *testing.T) {
 	t.Parallel()
 

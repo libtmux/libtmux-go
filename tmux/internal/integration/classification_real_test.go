@@ -17,8 +17,6 @@ import (
 // so the tables have to be checked against whatever tmux is running rather
 // than against a fixture, which is what the compatibility matrix makes this
 // run on every supported release.
-//
-//libtmux:real-tmux
 func TestTmuxsOwnRefusalsStayClassified(t *testing.T) {
 	t.Parallel()
 

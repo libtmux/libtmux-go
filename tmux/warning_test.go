@@ -11,15 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:03c1f413095c
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:0c19eb697b50
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:2922a48ac870
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:2ec07ea00289
-// libtmux:parity libtmux.pane.Pane.capture_pane#warning:4aee8ceaa034
-// libtmux:parity libtmux.hooks.HooksMixin.run_hook#warning:21a25a5f2e9b
-// libtmux:parity libtmux.hooks.HooksMixin.set_hook#warning:21a25a5f2e9b
-// libtmux:parity libtmux.hooks.HooksMixin.show_hooks#warning:21a25a5f2e9b
-// libtmux:parity libtmux.hooks.HooksMixin.unset_hook#warning:21a25a5f2e9b
 func TestCapturePaneWarningsAreConcreteAndOrdered(t *testing.T) {
 	t.Parallel()
 
@@ -64,11 +55,6 @@ func TestCapturePaneWarningsAreConcreteAndOrdered(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:1cded5d69f99
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:4ec38997c7f9
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:c6a18af85027
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:c6a18af85027:2
-// libtmux:parity libtmux.pane.Pane.capture_pane#version-branch:tmux-version:c6a18af85027:3
 func TestCapturePaneVersionGateBoundaries(t *testing.T) {
 	t.Parallel()
 

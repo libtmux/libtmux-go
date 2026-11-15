@@ -6,8 +6,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// libtmux:parity libtmux#export:__version__
-// libtmux:parity libtmux.__about__.__version__
 func TestPackageBuildMetadataSurfaceCompiles(t *testing.T) {
 	t.Parallel()
 

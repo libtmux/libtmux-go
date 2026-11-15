@@ -9,26 +9,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.pane.Pane.display_popup
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:border_lines:d9be2600ac4e
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:border_style:4d3b7eb6c12c
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:close_existing:b874c97fbb98
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:close_on_any_key:512abb2889cb
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:close_on_exit,close_on_success:7fe7f6d507f5
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:close_on_exit:8ae43bb440be
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:close_on_success:ba40729359dc
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:command:581de879aee9
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:height:584748e889a5
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:no_border:f3385c3cc820
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:no_keys:5ad750b56292
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:start_directory:d91549582997
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:style:2fb8c408bf6c
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:title:a849ce4d4991
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:width:c4a3db243018
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:x:c2891f2208b1
-// libtmux:parity libtmux.pane.Pane.display_popup#parameter-branch:y:0cf048966732
 func TestDisplayPopupBuildsPythonFlagOrderAndExactTarget(t *testing.T) {
 	t.Parallel()
 
@@ -78,22 +58,6 @@ func TestDisplayPopupBuildsPythonFlagOrderAndExactTarget(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:1cded5d69f99
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:1cded5d69f99:2
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:4e983827f5ca
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:4e983827f5ca:2
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:4e983827f5ca:3
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:4e983827f5ca:4
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:4e983827f5ca:5
-// libtmux:parity libtmux.pane.Pane.display_popup#version-branch:tmux-version:4e983827f5ca:6
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:02db17883dc3
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:04e24fc19aae
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:435d237695c4
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:7203e98175ed
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:8ae1ebc29718
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:b5ab51d893a0
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:c0c571ede24a
-// libtmux:parity libtmux.pane.Pane.display_popup#warning:dd8c2a6933f5
 func TestDisplayPopupWarnsAndOmitsUnsupportedFields(t *testing.T) {
 	t.Parallel()
 

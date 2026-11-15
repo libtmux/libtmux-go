@@ -205,7 +205,6 @@ func TestCallerIdentityRetriesTmuxFailure(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCallerIdentityCachesSuccessfulEmptyDiscovery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

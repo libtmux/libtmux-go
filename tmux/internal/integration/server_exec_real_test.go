@@ -17,23 +17,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.run_shell
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:args:fd422ab3a1ca
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:as_tmux_command:0fe82009cc1e
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:background:af1c44728d8a
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:background:af1c44728d8a:2
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:cwd:c8f5f1bebe8f
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:delay:0b3ab3dbe007
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:show_stderr:77ae01eb137f
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.run_shell#version-branch:tmux-version:157b9dba160f
-// libtmux:parity libtmux.server.Server.run_shell#version-branch:tmux-version:161023f2e486
-// libtmux:parity libtmux.server.Server.run_shell#version-branch:tmux-version:5bb2ac269d05
-// libtmux:parity libtmux.server.Server.run_shell#warning:39bcbdbb8388
-// libtmux:parity libtmux.server.Server.run_shell#warning:78d80521a5af
-// libtmux:parity libtmux.server.Server.run_shell#warning:9349ea8de11f
-//
-//libtmux:real-tmux
 func TestRunShellAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -105,7 +88,6 @@ func TestRunShellAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunShellExitSevenRemainsCompletedOutput(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -134,7 +116,6 @@ func TestRunShellExitSevenRemainsCompletedOutput(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCommandKillDoesNotWaitForShellExit(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -200,12 +181,6 @@ case "$*" in *'kill -s KILL --'*) ;; *) exec /bin/sh "$@" ;; esac
 	}
 }
 
-// libtmux:parity libtmux.server.Server.wait_for
-// libtmux:parity libtmux.server.Server.wait_for#parameter-branch:lock:92e800fe2c02
-// libtmux:parity libtmux.server.Server.wait_for#parameter-branch:set_flag:6fd02ea1aab4
-// libtmux:parity libtmux.server.Server.wait_for#parameter-branch:unlock:8d2b1171c459
-//
-//libtmux:real-tmux
 func TestWaitForSignalLockUnlockAndCancellation(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 
@@ -263,16 +238,6 @@ func TestWaitForSignalLockUnlockAndCancellation(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.server.Server.if_shell
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:background:af1c44728d8a
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:else_command:bef5b34f0329
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.source_file
-// libtmux:parity libtmux.server.Server.source_file#parameter-branch:parse_only:656bfbd1a466
-// libtmux:parity libtmux.server.Server.source_file#parameter-branch:quiet:8573bc8befe4
-// libtmux:parity libtmux.server.Server.source_file#parameter-branch:verbose:414278ee0d55
-//
-//libtmux:real-tmux
 func TestIfShellAndSourceFileAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -337,7 +302,6 @@ func TestIfShellAndSourceFileAgainstRealTmux(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSourceFilePreservesTerminalSemicolonPathAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -378,8 +342,6 @@ func TestSourceFilePreservesTerminalSemicolonPathAgainstRealTmux(t *testing.T) {
 // gets whether the job's message came back or was captured by a pane - while
 // the unguarded control above always fails before any job exists. The output
 // text itself is checked only from tmux 3.5 onward, where it is delivered.
-//
-//libtmux:real-tmux
 func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -433,8 +395,6 @@ func TestRunShellTreatsLeadingDashCommandAsPositionalAgainstRealTmux(t *testing.
 // tmux 3.2a answers an unrecognised name with a clean, empty success, while
 // 3.3 and later answer it with "invalid option: <name>" and a nonzero exit.
 // Both leave Stdout empty, which is the one thing checked here.
-//
-//libtmux:real-tmux
 func TestIfShellTreatsLeadingDashShellCommandAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -474,8 +434,6 @@ func TestIfShellTreatsLeadingDashShellCommandAsPositionalAgainstRealTmux(t *test
 // wait-for "--" guard: a channel name is a bare positional argument on every
 // mode, so an unguarded "-S -chan" is parsed as two flag clusters rather than
 // a signal and its channel.
-//
-//libtmux:real-tmux
 func TestWaitForTreatsLeadingDashChannelAsPositionalAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

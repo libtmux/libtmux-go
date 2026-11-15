@@ -14,7 +14,6 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-//libtmux:real-tmux
 func TestPaneInputRefusesAnAttendedPane(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -59,7 +58,6 @@ func TestPaneInputRefusesAnAttendedPane(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestRunCommandRechecksClientAttentionAtDispatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -127,7 +125,6 @@ func attachViewingClient(ctx context.Context, t *testing.T, target tmux.Server) 
 	waitForMCPAttachedClient(ctx, t, target, process)
 }
 
-//libtmux:real-tmux
 func TestAttendedInputIsDeliveredOnlyWhenTheOperatorAllowsIt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -193,8 +190,6 @@ func TestAttendedInputIsDeliveredOnlyWhenTheOperatorAllowsIt(t *testing.T) {
 
 // The setting lifts the attended refusal and nothing else: each pane state
 // that refuses input still refuses it while a client is viewing the pane.
-//
-//libtmux:real-tmux
 func TestAllowedAttendedInputKeepsTheOtherRefusals(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

@@ -70,25 +70,6 @@ func TestSnapshotDecodeErrorRecordIsOneBased(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.formatter_prefix
-// libtmux:parity libtmux.common.PaneDict
-// libtmux:parity libtmux.common.SessionDict
-// libtmux:parity libtmux.common.WindowDict
-// libtmux:parity libtmux.pane.Pane.session
-// libtmux:parity libtmux.pane.Pane.window
-// libtmux:parity libtmux.window.Window.session
-// libtmux:parity libtmux.neo.Obj
-// libtmux:parity libtmux.neo.Obj.client_name
-// libtmux:parity libtmux.neo.Obj.pane_id
-// libtmux:parity libtmux.neo.Obj.pane_index
-// libtmux:parity libtmux.neo.Obj.server
-// libtmux:parity libtmux.neo.Obj.session_id
-// libtmux:parity libtmux.neo.Obj.window_id
-// libtmux:parity libtmux.neo.Obj.window_index
-// libtmux:parity libtmux.neo.OutputRaw
-// libtmux:parity libtmux.neo.OutputsRaw
-// libtmux:parity libtmux.neo.parse_output
-// libtmux:parity libtmux.neo.parse_output#parameter-branch:output:ede30dacf1d2
 func TestSnapshotPreservesLinkedWinlinkAndPaneViews(t *testing.T) {
 	t.Parallel()
 
@@ -370,15 +351,6 @@ func TestZeroSnapshotReturnsNonNilEmptySlices(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.neo.SCOPES_BY_LIST_CMD
-// libtmux:parity libtmux.neo.fetch_objs
-// libtmux:parity libtmux.neo.fetch_objs#parameter-branch:list_cmd:42a08906d3f8
-// libtmux:parity libtmux.neo.fetch_objs#parameter-branch:list_extra_args:36ea1fcdc1b4
-// libtmux:parity libtmux.neo.fetch_objs#parameter-branch:server:512dfb8018ab
-// libtmux:parity libtmux.neo.fetch_objs#parameter-branch:server:794e7a25cfdb
-// libtmux:parity libtmux.neo.get_output_format
-// libtmux:parity libtmux.neo.get_output_format#parameter-branch:list_cmd:a798a4eda880
-// libtmux:parity libtmux.neo.get_output_format#parameter-branch:tmux_version:c8853f8280c7
 func TestServerSnapshotUsesVersionedFramedListings(t *testing.T) {
 	t.Parallel()
 

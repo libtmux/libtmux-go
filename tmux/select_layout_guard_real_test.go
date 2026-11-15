@@ -13,8 +13,6 @@ import (
 // tmux 3.3a exits the server when select-layout cannot parse its operand, and
 // when it is given -o. Literal select-layout is refused there before it is
 // sent, in every spelling tmux accepts and inside a command list.
-//
-//libtmux:real-tmux
 func TestRawSelectLayoutIsRefusedWhereItKillsTheServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

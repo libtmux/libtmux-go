@@ -8,10 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.pane.Pane.choose_buffer
-// libtmux:parity libtmux.pane.Pane.choose_client
-// libtmux:parity libtmux.pane.Pane.clock_mode
-// libtmux:parity libtmux.pane.Pane.customize_mode
 func TestPaneModeCommandsUseExactPaneContext(t *testing.T) {
 	t.Parallel()
 
@@ -57,13 +53,6 @@ func TestPaneModeCommandsUseExactPaneContext(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.copy_mode
-// libtmux:parity libtmux.pane.Pane.copy_mode#parameter-branch:cancel:d480d98efb7a
-// libtmux:parity libtmux.pane.Pane.copy_mode#parameter-branch:exit_on_bottom:da23cc28e1b5
-// libtmux:parity libtmux.pane.Pane.copy_mode#parameter-branch:mouse_drag:767a4ddd3b1d
-// libtmux:parity libtmux.pane.Pane.copy_mode#parameter-branch:page_down:62888fd473ff
-// libtmux:parity libtmux.pane.Pane.copy_mode#parameter-branch:scroll_up:64208af261d8
-// libtmux:parity libtmux.pane.Pane.copy_mode#parameter-branch:source_pane:423c0a9156e7
 func TestCopyModeBuildsPythonFlagOrder(t *testing.T) {
 	t.Parallel()
 
@@ -87,8 +76,6 @@ func TestCopyModeBuildsPythonFlagOrder(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.pane.Pane.copy_mode#version-branch:tmux-version:820df7664d30
-// libtmux:parity libtmux.pane.Pane.copy_mode#warning:07225fecc4d2
 func TestCopyModeWarnsAndOmitsPageDownBefore35(t *testing.T) {
 	t.Parallel()
 
@@ -151,14 +138,6 @@ func TestCopyModeValidatesExactPaneBeforeVersionProbe(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.pane.Pane.choose_tree
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:filter_expression:741088570e6e
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:format_string:7284ef554e76
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:reverse:72696e193812
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:sessions_collapsed:dc36af30b6c2
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:sort_order:bc74294d9429
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:windows_collapsed:063263fb151d
-// libtmux:parity libtmux.pane.Pane.choose_tree#parameter-branch:zoom:629cd868ae3d
 func TestChooseTreeBuildsTypedSortAndLiteralFields(t *testing.T) {
 	t.Parallel()
 
@@ -185,15 +164,6 @@ func TestChooseTreeBuildsTypedSortAndLiteralFields(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.pane.Pane.display_panes
-// libtmux:parity libtmux.pane.Pane.display_panes#parameter-branch:duration:4675d6e179b9
-// libtmux:parity libtmux.pane.Pane.display_panes#parameter-branch:no_select:8c2e5e8989eb
-// libtmux:parity libtmux.pane.Pane.find_window
-// libtmux:parity libtmux.pane.Pane.find_window#parameter-branch:case_insensitive:cf484fe9e540
-// libtmux:parity libtmux.pane.Pane.find_window#parameter-branch:match_content:d19faeac104a
-// libtmux:parity libtmux.pane.Pane.find_window#parameter-branch:match_name:d259fbe84150
-// libtmux:parity libtmux.pane.Pane.find_window#parameter-branch:match_title:c066c53a42c5
-// libtmux:parity libtmux.pane.Pane.find_window#parameter-branch:regex:eb6f0b4408a2
 func TestFindWindowAndDisplayPanesBuildDistinctTargetShapes(t *testing.T) {
 	t.Parallel()
 

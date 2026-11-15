@@ -15,17 +15,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.server_access
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:allow:f3969308d5bd
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:deny:2eb790bb3e9a
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:list_access:f6e9907c043a
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:list_access:f6e9907c043a:2
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:read_only,write:14227e701e2d
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:read_only:e91b42a77c5e
-// libtmux:parity libtmux.server.Server.server_access#parameter-branch:write:fe54a3f721d4
-// libtmux:parity libtmux.server.Server.server_access#version-branch:tmux-version:d9801479e597
-//
-//libtmux:real-tmux
 func TestServerAccessListAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -100,15 +89,6 @@ func TestServerAccessListAgainstRealTmux(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.refresh_client
-// libtmux:parity libtmux.server.Server.refresh_client#parameter-branch:request_clipboard:f7531c059ac6
-// libtmux:parity libtmux.server.Server.refresh_client#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.refresh_client#version-branch:tmux-version:157b9dba160f
-// libtmux:parity libtmux.server.Server.refresh_client#warning:1fa7f6b92788
-// libtmux:parity libtmux.server.Server.switch_client
-// libtmux:parity libtmux.session.Session.switch_client
-//
-//libtmux:real-tmux
 func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -164,22 +144,6 @@ func TestRefreshAndSwitchClientsAgainstRealTmux(t *testing.T) {
 	waitClientSession(ctx, t, server, target, work.ID())
 }
 
-// libtmux:parity libtmux.server.Server.detach_all_clients
-// libtmux:parity libtmux.server.Server.detach_all_clients#parameter-branch:keep_client:169ea5ceb8fe
-// libtmux:parity libtmux.server.Server.detach_all_clients#parameter-branch:shell_command:bd963b0a10bc
-// libtmux:parity libtmux.server.Server.detach_client
-// libtmux:parity libtmux.server.Server.detach_client#parameter-branch:shell_command:bd963b0a10bc
-// libtmux:parity libtmux.server.Server.detach_client#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.lock_client
-// libtmux:parity libtmux.server.Server.lock_client#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.lock_server
-// libtmux:parity libtmux.server.Server.suspend_client
-// libtmux:parity libtmux.server.Server.suspend_client#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.session.Session.detach_client
-// libtmux:parity libtmux.session.Session.detach_client#parameter-branch:shell_command:bd963b0a10bc
-// libtmux:parity libtmux.session.Session.lock_session
-//
-//libtmux:real-tmux
 func TestDetachClientsAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -216,7 +180,6 @@ func TestDetachClientsAgainstRealTmux(t *testing.T) {
 	waitClientNames(ctx, t, server, nil)
 }
 
-//libtmux:real-tmux
 func TestLockAndSuspendOnlyIsolatedControlClients(t *testing.T) {
 	tests := []struct {
 		name      string

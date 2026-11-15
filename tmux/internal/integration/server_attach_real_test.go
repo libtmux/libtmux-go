@@ -15,12 +15,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.attach_session
-// libtmux:parity libtmux.session.Session.attach
-// libtmux:parity libtmux.session.Session.attach#parameter-branch:exit_:ec1dc0f87e55
-// libtmux:parity libtmux.session.Session.attach#parameter-branch:flags_:68f4c159cd01
-//
-//libtmux:real-tmux
 func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	// One budget covers every case below, each of which attaches a real tmux
@@ -97,7 +91,6 @@ func TestAttachSessionAgainstRealTmuxPTY(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestAttachSessionCancellationAgainstRealTmuxPTY(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	// Generous for the same reason, and unrelated to the one-second deadline

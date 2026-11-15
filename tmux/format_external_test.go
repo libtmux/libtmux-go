@@ -14,10 +14,6 @@ import (
 
 func requireAssignable[T any](T) {}
 
-// libtmux:parity libtmux.formats.CLIENT_FORMATS
-// libtmux:parity libtmux.formats.PANE_FORMATS
-// libtmux:parity libtmux.formats.SESSION_FORMATS
-// libtmux:parity libtmux.formats.WINDOW_FORMATS
 func TestScopedFormatSelectorSignaturesCompile(t *testing.T) {
 	t.Parallel()
 

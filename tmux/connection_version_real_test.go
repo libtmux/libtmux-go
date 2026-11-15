@@ -14,8 +14,6 @@ import (
 // handle, so a connection carries the version it was checked at even when the
 // session value came from a server that never probed one. The literal-command
 // gates read that version; without it they have nothing to compare.
-//
-//libtmux:real-tmux
 func TestOpenControlBindsTheVersionItChecked(t *testing.T) {
 	binary, err := exec.LookPath("tmux")
 	if err != nil {

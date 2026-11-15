@@ -11,12 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.clear_prompt_history
-// libtmux:parity libtmux.server.Server.clear_prompt_history#parameter-branch:prompt_type:83546fba116e
-// libtmux:parity libtmux.server.Server.clear_prompt_history#version-branch:tmux-version:d9801479e597
-// libtmux:parity libtmux.server.Server.show_prompt_history
-// libtmux:parity libtmux.server.Server.show_prompt_history#parameter-branch:prompt_type:83546fba116e
-// libtmux:parity libtmux.server.Server.show_prompt_history#version-branch:tmux-version:d9801479e597
 func TestPromptHistoryBuildsExactArgumentsForClosedTypes(t *testing.T) {
 	t.Parallel()
 

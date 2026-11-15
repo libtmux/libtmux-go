@@ -16,8 +16,6 @@ import (
 
 // list-keys and list-commands start a transient server on an empty socket, so
 // their success cannot establish that a daemon was already alive.
-//
-//libtmux:real-tmux
 func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 	t.Parallel()
 
@@ -90,8 +88,6 @@ func TestTheTwoListsThatAnswerWithoutAServer(t *testing.T) {
 // gap:
 //
 //	LIBTMUX_TEST_SLOW=1 taskset -c 0 go test -run TestKillThenNewSession ./tmux/internal/integration/
-//
-//libtmux:real-tmux
 func TestKillThenNewSessionNeverMeetsTheDyingDaemon(t *testing.T) {
 	if os.Getenv("LIBTMUX_TEST_SLOW") == "" {
 		t.Skip("slow: set LIBTMUX_TEST_SLOW=1 to run the kill and replace loop")

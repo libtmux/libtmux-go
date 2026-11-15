@@ -37,8 +37,6 @@ func modeOf(t *testing.T, path string) os.FileMode {
 // The file tmux writes is created by the tmux client the library starts, under
 // that process's umask. A file the library creates for a caller is private to
 // the user, and a file the caller made keeps the mode the caller gave it.
-//
-//libtmux:real-tmux
 func TestSaveBufferCreatesPrivateFilesAndKeepsExistingModes(t *testing.T) {
 	withOpenUmask(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -88,8 +86,6 @@ func TestSaveBufferCreatesPrivateFilesAndKeepsExistingModes(t *testing.T) {
 
 // A relative path is the server's to resolve against the working directory it
 // was built in, and the library makes the file there.
-//
-//libtmux:real-tmux
 func TestSaveBufferCreatesPrivateRelativeFiles(t *testing.T) {
 	withOpenUmask(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -115,8 +111,6 @@ func TestSaveBufferCreatesPrivateRelativeFiles(t *testing.T) {
 }
 
 // A save that fails must not leave the empty file the library made for it.
-//
-//libtmux:real-tmux
 func TestSaveBufferFailureRemovesTheFileItCreated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -144,7 +138,6 @@ func TestSaveBufferFailureRemovesTheFileItCreated(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestCaptureToFileCreatesPrivateFilesOverBothTransports(t *testing.T) {
 	withOpenUmask(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

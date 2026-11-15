@@ -7,32 +7,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// libtmux:parity libtmux._internal.constants.Hooks
-// libtmux:parity libtmux._internal.constants.Hooks.client_detached_control
-// libtmux:parity libtmux._internal.constants.Hooks.client_session_changed_control
-// libtmux:parity libtmux._internal.constants.Hooks.config_error
-// libtmux:parity libtmux._internal.constants.Hooks.continue_control
-// libtmux:parity libtmux._internal.constants.Hooks.exit_control
-// libtmux:parity libtmux._internal.constants.Hooks.extended_output
-// libtmux:parity libtmux._internal.constants.Hooks.layout_change
-// libtmux:parity libtmux._internal.constants.Hooks.message_control
-// libtmux:parity libtmux._internal.constants.Hooks.output
-// libtmux:parity libtmux._internal.constants.Hooks.pane_mode_changed
-// libtmux:parity libtmux._internal.constants.Hooks.paste_buffer_changed
-// libtmux:parity libtmux._internal.constants.Hooks.paste_buffer_deleted
-// libtmux:parity libtmux._internal.constants.Hooks.pause_control
-// libtmux:parity libtmux._internal.constants.Hooks.session_changed_control
-// libtmux:parity libtmux._internal.constants.Hooks.session_renamed_control
-// libtmux:parity libtmux._internal.constants.Hooks.session_window_changed
-// libtmux:parity libtmux._internal.constants.Hooks.sessions_changed
-// libtmux:parity libtmux._internal.constants.Hooks.subscription_changed
-// libtmux:parity libtmux._internal.constants.Hooks.unlinked_window_add
-// libtmux:parity libtmux._internal.constants.Hooks.unlinked_window_close
-// libtmux:parity libtmux._internal.constants.Hooks.unlinked_window_renamed
-// libtmux:parity libtmux._internal.constants.Hooks.window_add
-// libtmux:parity libtmux._internal.constants.Hooks.window_close
-// libtmux:parity libtmux._internal.constants.Hooks.window_pane_changed
-// libtmux:parity libtmux._internal.constants.Hooks.window_renamed_control
 func TestControlNotificationPublicSurface(t *testing.T) {
 	t.Parallel()
 

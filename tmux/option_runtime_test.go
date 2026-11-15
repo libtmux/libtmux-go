@@ -37,55 +37,6 @@ func TestGlobalScopeFactoriesReturnConcreteCapturedHandles(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.default_option_scope
-// libtmux:parity libtmux.session.Session.default_option_scope
-// libtmux:parity libtmux.constants.DEFAULT_OPTION_SCOPE
-// libtmux:parity libtmux.constants.OPTION_SCOPE_FLAG_MAP
-// libtmux:parity libtmux.constants.OptionScope
-// libtmux:parity libtmux.constants.OptionScope.Pane
-// libtmux:parity libtmux.constants.OptionScope.Server
-// libtmux:parity libtmux.constants.OptionScope.Session
-// libtmux:parity libtmux.constants.OptionScope.Window
-// libtmux:parity libtmux.pane.Pane.default_option_scope
-// libtmux:parity libtmux.window.Window.default_option_scope
-// libtmux:parity libtmux.window.Window.set_window_option
-// libtmux:parity libtmux.window.Window.set_window_option#warning:595c4a498323
-// libtmux:parity libtmux.window.Window.show_window_options
-// libtmux:parity libtmux.window.Window.show_window_options#warning:33caaa4656b3
-// libtmux:parity libtmux.options.OptionsMixin
-// libtmux:parity libtmux.options.OptionsMixin.__init__
-// libtmux:parity libtmux.options.OptionsMixin.__init__#parameter-branch:default_option_scope:2375a8b9e31a
-// libtmux:parity libtmux.options.OptionsMixin.default_option_scope
-// libtmux:parity libtmux.options.OptionsMixin.set_option
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:_format:b79419c02132
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:_format:c1a152a619ca
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:append:945ab72cb247
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:append:e358cfe094c6
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:ignore_errors:748118c5cba0
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:ignore_errors:e47c0b92f1e1
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:option,value:d3faaf781f06
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:prevent_overwrite:34c16bf03162
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:prevent_overwrite:b258594c6283
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:scope:2855c0da8f8d
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:scope:32fa398cc6e4
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:scope:b959adc22e97
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:suppress_warnings:2a9b18081f99
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:suppress_warnings:780df2bfdbf2
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:value:3014ecf52618
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:value:7ae1ab1ce1f8
-// libtmux:parity libtmux.options.OptionsMixin.show_option
-// libtmux:parity libtmux.options.OptionsMixin.show_options
-// libtmux:parity libtmux.options.OptionsMixin.unset_option
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:ignore_errors:748118c5cba0
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:ignore_errors:e47c0b92f1e1
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:option:d3faaf781f06
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:scope:0c5ef270ac46
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:scope:2855c0da8f8d
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:scope:32fa398cc6e4
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:scope:b959adc22e97
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:unset_panes:96c894e2433a
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:unset_panes:de1e3fe8e8ee
 func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 	t.Parallel()
 
@@ -283,8 +234,6 @@ func TestOptionOperationsBuildExactScopeArguments(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.dataclasses.SkipDefaultFieldsReprMixin
-// libtmux:parity libtmux._internal.dataclasses.SkipDefaultFieldsReprMixin.__repr__
 func TestOptionValuesPreserveTerminalSeparators(t *testing.T) {
 	t.Parallel()
 
@@ -596,28 +545,6 @@ func TestOptionMutationPreflightQueriesVersionOnlyWhenScopeRequiresIt(t *testing
 	})
 }
 
-// libtmux:parity libtmux.common.WindowOptionDict
-// libtmux:parity libtmux.options.ConvertedValue
-// libtmux:parity libtmux.options.ConvertedValues
-// libtmux:parity libtmux.options.ExplodedComplexUntypedOptionsDict
-// libtmux:parity libtmux.options.ExplodedUntypedOptionsDict
-// libtmux:parity libtmux.options.OptionDict
-// libtmux:parity libtmux.options.OptionsMixin.show_option
-// libtmux:parity libtmux.options.OptionsMixin.show_options
-// libtmux:parity libtmux.options.UntypedOptionsDict
-// libtmux:parity libtmux.options.convert_value
-// libtmux:parity libtmux.options.convert_value#parameter-branch:value:08fec6ce19e7
-// libtmux:parity libtmux.options.convert_value#parameter-branch:value:280f36395c72
-// libtmux:parity libtmux.options.convert_value#parameter-branch:value:7c8d96098f59
-// libtmux:parity libtmux.options.convert_value#parameter-branch:value:7e40614009da
-// libtmux:parity libtmux.options.convert_values
-// libtmux:parity libtmux.options.convert_values#parameter-branch:value:325eb7d0cc70
-// libtmux:parity libtmux.options.convert_values#parameter-branch:value:98507a1f7edd
-// libtmux:parity libtmux.options.convert_values#parameter-branch:value:c0c67f3cf246
-// libtmux:parity libtmux.options.explode_arrays
-// libtmux:parity libtmux.options.explode_arrays#parameter-branch:force_array:6427948e563a
-// libtmux:parity libtmux.options.explode_arrays#parameter-branch:force_array:a94938fdd506
-// libtmux:parity libtmux.options.parse_options_to_dict
 func TestOptionsDecodeExactTypedPresenceOriginAndSparseHoles(t *testing.T) {
 	t.Parallel()
 
@@ -710,11 +637,6 @@ func TestOptionsDecodePresentEmptyArray(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.constants.Options.__init__
-// libtmux:parity libtmux._internal.constants.PaneOptions.__init__
-// libtmux:parity libtmux._internal.constants.ServerOptions.__init__
-// libtmux:parity libtmux._internal.constants.SessionOptions.__init__
-// libtmux:parity libtmux._internal.constants.WindowOptions.__init__
 func TestOptionsAcceptTmuxTableOrderAndCanonicalizeGeneratedConstruction(t *testing.T) {
 	t.Parallel()
 
@@ -989,8 +911,6 @@ func TestGlobalOptionScopesReportBulkReadFailures(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.window.Window.show_window_option
-// libtmux:parity libtmux.window.Window.show_window_option#warning:a89297922e19
 func TestRawOptionPreservesPresenceAndExactTerminalLineFeedSemantics(t *testing.T) {
 	t.Parallel()
 
@@ -1126,14 +1046,6 @@ func TestIndexedOptionPresenceRejectsUnexpectedAndNonemptyBareRecords(t *testing
 	}
 }
 
-// libtmux:parity libtmux.exc.AmbiguousOption
-// libtmux:parity libtmux.exc.InvalidOption
-// libtmux:parity libtmux.exc.OptionError
-// libtmux:parity libtmux.exc.UnknownOption
-// libtmux:parity libtmux.options.handle_option_error
-// libtmux:parity libtmux.options.handle_option_error#parameter-branch:error:1136d96388c5
-// libtmux:parity libtmux.options.handle_option_error#parameter-branch:error:2fbb42d5a549
-// libtmux:parity libtmux.options.handle_option_error#parameter-branch:error:b3e270235515
 func TestOptionErrorsClassifyBeforeRedactingOwnedResults(t *testing.T) {
 	t.Parallel()
 
@@ -1208,12 +1120,6 @@ func TestOptionErrorsClassifyBeforeRedactingOwnedResults(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:ignore_errors:748118c5cba0
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:ignore_errors:e47c0b92f1e1
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:suppress_warnings:2a9b18081f99
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:suppress_warnings:780df2bfdbf2
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:ignore_errors:748118c5cba0
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:ignore_errors:e47c0b92f1e1
 func TestOptionMutationsTreatStderrAtZeroExitAsFailureAndQuietMissAsSuccess(t *testing.T) {
 	t.Parallel()
 
@@ -1278,7 +1184,6 @@ func TestTypedScalarOptionSettersEncodeEveryValueKindAndScope(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.options.OptionsMixin.set_option
 func TestTypedArrayOptionSettersReplaceWithExactScopeArguments(t *testing.T) {
 	t.Parallel()
 
@@ -1927,16 +1832,6 @@ func optionTestObjects(runner commandRunner) (Server, Session, Window, Pane) {
 		}
 }
 
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:g,global_:bcf3b5284452
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:g,global_:fabe8cef3aca
-// libtmux:parity libtmux.options.OptionsMixin.set_option#parameter-branch:g:aab8d0b6d44c
-// libtmux:parity libtmux.options.OptionsMixin.set_option#warning:abb8cfc75660
-// libtmux:parity libtmux.options.OptionsMixin.show_option
-// libtmux:parity libtmux.options.OptionsMixin.show_option#parameter-branch:g:03e14ffa90c7
-// libtmux:parity libtmux.options.OptionsMixin.show_option#warning:abb8cfc75660
-// libtmux:parity libtmux.options.OptionsMixin.show_options
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:global_:bcf3b5284452
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:global_:fabe8cef3aca
 func TestGlobalOptionOperationsBuildExactScopeArguments(t *testing.T) {
 	t.Parallel()
 
@@ -2050,8 +1945,6 @@ func TestGlobalOptionOperationsBuildExactScopeArguments(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:unset_panes:96c894e2433a
-// libtmux:parity libtmux.options.OptionsMixin.unset_option#parameter-branch:unset_panes:de1e3fe8e8ee
 func TestGlobalOptionScopesRejectPaneCascadeBeforeExecution(t *testing.T) {
 	t.Parallel()
 

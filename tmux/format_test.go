@@ -21,9 +21,6 @@ func TestFormatTemplateUsesSingleEvaluationQuotedFraming(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.formats.FORMAT_SEPARATOR
-// libtmux:parity libtmux.neo.parse_output
-// libtmux:parity libtmux.neo.parse_output#parameter-branch:output:ede30dacf1d2
 func TestDecodeFormatRecordsPreservesQuotedValues(t *testing.T) {
 	t.Parallel()
 
@@ -170,11 +167,6 @@ func TestDecodeFormatRecordsBackslashEscapesInvalidUTF8AfterUnquoting(t *testing
 	assertFormatValue(t, records[0], "window_name", "dev", true)
 }
 
-// libtmux:parity libtmux.neo.FIELD_VERSION
-// libtmux:parity libtmux.neo.SCOPES_BY_LIST_CMD
-// libtmux:parity libtmux.neo.get_output_format
-// libtmux:parity libtmux.neo.get_output_format#parameter-branch:list_cmd:a798a4eda880
-// libtmux:parity libtmux.neo.get_output_format#parameter-branch:tmux_version:c8853f8280c7
 func TestFormatFieldsForAppliesScopeAndVersionGates(t *testing.T) {
 	t.Parallel()
 
@@ -200,23 +192,6 @@ func TestFormatFieldsForAppliesScopeAndVersionGates(t *testing.T) {
 	assertFormatFieldPresence(t, clientFields, "copy_cursor_line", false)
 }
 
-// libtmux:parity libtmux.neo.Obj.buffer_name
-// libtmux:parity libtmux.neo.Obj.buffer_sample
-// libtmux:parity libtmux.neo.Obj.buffer_size
-// libtmux:parity libtmux.neo.Obj.command_list_alias
-// libtmux:parity libtmux.neo.Obj.command_list_name
-// libtmux:parity libtmux.neo.Obj.command_list_usage
-// libtmux:parity libtmux.neo.Obj.copy_cursor_line
-// libtmux:parity libtmux.neo.Obj.copy_cursor_word
-// libtmux:parity libtmux.neo.Obj.copy_cursor_x
-// libtmux:parity libtmux.neo.Obj.copy_cursor_y
-// libtmux:parity libtmux.neo.Obj.current_file
-// libtmux:parity libtmux.neo.Obj.scroll_position
-// libtmux:parity libtmux.neo.Obj.search_match
-// libtmux:parity libtmux.neo.Obj.selection_end_x
-// libtmux:parity libtmux.neo.Obj.selection_end_y
-// libtmux:parity libtmux.neo.Obj.selection_start_x
-// libtmux:parity libtmux.neo.Obj.selection_start_y
 func TestHierarchyListingsExcludeNonHierarchyNeoFormats(t *testing.T) {
 	t.Parallel()
 
@@ -241,161 +216,6 @@ func TestHierarchyListingsExcludeNonHierarchyNeoFormats(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.neo.Obj.active_window_index
-// libtmux:parity libtmux.neo.Obj.alternate_saved_x
-// libtmux:parity libtmux.neo.Obj.alternate_saved_y
-// libtmux:parity libtmux.neo.Obj.bracket_paste_flag
-// libtmux:parity libtmux.neo.Obj.client_activity
-// libtmux:parity libtmux.neo.Obj.client_cell_height
-// libtmux:parity libtmux.neo.Obj.client_cell_width
-// libtmux:parity libtmux.neo.Obj.client_control_mode
-// libtmux:parity libtmux.neo.Obj.client_created
-// libtmux:parity libtmux.neo.Obj.client_discarded
-// libtmux:parity libtmux.neo.Obj.client_flags
-// libtmux:parity libtmux.neo.Obj.client_height
-// libtmux:parity libtmux.neo.Obj.client_key_table
-// libtmux:parity libtmux.neo.Obj.client_last_session
-// libtmux:parity libtmux.neo.Obj.client_mode_format
-// libtmux:parity libtmux.neo.Obj.client_pid
-// libtmux:parity libtmux.neo.Obj.client_prefix
-// libtmux:parity libtmux.neo.Obj.client_readonly
-// libtmux:parity libtmux.neo.Obj.client_session
-// libtmux:parity libtmux.neo.Obj.client_termfeatures
-// libtmux:parity libtmux.neo.Obj.client_termname
-// libtmux:parity libtmux.neo.Obj.client_termtype
-// libtmux:parity libtmux.neo.Obj.client_tty
-// libtmux:parity libtmux.neo.Obj.client_uid
-// libtmux:parity libtmux.neo.Obj.client_user
-// libtmux:parity libtmux.neo.Obj.client_utf8
-// libtmux:parity libtmux.neo.Obj.client_width
-// libtmux:parity libtmux.neo.Obj.client_written
-// libtmux:parity libtmux.neo.Obj.config_files
-// libtmux:parity libtmux.neo.Obj.cursor_character
-// libtmux:parity libtmux.neo.Obj.cursor_flag
-// libtmux:parity libtmux.neo.Obj.cursor_x
-// libtmux:parity libtmux.neo.Obj.cursor_y
-// libtmux:parity libtmux.neo.Obj.history_bytes
-// libtmux:parity libtmux.neo.Obj.history_limit
-// libtmux:parity libtmux.neo.Obj.history_size
-// libtmux:parity libtmux.neo.Obj.insert_flag
-// libtmux:parity libtmux.neo.Obj.keypad_cursor_flag
-// libtmux:parity libtmux.neo.Obj.keypad_flag
-// libtmux:parity libtmux.neo.Obj.last_window_index
-// libtmux:parity libtmux.neo.Obj.line
-// libtmux:parity libtmux.neo.Obj.mouse_all_flag
-// libtmux:parity libtmux.neo.Obj.mouse_any_flag
-// libtmux:parity libtmux.neo.Obj.mouse_button_flag
-// libtmux:parity libtmux.neo.Obj.mouse_sgr_flag
-// libtmux:parity libtmux.neo.Obj.mouse_standard_flag
-// libtmux:parity libtmux.neo.Obj.next_session_id
-// libtmux:parity libtmux.neo.Obj.origin_flag
-// libtmux:parity libtmux.neo.Obj.pane_active
-// libtmux:parity libtmux.neo.Obj.pane_at_bottom
-// libtmux:parity libtmux.neo.Obj.pane_at_left
-// libtmux:parity libtmux.neo.Obj.pane_at_right
-// libtmux:parity libtmux.neo.Obj.pane_at_top
-// libtmux:parity libtmux.neo.Obj.pane_bg
-// libtmux:parity libtmux.neo.Obj.pane_bottom
-// libtmux:parity libtmux.neo.Obj.pane_current_command
-// libtmux:parity libtmux.neo.Obj.pane_current_path
-// libtmux:parity libtmux.neo.Obj.pane_dead
-// libtmux:parity libtmux.neo.Obj.pane_dead_signal
-// libtmux:parity libtmux.neo.Obj.pane_dead_status
-// libtmux:parity libtmux.neo.Obj.pane_dead_time
-// libtmux:parity libtmux.neo.Obj.pane_fg
-// libtmux:parity libtmux.neo.Obj.pane_flags
-// libtmux:parity libtmux.neo.Obj.pane_floating_flag
-// libtmux:parity libtmux.neo.Obj.pane_format
-// libtmux:parity libtmux.neo.Obj.pane_height
-// libtmux:parity libtmux.neo.Obj.pane_in_mode
-// libtmux:parity libtmux.neo.Obj.pane_input_off
-// libtmux:parity libtmux.neo.Obj.pane_last
-// libtmux:parity libtmux.neo.Obj.pane_left
-// libtmux:parity libtmux.neo.Obj.pane_marked
-// libtmux:parity libtmux.neo.Obj.pane_marked_set
-// libtmux:parity libtmux.neo.Obj.pane_mode
-// libtmux:parity libtmux.neo.Obj.pane_path
-// libtmux:parity libtmux.neo.Obj.pane_pb_progress
-// libtmux:parity libtmux.neo.Obj.pane_pb_state
-// libtmux:parity libtmux.neo.Obj.pane_pid
-// libtmux:parity libtmux.neo.Obj.pane_pipe
-// libtmux:parity libtmux.neo.Obj.pane_pipe_pid
-// libtmux:parity libtmux.neo.Obj.pane_right
-// libtmux:parity libtmux.neo.Obj.pane_search_string
-// libtmux:parity libtmux.neo.Obj.pane_start_command
-// libtmux:parity libtmux.neo.Obj.pane_start_path
-// libtmux:parity libtmux.neo.Obj.pane_synchronized
-// libtmux:parity libtmux.neo.Obj.pane_tabs
-// libtmux:parity libtmux.neo.Obj.pane_title
-// libtmux:parity libtmux.neo.Obj.pane_top
-// libtmux:parity libtmux.neo.Obj.pane_tty
-// libtmux:parity libtmux.neo.Obj.pane_width
-// libtmux:parity libtmux.neo.Obj.pane_x
-// libtmux:parity libtmux.neo.Obj.pane_y
-// libtmux:parity libtmux.neo.Obj.pane_z
-// libtmux:parity libtmux.neo.Obj.pane_zoomed_flag
-// libtmux:parity libtmux.neo.Obj.pid
-// libtmux:parity libtmux.neo.Obj.scroll_region_lower
-// libtmux:parity libtmux.neo.Obj.scroll_region_upper
-// libtmux:parity libtmux.neo.Obj.session_activity
-// libtmux:parity libtmux.neo.Obj.session_alerts
-// libtmux:parity libtmux.neo.Obj.session_attached
-// libtmux:parity libtmux.neo.Obj.session_attached_list
-// libtmux:parity libtmux.neo.Obj.session_created
-// libtmux:parity libtmux.neo.Obj.session_format
-// libtmux:parity libtmux.neo.Obj.session_group
-// libtmux:parity libtmux.neo.Obj.session_group_attached
-// libtmux:parity libtmux.neo.Obj.session_group_attached_list
-// libtmux:parity libtmux.neo.Obj.session_group_list
-// libtmux:parity libtmux.neo.Obj.session_group_many_attached
-// libtmux:parity libtmux.neo.Obj.session_group_size
-// libtmux:parity libtmux.neo.Obj.session_grouped
-// libtmux:parity libtmux.neo.Obj.session_last_attached
-// libtmux:parity libtmux.neo.Obj.session_many_attached
-// libtmux:parity libtmux.neo.Obj.session_marked
-// libtmux:parity libtmux.neo.Obj.session_name
-// libtmux:parity libtmux.neo.Obj.session_path
-// libtmux:parity libtmux.neo.Obj.session_stack
-// libtmux:parity libtmux.neo.Obj.session_windows
-// libtmux:parity libtmux.neo.Obj.socket_path
-// libtmux:parity libtmux.neo.Obj.start_time
-// libtmux:parity libtmux.neo.Obj.synchronized_output_flag
-// libtmux:parity libtmux.neo.Obj.uid
-// libtmux:parity libtmux.neo.Obj.user
-// libtmux:parity libtmux.neo.Obj.version
-// libtmux:parity libtmux.neo.Obj.window_active
-// libtmux:parity libtmux.neo.Obj.window_active_clients
-// libtmux:parity libtmux.neo.Obj.window_active_clients_list
-// libtmux:parity libtmux.neo.Obj.window_active_sessions
-// libtmux:parity libtmux.neo.Obj.window_active_sessions_list
-// libtmux:parity libtmux.neo.Obj.window_activity
-// libtmux:parity libtmux.neo.Obj.window_activity_flag
-// libtmux:parity libtmux.neo.Obj.window_bell_flag
-// libtmux:parity libtmux.neo.Obj.window_bigger
-// libtmux:parity libtmux.neo.Obj.window_cell_height
-// libtmux:parity libtmux.neo.Obj.window_cell_width
-// libtmux:parity libtmux.neo.Obj.window_end_flag
-// libtmux:parity libtmux.neo.Obj.window_flags
-// libtmux:parity libtmux.neo.Obj.window_format
-// libtmux:parity libtmux.neo.Obj.window_height
-// libtmux:parity libtmux.neo.Obj.window_last_flag
-// libtmux:parity libtmux.neo.Obj.window_layout
-// libtmux:parity libtmux.neo.Obj.window_linked
-// libtmux:parity libtmux.neo.Obj.window_linked_sessions
-// libtmux:parity libtmux.neo.Obj.window_linked_sessions_list
-// libtmux:parity libtmux.neo.Obj.window_marked_flag
-// libtmux:parity libtmux.neo.Obj.window_name
-// libtmux:parity libtmux.neo.Obj.window_offset_x
-// libtmux:parity libtmux.neo.Obj.window_offset_y
-// libtmux:parity libtmux.neo.Obj.window_panes
-// libtmux:parity libtmux.neo.Obj.window_raw_flags
-// libtmux:parity libtmux.neo.Obj.window_silence_flag
-// libtmux:parity libtmux.neo.Obj.window_stack_index
-// libtmux:parity libtmux.neo.Obj.window_start_flag
-// libtmux:parity libtmux.neo.Obj.window_visible_layout
-// libtmux:parity libtmux.neo.Obj.window_width
-// libtmux:parity libtmux.neo.Obj.window_zoomed_flag
-// libtmux:parity libtmux.neo.Obj.wrap_flag
 func TestFormatValuesAccessorsPreserveEmptyAndAbsent(t *testing.T) {
 	t.Parallel()
 

@@ -14,13 +14,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.window.Window.respawn
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:kill:c73eb1e87efe
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:shell:613b2dd997a5
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:start_directory:d91549582997
-//
-//libtmux:real-tmux
 func TestWindowRespawnAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

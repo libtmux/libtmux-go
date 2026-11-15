@@ -13,21 +13,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.run_shell
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:args:fd422ab3a1ca
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:as_tmux_command:0fe82009cc1e
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:background:af1c44728d8a
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:background:af1c44728d8a:2
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:cwd:c8f5f1bebe8f
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:delay:0b3ab3dbe007
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:show_stderr:77ae01eb137f
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.run_shell#version-branch:tmux-version:157b9dba160f
-// libtmux:parity libtmux.server.Server.run_shell#version-branch:tmux-version:161023f2e486
-// libtmux:parity libtmux.server.Server.run_shell#version-branch:tmux-version:5bb2ac269d05
-// libtmux:parity libtmux.server.Server.run_shell#warning:39bcbdbb8388
-// libtmux:parity libtmux.server.Server.run_shell#warning:78d80521a5af
-// libtmux:parity libtmux.server.Server.run_shell#warning:9349ea8de11f
 func TestRunShellBuildsExactArguments(t *testing.T) {
 	t.Parallel()
 
@@ -288,8 +273,6 @@ func TestRunShellClonesArgsBeforeVersionProbe(t *testing.T) {
 	assertRequestArguments(t, requests[1], []string{"run-shell", "--", "echo #{1}", "before"})
 }
 
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:cwd:c8f5f1bebe8f
-// libtmux:parity libtmux.server.Server.run_shell#parameter-branch:delay:0b3ab3dbe007
 func TestRunShellCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 	t.Parallel()
 
@@ -323,10 +306,6 @@ func TestRunShellCapturesPointerFieldsBeforeVersionProbe(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.server.Server.wait_for
-// libtmux:parity libtmux.server.Server.wait_for#parameter-branch:lock:92e800fe2c02
-// libtmux:parity libtmux.server.Server.wait_for#parameter-branch:set_flag:6fd02ea1aab4
-// libtmux:parity libtmux.server.Server.wait_for#parameter-branch:unlock:8d2b1171c459
 func TestWaitForBuildsExactArguments(t *testing.T) {
 	t.Parallel()
 
@@ -365,14 +344,6 @@ func TestWaitForBuildsExactArguments(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.server.Server.if_shell
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:background:af1c44728d8a
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:else_command:bef5b34f0329
-// libtmux:parity libtmux.server.Server.if_shell#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.source_file
-// libtmux:parity libtmux.server.Server.source_file#parameter-branch:parse_only:656bfbd1a466
-// libtmux:parity libtmux.server.Server.source_file#parameter-branch:quiet:8573bc8befe4
-// libtmux:parity libtmux.server.Server.source_file#parameter-branch:verbose:414278ee0d55
 func TestIfShellBuildsExactArguments(t *testing.T) {
 	t.Parallel()
 
@@ -394,7 +365,6 @@ func TestIfShellBuildsExactArguments(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux._internal.types.StrPath
 func TestSourceFileBuildsExactArgumentsAndExpandsCurrentUser(t *testing.T) {
 	t.Parallel()
 

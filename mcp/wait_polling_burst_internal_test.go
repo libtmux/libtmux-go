@@ -15,8 +15,6 @@ import (
 // no miss. wait_for_text says so below tmux 3.7; this pins the behavior it
 // describes, so a change to readDelta that closes or widens the gap fails
 // here rather than leaving the tool text stale.
-//
-//libtmux:real-tmux
 func TestPollingWaitMissesRowsThatScrollPastBetweenReads(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

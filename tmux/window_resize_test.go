@@ -8,22 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.constants.RESIZE_ADJUSTMENT_DIRECTION_FLAG_MAP
-// libtmux:parity libtmux.constants.ResizeAdjustmentDirection
-// libtmux:parity libtmux.constants.ResizeAdjustmentDirection.Down
-// libtmux:parity libtmux.constants.ResizeAdjustmentDirection.Left
-// libtmux:parity libtmux.constants.ResizeAdjustmentDirection.Right
-// libtmux:parity libtmux.constants.ResizeAdjustmentDirection.Up
-// libtmux:parity libtmux.exc.WindowError
-// libtmux:parity libtmux.window.Window.resize
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:adjustment:73daa10a3099
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:adjustment_direction:e4a3795db9a4
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:expand,shrink:d624172d273f
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:expand:163401d681e1
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:height,width:a104fc5529e1
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:height:3fde596c5d4b
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:shrink:fd4b5f4dd805
-// libtmux:parity libtmux.window.Window.resize#parameter-branch:width:84d6a1e76504
 func TestResizeWindowBuildsOneModeOfLiteralArguments(t *testing.T) {
 	t.Parallel()
 
@@ -112,9 +96,6 @@ func TestResizeWindowBuildsOneModeOfLiteralArguments(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.AdjustmentDirectionRequiresAdjustment
-// libtmux:parity libtmux.exc.AdjustmentDirectionRequiresAdjustment.__init__
-// libtmux:parity libtmux.exc.WindowAdjustmentDirectionRequiresAdjustment
 func TestResizeWindowRejectsInvalidModesBeforeExecution(t *testing.T) {
 	t.Parallel()
 

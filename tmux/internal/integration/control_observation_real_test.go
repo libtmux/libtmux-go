@@ -16,7 +16,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestPaneObservationLinearizesBaselineAndOutput(t *testing.T) {
 	initial := tmux.NewSessionRequest{Name: "work"}
 	server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
@@ -88,7 +87,6 @@ func TestPaneObservationLinearizesBaselineAndOutput(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneObservationOwnsLinkedSessionAndDetectsUnlink(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -213,7 +211,6 @@ func waitForPaneMarker(
 	}
 }
 
-//libtmux:real-tmux
 func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 	// The reader yields raw terminal bytes, so a readline shell's bracketed-paste
 	// sequences would reach it glued to the command's output. FixedShell pins a
@@ -297,7 +294,6 @@ func TestPaneWriterTypesLinesAndReaderHearsOnlyThisPane(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestNotificationIteratorsRange(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

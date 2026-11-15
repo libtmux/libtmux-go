@@ -11,11 +11,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.window.Window.respawn
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:environment:88c271e9ea0f
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:kill:c73eb1e87efe
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:shell:613b2dd997a5
-// libtmux:parity libtmux.window.Window.respawn#parameter-branch:start_directory:d91549582997
 func TestWindowRespawnBuildsExactArgumentsAndRedactsCompletedErrors(t *testing.T) {
 	t.Parallel()
 

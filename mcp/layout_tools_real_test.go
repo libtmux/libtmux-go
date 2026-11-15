@@ -26,8 +26,6 @@ const layoutRoundTripTmuxBinary = "LIBTMUX_GO_TEST_TMUX38_BIN"
 // does not survive a save-and-restore round trip on 3.8+ the way a JSON
 // layout's pane ids do. Save, scramble, restore, and require every pane back
 // at its exact original position - not merely the same shape.
-//
-//libtmux:real-tmux
 func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -122,8 +120,6 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 // TestSelectLayoutToolAcceptsAUniquePresetPrefix checks the same at the MCP
 // surface: select_layout's own pre-check must not reject a unique preset
 // prefix before tmux.Window.SelectLayout gets a chance to resolve it.
-//
-//libtmux:real-tmux
 func TestSelectLayoutToolAcceptsAUniquePresetPrefix(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

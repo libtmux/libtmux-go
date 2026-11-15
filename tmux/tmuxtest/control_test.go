@@ -18,15 +18,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.pytest_plugin.control_mode
-//
-// libtmux:parity libtmux._internal.control_mode.ControlMode
-// libtmux:parity libtmux._internal.control_mode.ControlMode.__enter__
-// libtmux:parity libtmux._internal.control_mode.ControlMode.__init__
-// libtmux:parity libtmux._internal.control_mode.ControlMode.client_name
-// libtmux:parity libtmux._internal.control_mode.ControlMode.stdout
-//
-//libtmux:real-tmux
 func TestControlModeRegistersAndExposesProtocolOutput(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	session := onlyControlSession(t, server)
@@ -48,10 +39,6 @@ func TestControlModeRegistersAndExposesProtocolOutput(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.control_mode.ControlMode.server
-// libtmux:parity libtmux._internal.control_mode.ControlMode.session
-//
-//libtmux:real-tmux
 func TestControlModeRetainsValidatedServerAndSession(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	session := onlyControlSession(t, server)
@@ -65,10 +52,6 @@ func TestControlModeRetainsValidatedServerAndSession(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.control_mode.ControlMode._proc
-// libtmux:parity libtmux._internal.control_mode.ControlMode._write_fd
-//
-//libtmux:real-tmux
 func TestControlModeCleanupRemovesClientAndIsIdempotent(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	session := onlyControlSession(t, server)
@@ -100,9 +83,6 @@ func TestControlModeCleanupRemovesClientAndIsIdempotent(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux._internal.control_mode.ControlMode.__exit__
-//
-//libtmux:real-tmux
 func TestControlModeCloseContextCanRetryAfterCancellation(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	session := onlyControlSession(t, server)

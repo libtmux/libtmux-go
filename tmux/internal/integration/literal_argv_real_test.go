@@ -13,7 +13,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestLiteralArgumentsAndRawSeparatorsAgainstRealTmux(t *testing.T) {
 	base := tmuxtest.NewServer(context.Background(), t)
 	configuration := filepath.Join(t.TempDir(), "tmux.conf;")

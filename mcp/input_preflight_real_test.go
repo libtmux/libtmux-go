@@ -16,7 +16,6 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-//libtmux:real-tmux
 func TestSelectLayoutReusesNativeValidation(t *testing.T) {
 	target := tmuxtest.NewServer(t.Context(), t)
 	sessions, err := target.Sessions(t.Context())
@@ -77,7 +76,6 @@ func TestSelectLayoutReusesNativeValidation(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestSendConfiguredMembershipReal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -149,8 +147,6 @@ func TestSendConfiguredMembershipReal(t *testing.T) {
 // caller who put "Enter" in keys never ran the command; the enter field
 // presses Enter as its own key, dispatched separately from the literal
 // sequence, so it submits regardless of literal.
-//
-//libtmux:real-tmux
 func TestSendKeysEnterFlagSubmitsLiteralText(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -190,7 +186,6 @@ func TestSendKeysEnterFlagSubmitsLiteralText(t *testing.T) {
 	tmuxtest.WaitForLine(ctx, t, panes[1], batchMarker)
 }
 
-//libtmux:real-tmux
 func TestRunConfiguredMembershipReal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -236,7 +231,6 @@ func TestRunConfiguredMembershipReal(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPasteAndCallerPreflightReal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -399,7 +393,6 @@ func TestPasteAndCallerPreflightReal(t *testing.T) {
 	})
 }
 
-//libtmux:real-tmux
 func TestSendRechecksAfterCallerConfirmation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -520,7 +513,6 @@ func onlyRequest(t *testing.T, result *sdk.CallToolResult) (string, *sdk.ElicitP
 	return "", nil
 }
 
-//libtmux:real-tmux
 func TestCallerPaneAsksByInputRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -595,7 +587,6 @@ func TestCallerPaneAsksByInputRequest(t *testing.T) {
 	})
 }
 
-//libtmux:real-tmux
 func TestCallerPaneBatchAsksOnceBeforeAnythingRuns(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

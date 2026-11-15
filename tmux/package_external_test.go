@@ -6,12 +6,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux"
 )
 
-// libtmux:parity libtmux#export:Client
-// libtmux:parity libtmux#export:Pane
-// libtmux:parity libtmux#export:Server
-// libtmux:parity libtmux#export:Session
-// libtmux:parity libtmux#export:Window
-// libtmux:parity libtmux.__all__
 func TestPackageExportsCompile(t *testing.T) {
 	t.Parallel()
 

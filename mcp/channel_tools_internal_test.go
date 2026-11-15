@@ -127,7 +127,6 @@ func TestWaitForChannelBoundsColdRuntimeAcquisition(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForChannelReportsTheResolvedTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -163,7 +162,6 @@ func TestWaitForChannelReportsTheResolvedTimeout(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForChannelHonorsTheEnvironmentCeiling(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -189,7 +187,6 @@ func TestWaitForChannelHonorsTheEnvironmentCeiling(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestWaitForChannelOwnsProgressUntilTheWaitReturns(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

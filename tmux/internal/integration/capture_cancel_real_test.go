@@ -56,8 +56,6 @@ func capturePanes(
 // in flight, still ends with no scratch buffer once the server runs again, and
 // the cleanup that could not reach a stopped server within its bound is said
 // in the returned error instead of hanging or vanishing.
-//
-//libtmux:real-tmux
 func TestCaptureToFileCancelledWhileServerStoppedLeavesNoBuffer(t *testing.T) {
 	for _, transport := range []string{"subprocess", "connection"} {
 		t.Run(transport, func(t *testing.T) {
@@ -135,8 +133,6 @@ func TestCaptureToFileCancelledWhileServerStoppedLeavesNoBuffer(t *testing.T) {
 // it. When the server stops right after the final capture-pane (a hook stops it
 // from inside tmux) and the limit passes, no scratch buffer is left once the
 // server answers again.
-//
-//libtmux:real-tmux
 func TestSessionRunCancelledAfterCaptureOnConnectionLeavesNoScratchBuffer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()

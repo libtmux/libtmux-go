@@ -45,8 +45,6 @@ func scratchBuffersOn(ctx context.Context, t *testing.T, server tmux.Server) []s
 // A path is either written exactly as named or refused before dispatch with a
 // request error. It never runs some other tmux command, and no scratch buffer
 // outlives the call, over a subprocess and over a Connection lane alike.
-//
-//libtmux:real-tmux
 func TestCaptureToFilePathsOverBothTransports(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

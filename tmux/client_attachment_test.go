@@ -8,9 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.client.Client.attached_pane
-// libtmux:parity libtmux.client.Client.attached_session
-// libtmux:parity libtmux.client.Client.attached_window
 func TestClientResolveAttachmentUsesOneStrictSnapshotAndSessionFocus(t *testing.T) {
 	t.Parallel()
 
@@ -180,8 +177,6 @@ func TestClientResolveAttachmentAbsenceAndPartialStates(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.MultipleActiveWindows
-// libtmux:parity libtmux.exc.MultipleActiveWindows.__init__
 func TestClientResolveAttachmentKeepsFailuresLoud(t *testing.T) {
 	t.Parallel()
 

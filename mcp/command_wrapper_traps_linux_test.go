@@ -17,7 +17,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-//libtmux:real-tmux
 func TestRunShellCommandPreservesInheritedShellSemantics(t *testing.T) {
 	for _, shell := range []struct {
 		name      string

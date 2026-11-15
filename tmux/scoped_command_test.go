@@ -10,16 +10,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.session.Session.cmd
-// libtmux:parity libtmux.session.Session.cmd#parameter-branch:target:7179a7fee946
-// libtmux:parity libtmux.common.CmdMixin
-// libtmux:parity libtmux.common.CmdMixin.cmd
-// libtmux:parity libtmux.common.CmdProtocol
-// libtmux:parity libtmux.common.CmdProtocol.__call__
-// libtmux:parity libtmux.pane.Pane.cmd
-// libtmux:parity libtmux.pane.Pane.cmd#parameter-branch:target:7179a7fee946
-// libtmux:parity libtmux.window.Window.cmd
-// libtmux:parity libtmux.window.Window.cmd#parameter-branch:target:7179a7fee946
 func TestObjectCmdInjectsStableTargetAfterSubcommand(t *testing.T) {
 	t.Parallel()
 

@@ -16,8 +16,6 @@ import (
 // One command earns one trace on every route. A connection-bound server sends
 // its commands down a control lane, which is itself a place a command can be
 // observed, so the two have to agree on which of them reports.
-//
-//libtmux:real-tmux
 func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 	t.Parallel()
 
@@ -128,8 +126,6 @@ func TestOneCommandIsObservedOnceOverEitherTransport(t *testing.T) {
 // every program does, and it must cost one listing, not a whole-server
 // snapshot's one listing per relation kind, each asking tmux for every
 // format field.
-//
-//libtmux:real-tmux
 func TestResolvingAnActivePaneListsOnlyItsOwnScope(t *testing.T) {
 	t.Parallel()
 
@@ -206,8 +202,6 @@ func listings(commands []string) []string {
 // Typed text reaches the pane as itself. A semicolon separates tmux commands
 // and a backslash escapes in them, so both are ways a send that reshapes its
 // arguments corrupts what a caller typed.
-//
-//libtmux:real-tmux
 func TestTypedTextReachesThePaneAsItself(t *testing.T) {
 	t.Parallel()
 

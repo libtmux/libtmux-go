@@ -10,25 +10,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.__repr__
-// libtmux:parity libtmux.session.Session
-// libtmux:parity libtmux.session.Session.__enter__
-// libtmux:parity libtmux.session.Session.__eq__
-// libtmux:parity libtmux.session.Session.__eq__#parameter-branch:other:02a3a438c196
-// libtmux:parity libtmux.session.Session.__repr__
-// libtmux:parity libtmux.session.Session.id
-// libtmux:parity libtmux.session.Session.server
-// libtmux:parity libtmux.client.Client
-// libtmux:parity libtmux.pane.Pane
-// libtmux:parity libtmux.pane.Pane.__enter__
-// libtmux:parity libtmux.pane.Pane.__eq__
-// libtmux:parity libtmux.pane.Pane.__eq__#parameter-branch:other:13f7731ff992
-// libtmux:parity libtmux.pane.Pane.__repr__
-// libtmux:parity libtmux.window.Window
-// libtmux:parity libtmux.window.Window.__enter__
-// libtmux:parity libtmux.window.Window.__eq__
-// libtmux:parity libtmux.window.Window.__eq__#parameter-branch:other:5fca9cbeda28
-// libtmux:parity libtmux.window.Window.__repr__
 func TestModelIdentityAndRepresentations(t *testing.T) {
 	t.Parallel()
 
@@ -71,17 +52,6 @@ func TestModelIdentityAndRepresentations(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.session.Session.name
-// libtmux:parity libtmux.window.Window.id
-// libtmux:parity libtmux.window.Window.name
-// libtmux:parity libtmux.window.Window.index
-// libtmux:parity libtmux.window.Window.height
-// libtmux:parity libtmux.window.Window.width
-// libtmux:parity libtmux.pane.Pane.id
-// libtmux:parity libtmux.pane.Pane.index
-// libtmux:parity libtmux.pane.Pane.height
-// libtmux:parity libtmux.pane.Pane.width
-// libtmux:parity libtmux.pane.Pane.title
 func TestPythonAliasPropertiesUseCanonicalModelValues(t *testing.T) {
 	t.Parallel()
 
@@ -205,11 +175,6 @@ func TestServerIdentityAnchorsRelativePathsToFrozenWorkingDirectory(t *testing.T
 	}
 }
 
-// libtmux:parity libtmux.server.Server.__enter__
-// libtmux:parity libtmux.server.Server.__eq__
-// libtmux:parity libtmux.server.Server.__eq__#parameter-branch:other:6cb50a842361
-// libtmux:parity libtmux.server.Server.socket_name
-// libtmux:parity libtmux.server.Server.socket_path
 func TestServerIdentityUsesEffectiveSocketPathSelector(t *testing.T) {
 	t.Parallel()
 

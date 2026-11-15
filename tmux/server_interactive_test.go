@@ -77,32 +77,6 @@ func TestCommandPromptBuildsExactArguments(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.server.Server.display_menu
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:border_lines:d9be2600ac4e
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:border_style:4d3b7eb6c12c
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:mouse:61c1f4bb05bb
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:selected_style:8d9e2e2259ea
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:starting_choice:47b908259302
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:stay_open:9abb4fe49285
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:style:2fb8c408bf6c
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:target_pane:5f9e4a0df2ff
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:title:a849ce4d4991
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:x:c2891f2208b1
-// libtmux:parity libtmux.server.Server.display_menu#parameter-branch:y:0cf048966732
-// libtmux:parity libtmux.server.Server.display_menu#version-branch:tmux-version:5bb2ac269d05
-// libtmux:parity libtmux.server.Server.display_menu#version-branch:tmux-version:5bb2ac269d05:2
-// libtmux:parity libtmux.server.Server.display_menu#version-branch:tmux-version:5bb2ac269d05:3
-// libtmux:parity libtmux.server.Server.display_menu#version-branch:tmux-version:5bb2ac269d05:4
-// libtmux:parity libtmux.server.Server.display_menu#version-branch:tmux-version:5bb2ac269d05:5
-// libtmux:parity libtmux.server.Server.display_menu#version-branch:tmux-version:82c3b9df745c
-// libtmux:parity libtmux.server.Server.display_menu#warning:2951ff2002a9
-// libtmux:parity libtmux.server.Server.display_menu#warning:2953a2cb595a
-// libtmux:parity libtmux.server.Server.display_menu#warning:79333b75bfbe
-// libtmux:parity libtmux.server.Server.display_menu#warning:a35dc72d82e4
-// libtmux:parity libtmux.server.Server.display_menu#warning:bee653a17e16
-// libtmux:parity libtmux.server.Server.display_menu#warning:e62af5989ba6
-// libtmux:parity libtmux.server.Server.start_server
 func TestDisplayMenuBuildsTypedItemArguments(t *testing.T) {
 	t.Parallel()
 
@@ -154,36 +128,6 @@ func TestDisplayMenuBuildsTypedItemArguments(t *testing.T) {
 	})
 }
 
-// libtmux:parity libtmux.server.Server.command_prompt
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:bspace_exit:7238f0865c95
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:expand_format:3634369442f2
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:inputs:b6499bc9fd6d
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:key_only:c28e76c495c6
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:literal:399069e0cc76
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:no_freeze:85604e1972c7
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:numeric:fcc881c8bb5c
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:on_input_change:d0d5f3ef21cf
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:one_key:2835968062ff
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:prompt:16b451056c1b
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:prompt_type:83546fba116e
-// libtmux:parity libtmux.server.Server.command_prompt#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.command_prompt#version-branch:tmux-version:157b9dba160f
-// libtmux:parity libtmux.server.Server.command_prompt#version-branch:tmux-version:157b9dba160f:2
-// libtmux:parity libtmux.server.Server.command_prompt#version-branch:tmux-version:161023f2e486
-// libtmux:parity libtmux.server.Server.command_prompt#version-branch:tmux-version:d9801479e597
-// libtmux:parity libtmux.server.Server.command_prompt#warning:37815d3900a7
-// libtmux:parity libtmux.server.Server.command_prompt#warning:83696e92476d
-// libtmux:parity libtmux.server.Server.command_prompt#warning:a1188bba9cd7
-// libtmux:parity libtmux.server.Server.confirm_before
-// libtmux:parity libtmux.server.Server.confirm_before#parameter-branch:confirm_key:a51acfa2582f
-// libtmux:parity libtmux.server.Server.confirm_before#parameter-branch:default_yes:a54c1881b74f
-// libtmux:parity libtmux.server.Server.confirm_before#parameter-branch:prompt:16b451056c1b
-// libtmux:parity libtmux.server.Server.confirm_before#parameter-branch:target_client:9bd26a6f1edf
-// libtmux:parity libtmux.server.Server.confirm_before#version-branch:tmux-version:5bb2ac269d05
-// libtmux:parity libtmux.server.Server.confirm_before#version-branch:tmux-version:5bb2ac269d05:2
-// libtmux:parity libtmux.server.Server.confirm_before#version-branch:tmux-version:d9801479e597
-// libtmux:parity libtmux.server.Server.confirm_before#warning:931e3a7f3f33
-// libtmux:parity libtmux.server.Server.confirm_before#warning:fd405b4a80ca
 func TestInteractiveVersionBoundariesWarnAndOmit(t *testing.T) {
 	t.Parallel()
 

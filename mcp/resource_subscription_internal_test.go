@@ -129,8 +129,6 @@ func twoPanes(ctx context.Context, t *testing.T) watchedPanes {
 
 // A pane's output is announced on the URI the client subscribed with, on both
 // protocol generations, and reading it then shows the output.
-//
-//libtmux:real-tmux
 func TestPaneContentSubscription(t *testing.T) {
 	for _, version := range resourceProtocols {
 		t.Run(version, func(t *testing.T) {
@@ -195,8 +193,6 @@ func TestPaneContentSubscription(t *testing.T) {
 
 // One control client serves every session watching a pane, it ends with the
 // last of them, and nothing that ends a session leaves it running.
-//
-//libtmux:real-tmux
 func TestPaneWatchLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -278,8 +274,6 @@ func TestPaneWatchLifecycle(t *testing.T) {
 
 // Past the cap a new pane is refused, while a pane already watched is shared
 // without spending another control client.
-//
-//libtmux:real-tmux
 func TestPaneWatchesAreCapped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -304,8 +298,6 @@ func TestPaneWatchesAreCapped(t *testing.T) {
 
 // What cannot be subscribed to is invalid params, on either protocol, rather
 // than a failure of the server.
-//
-//libtmux:real-tmux
 func TestSubscribingToWhatIsNotWatchableIsInvalidParams(t *testing.T) {
 	for _, version := range resourceProtocols {
 		t.Run(version, func(t *testing.T) {
@@ -335,8 +327,6 @@ func TestSubscribingToWhatIsNotWatchableIsInvalidParams(t *testing.T) {
 
 // Below tmux 3.7 there is no control observation to push from, so a
 // subscription is refused with the remedy, and a read still works.
-//
-//libtmux:real-tmux
 func TestSubscribingBelowTheControlFloorIsRefused(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

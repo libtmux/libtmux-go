@@ -14,8 +14,6 @@ import (
 
 // Forward references let later steps target objects created earlier in the
 // same run.
-//
-//libtmux:real-tmux
 func TestPlanTargetsWhatItHasNotCreatedYet(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -132,8 +130,6 @@ func TestPlanPreviewLeavesUnresolvedStepsNil(t *testing.T) {
 
 // Run checks every step before it sends the first, so a request this package
 // refuses stops the plan with nothing created.
-//
-//libtmux:real-tmux
 func TestPlanKeepsAnUnsentRenderFailureSkipped(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -172,7 +168,6 @@ func TestPlanRefusesTheZeroRef(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPlanRefusesReferencesFromDifferentDaemons(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -212,7 +207,6 @@ func TestPlanRefusesReferencesFromDifferentDaemons(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPlanAtomicallyRejectsTheWrongServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -244,8 +238,6 @@ func TestPlanAtomicallyRejectsTheWrongServer(t *testing.T) {
 
 // tmux does not attribute a grouped command-list failure to an individual
 // operation, so every operation in the dispatch is indeterminate.
-//
-//libtmux:real-tmux
 func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -298,8 +290,6 @@ func TestPlanStopsAtTheFirstFailure(t *testing.T) {
 }
 
 // A transport may change plan cost, not results.
-//
-//libtmux:real-tmux
 func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -352,8 +342,6 @@ func TestPlanRunsIdenticallyOnBothTransports(t *testing.T) {
 }
 
 // Every operation after session creation targets a forward reference.
-//
-//libtmux:real-tmux
 func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -420,7 +408,6 @@ func TestPlanBuildsAWorkspaceInOnePass(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPlanRecordsTheWiderSurface(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -486,8 +473,6 @@ func TestPlanRecordsTheWiderSurface(t *testing.T) {
 }
 
 // Cmd resolves forward references like typed plan operations.
-//
-//libtmux:real-tmux
 func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -531,8 +516,6 @@ func TestPlanCmdRecordsWhatHasNoRecorder(t *testing.T) {
 }
 
 // Planners may change dispatch count, never per-operation results.
-//
-//libtmux:real-tmux
 func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -628,8 +611,6 @@ func TestPlannersAgreeOnResultsAndDifferOnCost(t *testing.T) {
 
 // tmux merges command-list replies; Plan must restore per-operation output and
 // status.
-//
-//libtmux:real-tmux
 func TestPlanSplitsResultsPerOperation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -709,7 +690,6 @@ func TestPlanSplitsResultsPerOperation(t *testing.T) {
 	}
 }
 
-//libtmux:real-tmux
 func TestPlannersAgreeWhenAnOperationNamesTwoObjects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -864,8 +844,6 @@ func TestPlanRefusesAGroupingThatIsNotThePlan(t *testing.T) {
 // DisplayMessage. Each duplicate needed its own fix, so each is exercised
 // here even though the immediate-method equivalents are already covered
 // elsewhere.
-//
-//libtmux:real-tmux
 func TestPlanTreatsLeadingDashTextAsPositionalAgainstRealTmux(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

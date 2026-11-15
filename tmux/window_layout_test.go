@@ -154,14 +154,6 @@ func TestValidateLayoutStillRefusesAnUnrecognisedValue(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.window.Window.next_layout
-// libtmux:parity libtmux.window.Window.previous_layout
-// libtmux:parity libtmux.window.Window.select_layout
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:layout,next_layout,previous_layout,spread:0fa948c7463a
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:layout:2a9f9e28d66a
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:next_layout:e5241b7cc5f9
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:previous_layout:146fb5ba152c
-// libtmux:parity libtmux.window.Window.select_layout#parameter-branch:spread:ef0ecf84f4e8
 func TestWindowLayoutCommandsBuildLiteralArguments(t *testing.T) {
 	t.Parallel()
 

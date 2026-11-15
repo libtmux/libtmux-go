@@ -8,12 +8,6 @@ import (
 	"testing"
 )
 
-// libtmux:parity libtmux._internal.constants.ServerOptions.terminal_features
-// libtmux:parity libtmux._internal.constants.TerminalFeatures
-// libtmux:parity libtmux.options.CommandAliases
-// libtmux:parity libtmux.options.TerminalOverride
-// libtmux:parity libtmux.options.TerminalOverrides
-// libtmux:parity libtmux.options.explode_complex
 func TestComplexOptionProjectionsPreservePresenceOriginAndPythonShapes(t *testing.T) {
 	t.Parallel()
 

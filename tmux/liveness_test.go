@@ -26,10 +26,6 @@ func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
 }
 
-// libtmux:parity libtmux.server.Server.is_alive
-// libtmux:parity libtmux.server.Server.raise_if_dead
-//
-//libtmux:real-tmux
 func TestServerLivenessDistinguishesDeadFromTransportFailure(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 
@@ -73,7 +69,6 @@ func TestServerIsAliveReturnsContextError(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.TmuxCommandNotFound
 func TestNewServerRejectsMissingExecutableBeforeLiveness(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing-tmux")
 	_, err := tmux.NewServer(tmux.ServerOptions{Binary: missing})
@@ -215,8 +210,6 @@ func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
 
 // tmux's client exits 0 when the server is killed under a foreground command,
 // so a blocking command must check the server before it reports success.
-//
-//libtmux:real-tmux
 func TestForegroundShellCommandsReportAServerKilledUnderThem(t *testing.T) {
 	// The shell command ends its own server through the TMUX it inherits.
 	const endServer = "tmux kill-server"

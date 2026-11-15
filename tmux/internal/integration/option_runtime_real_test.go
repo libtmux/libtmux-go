@@ -19,16 +19,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux.server.Server.default_option_scope
-// libtmux:parity libtmux.session.Session.default_option_scope
-// libtmux:parity libtmux._internal.constants.ServerOptions.terminal_features
-// libtmux:parity libtmux._internal.constants.TerminalFeatures
-// libtmux:parity libtmux.options.CommandAliases
-// libtmux:parity libtmux.options.TerminalOverride
-// libtmux:parity libtmux.options.TerminalOverrides
-// libtmux:parity libtmux.options.explode_complex
-//
-//libtmux:real-tmux
 func TestOptionRuntimePreservesAllRealScopesAndValueStates(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
@@ -257,9 +247,6 @@ func TestOptionRuntimePreservesAllRealScopesAndValueStates(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.options.OptionsMixin.set_option
-//
-//libtmux:real-tmux
 func TestTypedArrayOptionReplacementPreservesRealState(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
@@ -382,9 +369,6 @@ func TestTypedArrayOptionReplacementPreservesRealState(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.options.OptionsMixin.set_option
-//
-//libtmux:real-tmux
 func TestTypedArrayOptionReplacementReportsRealPartialFailure(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	realBinary, err := exec.LookPath("tmux")
@@ -446,10 +430,6 @@ func mustSparseStrings(t *testing.T, entries ...tmux.SparseEntry[string]) tmux.S
 	return values
 }
 
-// libtmux:parity libtmux.server.Server.default_hook_scope
-// libtmux:parity libtmux.session.Session.default_hook_scope
-//
-//libtmux:real-tmux
 func TestHookRuntimePreservesAllRealScopesAndPartialBulkSemantics(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	snapshot := mustRealSnapshot(t, server)
@@ -598,7 +578,6 @@ func TestHookRuntimePreservesAllRealScopesAndPartialBulkSemantics(t *testing.T) 
 	}
 }
 
-//libtmux:real-tmux
 func TestSetHooksRejectsOverflowWithoutClearingRealHook(t *testing.T) {
 	if strconv.IntSize < 64 {
 		t.Skip("an index above MaxInt32 is not representable by int")
@@ -662,8 +641,6 @@ func onlyRealOptionHierarchy(t *testing.T, snapshot tmux.Snapshot) (tmux.Session
 // TestOptionTargetSentinelSeparatesAMissingWindowFromABadName covers the pair
 // against real tmux. Both exit 1 and neither renders tmux's message, so the
 // sentinel is the only thing that tells a caller which mistake it made.
-//
-//libtmux:real-tmux
 func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -730,8 +707,6 @@ func TestOptionTargetSentinelSeparatesAMissingWindowFromABadName(t *testing.T) {
 // that is differs per option. A caller who says 250ms means 250ms of whichever
 // one tmux keeps, and a duration tmux cannot hold is a mistake worth refusing
 // rather than truncating into one it can.
-//
-//libtmux:real-tmux
 func TestDurationOptionsRoundTripInTmuxsOwnUnits(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

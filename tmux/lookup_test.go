@@ -9,13 +9,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/internal/tmuxcmd"
 )
 
-// libtmux:parity libtmux.server.Server.child_id_attribute
-// libtmux:parity libtmux.session.Session.from_session_id
-// libtmux:parity libtmux.client.Client.from_client_name
-// libtmux:parity libtmux.pane.Pane.from_pane_id
-// libtmux:parity libtmux.window.Window.from_window_id
-// libtmux:parity libtmux.neo.fetch_obj
-// libtmux:parity libtmux.neo.fetch_obj#parameter-branch:list_cmd,list_extra_args,obj_id,obj_key,server:87dd2474d396
 func TestServerPointLookupsUseScopedFramedListings(t *testing.T) {
 	t.Parallel()
 
@@ -297,22 +290,6 @@ func TestServerPointLookupsChoosePythonBestWinlink(t *testing.T) {
 	}
 }
 
-// libtmux:parity libtmux.exc.MultipleObjectsReturned
-// libtmux:parity libtmux.exc.MultipleObjectsReturned.__init__
-// libtmux:parity libtmux.exc.MultipleObjectsReturned.__init__#parameter-branch:args:fd422ab3a1ca
-// libtmux:parity libtmux.exc.MultipleObjectsReturned.__init__#parameter-branch:count:f4f0d58a810a
-// libtmux:parity libtmux.exc.MultipleObjectsReturned.__init__#parameter-branch:query:847ec4f232c8
-// libtmux:parity libtmux.exc.ObjectDoesNotExist
-// libtmux:parity libtmux.exc.ObjectDoesNotExist.__init__
-// libtmux:parity libtmux.exc.ObjectDoesNotExist.__init__#parameter-branch:args:fd422ab3a1ca
-// libtmux:parity libtmux.exc.ObjectDoesNotExist.__init__#parameter-branch:query:847ec4f232c8
-// libtmux:parity libtmux.exc.PaneNotFound
-// libtmux:parity libtmux.exc.PaneNotFound.__init__
-// libtmux:parity libtmux.exc.PaneNotFound.__init__#parameter-branch:pane_id:a46e51340c77
-// libtmux:parity libtmux.exc.TmuxObjectDoesNotExist
-// libtmux:parity libtmux.exc.TmuxObjectDoesNotExist.__init__
-// libtmux:parity libtmux.exc.TmuxObjectDoesNotExist.__init__#parameter-branch:list_cmd,list_extra_args,obj_id,obj_key:6c63cfb56ffd
-// libtmux:parity libtmux.exc.TmuxObjectDoesNotExist.__init__#parameter-branch:list_extra_args:4ed34060ba84
 func TestServerPointLookupCardinality(t *testing.T) {
 	t.Parallel()
 
@@ -808,13 +785,6 @@ func TestServerPointLookupRejectsInvalidStableTargetsBeforeExecution(t *testing.
 	}
 }
 
-// libtmux:parity libtmux.session.Session.refresh
-// libtmux:parity libtmux.client.Client.refresh
-// libtmux:parity libtmux.client.Client.server
-// libtmux:parity libtmux.pane.Pane.refresh
-// libtmux:parity libtmux.pane.Pane.server
-// libtmux:parity libtmux.window.Window.refresh
-// libtmux:parity libtmux.window.Window.server
 func TestModelRefreshReturnsNewLiveValue(t *testing.T) {
 	t.Parallel()
 

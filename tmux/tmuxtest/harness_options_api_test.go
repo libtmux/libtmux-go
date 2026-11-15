@@ -8,13 +8,6 @@ import (
 	"github.com/libtmux/libtmux-go/tmux/tmuxtest"
 )
 
-// libtmux:parity libtmux._internal.control_mode.ControlMode
-// libtmux:parity libtmux._internal.control_mode.ControlMode.__enter__
-// libtmux:parity libtmux._internal.control_mode.ControlMode.__exit__
-// libtmux:parity libtmux._internal.control_mode.ControlMode.__init__
-// libtmux:parity libtmux.pytest_plugin.TestServer
-// libtmux:parity libtmux.pytest_plugin.USING_ZSH
-// libtmux:parity libtmux.pytest_plugin.control_mode
 func TestServerOptionsPublicSurfaceCompiles(_ *testing.T) {
 	var options tmuxtest.ServerOptions
 	requireNewServerSignature(tmuxtest.NewServer)
