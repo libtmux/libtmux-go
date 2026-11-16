@@ -77,6 +77,27 @@ def supported_versions(manifest: Path) -> list[str]:
     return versions
 
 
+def available_versions(matrix: Path, supported: list[str]) -> list[str]:
+    """List the supported releases the matrix holds a tmux for, oldest first.
+
+    The manifest orders releases as tmux numbers them, which a text sort of the
+    directory names does not.
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     for name in ("3.10", "3.9", "3.2a"):
+    ...         tmux = Path(root) / name / "bin" / "tmux"
+    ...         tmux.parent.mkdir(parents=True)
+    ...         _ = tmux.write_text("#!/bin/sh\\n")
+    ...         tmux.chmod(0o755)
+    ...     available_versions(Path(root), ["3.9", "3.10"])
+    ['3.9', '3.10']
+    """
+    return [
+        version for version in supported if os.access(matrix / version / "bin" / "tmux", os.X_OK)
+    ]
+
+
 def holds_socket(directory: Path) -> bool:
     """Report whether a socket file sits anywhere under directory."""
     for parent, _, names in os.walk(directory):
@@ -123,11 +144,7 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
     elif environ.get("LIBTMUX_MATRIX_REQUIRED") == "1":
         versions = supported
     else:
-        versions = sorted(
-            candidate.name
-            for candidate in matrix.glob("*/")
-            if os.access(candidate / "bin" / "tmux", os.X_OK) and candidate.name in supported
-        )
+        versions = available_versions(matrix, supported)
     if not versions:
         raise MatrixError(f"{matrix} holds no version with bin/tmux in it")
     for version in versions:
@@ -199,18 +216,15 @@ def run(environ: Mapping[str, str]) -> int:
             "each with bin/tmux inside it:\n\n"
             "    $LIBTMUX_TMUX_MATRIX/3.3a/bin/tmux\n"
             "    $LIBTMUX_TMUX_MATRIX/3.7c/bin/tmux\n\n"
-            "Skipping rather than failing: a checkout without a matrix can still run every\n"
-            "other gate, and reporting a pass this did not earn would be worse than saying\n"
-            "it did not run.",
+            "Skipping rather than failing, so a checkout without a matrix still runs every\n"
+            "other gate. Set LIBTMUX_MATRIX_REQUIRED=1 to fail instead.",
             file=sys.stderr,
         )
         return 0
 
-    # A tmux namespace of this sweep's own, made fresh each run. Sibling
-    # checkouts sweep their own matrices on the same machine, and a shared
-    # socket directory is one sweep ending servers another is still using. The
-    # caller's TMUX_TMPDIR is not reused for the same reason: it is the
-    # directory of the tmux they use.
+    # A socket directory of this sweep's own, fresh each run: sibling checkouts
+    # sweep concurrently, and a shared one lets one sweep end servers another
+    # still uses. The caller's TMUX_TMPDIR is not reused for the same reason.
     try:
         socket_directory = Path(
             tempfile.mkdtemp(prefix="lmx.", dir=socket_base(environ.get("TMPDIR") or "/tmp"))

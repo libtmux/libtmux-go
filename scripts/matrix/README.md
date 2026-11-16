@@ -7,6 +7,7 @@ lane.
 It needs a directory with `<version>/bin/tmux` for each release, at
 `$LIBTMUX_TMUX_MATRIX` or `~/.local/share/libtmux-tmux-matrix`. Without one it
 says so and exits 0, so a checkout with no builds still passes its other gates.
+
 The releases are the supported entries of
 [`.github/ci-matrix.txt`](../../.github/ci-matrix.txt), each run through
 [`test-module`](../test-module).
@@ -17,10 +18,11 @@ The releases are the supported entries of
 | `LIBTMUX_MATRIX_VERSIONS` | Space-separated releases to run |
 | `LIBTMUX_MATRIX_MODULES` | Space-separated modules to run |
 
-The sweep runs with a socket directory of its own, made for the run and removed
-after it, and without `TMUX`, `TMUX_PANE` and `LIBTMUX_SOCKET*`, so it never
-reaches the tmux you use. A socket left in that directory keeps it and fails the
-sweep.
+The sweep never reaches the tmux you use: it runs without `TMUX`, `TMUX_PANE`
+and `LIBTMUX_SOCKET*`, in a socket directory made for the run and removed after
+it.
+
+A socket left in that directory keeps it and fails the sweep.
 
 Run every module against every supported build found in the matrix:
 

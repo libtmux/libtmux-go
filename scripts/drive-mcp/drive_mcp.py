@@ -15,9 +15,8 @@ wherever the binary does.
 
 Environment is replaced rather than inherited, which is what a client does:
 pass only what the server needs, as NAME=VALUE arguments after the binary.
-Inheriting a shell's environment hides a whole class of bug -- a missing UTF-8
-locale made tmux rewrite a tab separator, and the control-connection poll never
-matched.
+Inheriting a shell's environment hides a whole class of bug, such as a missing
+UTF-8 locale that makes tmux rewrite a tab separator.
 
 To exercise self-detection, run this script itself inside a pane of the tmux
 server under test. It keeps TMUX and TMUX_PANE unless you replace them, so the
@@ -191,8 +190,7 @@ async def drive(
         print(f"=== {method} {json.dumps(params)[:120]}")
         print(json.dumps(reply, indent=2)[: step.get("maxChars", 4000)])
         # A tool that declares an output schema and answers without structured
-        # content has broken a contract it published, which is a bug no
-        # assertion had to be written for.
+        # content breaks its published contract.
         if name and advertised.get(name, {}).get("outputSchema"):
             result = reply.get("result", {})
             if not result.get("isError") and result.get("structuredContent") is None:
