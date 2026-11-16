@@ -1,6 +1,5 @@
 screen: stdout is a terminal
 exited 3
-1
-2
-3
+stream: live output
 stopped: killed
+input: hello terminal

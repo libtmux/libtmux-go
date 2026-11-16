@@ -2,7 +2,9 @@ package tmux
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -291,4 +293,77 @@ func receiverName(expression ast.Expr) string {
 		return receiverName(expression.X)
 	}
 	return ""
+}
+
+func TestCapabilityStatusUsesReleaseBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		version, id string
+		supported   bool
+	}{
+		{"3.3a", "program-argv", true},
+		{"3.3", "program-argv", false},
+		{"3.7c", "program-lifetime", false},
+		{"3.8-rc3", "program-lifetime", false},
+		{"3.8", "program-lifetime", true},
+		{"3.8a", "program-lifetime", true},
+		{"3.8-rc3", "layout-json", false},
+		{"3.8", "layout-json", true},
+		{"3.8a", "layout-json", true},
+	} {
+		statuses := capabilitiesForVersion(mustParseTestVersion(t, test.version))
+		found := false
+		for _, status := range statuses {
+			if status.ID == test.id {
+				found = true
+				if status.Supported != test.supported {
+					t.Errorf("%s on %s: supported=%v", test.id, test.version, status.Supported)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("missing capability %s", test.id)
+		}
+	}
+	first := capabilitiesForVersion(mustParseTestVersion(t, "3.8"))
+	first[0].APIs[0] = "changed"
+	first[0].Commands[0].Command = "changed"
+	first[1].Commands[0].Flags[0] = "changed"
+	again := capabilitiesForVersion(mustParseTestVersion(t, "3.8"))
+	if again[0].APIs[0] == "changed" || again[0].Commands[0].Command == "changed" || again[1].Commands[0].Flags[0] == "changed" {
+		t.Fatal("discovery aliases registry")
+	}
+}
+
+func TestCapabilitiesUseDaemonWithoutCreation(t *testing.T) {
+	runner := &versionRunner{binary: "3.8", daemon: "3.3a"}
+	server := rawVersionServer(t, runner)
+	if _, err := server.Capability(t.Context(), "unknown"); !errors.Is(err, ErrInvalidServerCommandRequest) || runner.requests != 0 {
+		t.Fatalf("unknown capability = %v, requests %d", err, runner.requests)
+	}
+	status, err := server.Capability(t.Context(), "program-lifetime")
+	if err != nil || status.Supported || status.Current.String() != "3.3a" {
+		t.Fatalf("daemon capability = %#v, %v", status, err)
+	}
+	session := Session{server: server}
+	if _, err := session.StartProgram(t.Context(), "cat", nil, RunOptions{}); !errors.Is(err, ErrVersionTooLow) {
+		t.Fatalf("new client, old daemon StartProgram = %v", err)
+	}
+	if runner.binaryProbes != 0 || runner.effects != 0 {
+		t.Fatalf("binary probes %d, effects %d", runner.binaryProbes, runner.effects)
+	}
+	bound := server.withDaemon(snapshotServerIdentity{
+		version: mustParseTestVersion(t, "3.3a"), pid: "different", startTime: "456", socketPath: "/tmp/version.sock",
+	})
+	if _, err := bound.Capabilities(t.Context()); !errors.Is(err, ErrDaemonReplaced) {
+		t.Fatalf("replaced daemon discovery = %v", err)
+	}
+	runner.daemon = ""
+	if _, err := server.Capabilities(t.Context()); !errors.Is(err, ErrNoServer) || runner.effects != 0 || runner.binaryProbes != 0 {
+		t.Fatalf("missing daemon = %v, effects %d, binary probes %d", err, runner.effects, runner.binaryProbes)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := server.Capabilities(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled discovery = %v", err)
+	}
 }

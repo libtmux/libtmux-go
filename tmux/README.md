@@ -627,16 +627,19 @@ Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux),
 [libtmux.org](https://libtmux.org/en/go/latest/reference/). Changelog:
 [`CHANGELOG.md`](../CHANGELOG.md).
 
-[`Session.Run`][tmux-session-run] runs a command in a window of its own, with
-a terminal. A nonzero exit status arrives in the result:
+[`Session.RunProgram`][tmux-session-runprogram] runs an executable and literal
+arguments in a terminal window on tmux 3.8. Query
+[`Server.Capability`][tmux-server-capability] for `program-lifetime` first.
+[`Session.Run`][tmux-session-run] takes shell commands on tmux 3.3a or newer.
+A nonzero program exit status arrives in the result:
 
 <!-- docs:run-to-completion -->
 
 ```go
 // Given: ctx context.Context; session tmux.Session
 // The command runs with a terminal, so test -t holds where a pipe fails.
-command := "test -t 1 && echo stdout is a terminal; exit 3"
-result, err := session.Run(ctx, command, tmux.RunOptions{})
+arguments := []string{"-c", "test -t 1 && echo stdout is a terminal; exit 3"}
+result, err := session.RunProgram(ctx, "sh", arguments, tmux.RunOptions{})
 if err != nil {
 	return fmt.Errorf("run command: %w", err)
 }
@@ -855,6 +858,8 @@ $ go doc github.com/libtmux/libtmux-go/tmux
 [tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
 [tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
+[tmux-session-runprogram]: https://libtmux.org/en/go/latest/reference/tmux-session-runprogram/
+[tmux-server-capability]: https://libtmux.org/en/go/latest/reference/tmux-server-capability/
 [tmux-session-searchwindows]: https://libtmux.org/en/go/latest/reference/tmux-session-searchwindows/
 [tmux-session-setmouse]: https://libtmux.org/en/go/latest/reference/tmux-session-setmouse/
 [tmux-session-setoption]: https://libtmux.org/en/go/latest/reference/tmux-session-setoption/

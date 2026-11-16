@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -636,5 +637,54 @@ func TestWaitOutcomeOutlivesTheCallerThatReadIt(t *testing.T) {
 				t.Errorf("kill-window sent %d times with Keep %v, want %d", got, keep, wantKills)
 			}
 		})
+	}
+}
+
+func TestOwningProgramErrorRetainsRecoveryPane(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	running := &Running{pane: Pane{paneID: PaneID("%42")}, lifetime: &programLifetime{gate: make(chan struct{}, 1)}}
+	result, err := waitForRun(ctx, running, nil)
+	if err == nil || result.Pane != PaneID("%42") || result.Status != -1 {
+		t.Fatalf("owning error = %#v, %v", result, err)
+	}
+}
+
+func TestProgramRemovalReportsObserverCloseFailure(t *testing.T) {
+	closeFailure := errors.New("observer shutdown failed")
+	closed := make(chan struct{})
+	close(closed)
+	client := &ControlClient{clientName: ClientName("client-42"), closeDone: closed, closeErr: closeFailure}
+	// Shutdown has finished, preserving the error the owner must report.
+	client.closeOnce.Do(func() {})
+	server := rawVersionServer(t, &versionRunner{binary: "3.8", daemon: "3.8"})
+	pane := Pane{server: server, paneID: PaneID("%42"), windowID: WindowID("@42")}
+	lifetime := &programLifetime{
+		session: Session{server: server}, pane: pane, gate: make(chan struct{}, 1),
+		current: &programWitness{client: client, finished: make(chan struct{})},
+	}
+	running := &Running{pane: pane, lifetime: lifetime}
+	if err := running.remove(t.Context()); !errors.Is(err, closeFailure) || err.Error() != closeFailure.Error() {
+		t.Fatalf("program removal hid observer close failure: %v", err)
+	}
+}
+
+func TestProgramCaptureCleansPrivateDirectoryOnFailure(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("TMPDIR", directory)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	server := rawVersionServer(t, &versionRunner{binary: "3.8", daemon: "3.8"})
+	pane := Pane{server: server, sessionID: "$0", windowID: "@0", paneID: "%0"}
+	_, err := captureFinishedScreen(ctx, pane, true)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("capture after cancellation = %v", err)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("capture left %d temporary artifacts", len(entries))
 	}
 }

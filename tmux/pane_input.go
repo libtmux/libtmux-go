@@ -296,7 +296,10 @@ const paneWriterPiece = 3 << 10
 
 type paneWriter struct {
 	ctx  context.Context
-	pane Pane
+	pane interface {
+		SendKeys(context.Context, SendKeysRequest) error
+		Enter(context.Context) error
+	}
 }
 
 func (w paneWriter) Write(data []byte) (int, error) {

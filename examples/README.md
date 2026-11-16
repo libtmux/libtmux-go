@@ -80,8 +80,9 @@ The programs use empty configs and remove their servers on exit.
   server the test harness owns.
 
 The examples need tmux 3.3a or newer on `PATH`; `any-slice` needs none.
-`byte-streams`, `control-mode-subscribe`, `fast-path`, `pane-io` and
-`run-to-completion` need tmux 3.7 for their control connections or observations.
+`byte-streams`, `control-mode-subscribe`, `fast-path` and `pane-io` need tmux 3.7
+for their control connections or observations. `run-to-completion` needs tmux
+3.8 for program-generation ownership.
 
 ## Testing them
 

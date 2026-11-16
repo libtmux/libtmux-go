@@ -79,18 +79,23 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 	slices.SortFunc(tested, tmux.Version.Compare)
 	oldest, newest := tested[0].String(), tested[len(tested)-1].String()
 	connectionFloor := tmux.MinimumConnectionVersion
-	if !slices.ContainsFunc(tested, func(version tmux.Version) bool {
-		return version.String() == connectionFloor
-	}) {
-		t.Fatalf("%s omits the connection floor %s", ciManifestPath, connectionFloor)
+	programFloor := "3.8"
+	for _, floor := range []string{connectionFloor, programFloor} {
+		if !slices.ContainsFunc(tested, func(version tmux.Version) bool {
+			return version.String() == floor
+		}) {
+			t.Fatalf("%s omits the feature floor %s", ciManifestPath, floor)
+		}
 	}
 	allowedRanges := map[[2]string]bool{
 		{oldest, newest}:          true,
 		{connectionFloor, newest}: true,
+		{programFloor, newest}:    true,
 	}
 	allowedFloors := map[string]bool{
 		oldest:          true,
 		connectionFloor: true,
+		programFloor:    true,
 	}
 
 	for _, document := range markdownFiles(t, root) {
@@ -101,15 +106,15 @@ func TestDocumentedTmuxRangesAreTested(t *testing.T) {
 		for _, match := range documentedRange.FindAllStringSubmatch(string(content), -1) {
 			if !allowedRanges[[2]string{match[1], match[2]}] {
 				t.Errorf("%s promises untested tmux range %s through %s; "+
-					"tested module ranges are %s-%s and %s-%s",
-					document, match[1], match[2], oldest, newest, connectionFloor, newest)
+					"tested module ranges are %s-%s, %s-%s and %s-%s",
+					document, match[1], match[2], oldest, newest, connectionFloor, newest, programFloor, newest)
 			}
 		}
 		for _, matcher := range []*regexp.Regexp{documentedFloorOnly, documentedNamedFloor} {
 			for _, match := range matcher.FindAllStringSubmatch(string(content), -1) {
 				if !allowedFloors[match[1]] {
-					t.Errorf("%s asks for untested tmux floor %s; tested floors are %s and %s",
-						document, match[1], oldest, connectionFloor)
+					t.Errorf("%s asks for untested tmux floor %s; tested floors are %s, %s and %s",
+						document, match[1], oldest, connectionFloor, programFloor)
 				}
 			}
 		}

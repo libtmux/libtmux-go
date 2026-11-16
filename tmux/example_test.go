@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2274,6 +2275,94 @@ func ExampleSession_Run() {
 	}
 	fmt.Println(result.Lines, result.Status)
 	// Output: [built] 3
+}
+
+func ExampleSession_RunProgram() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-run-program-" + rand.Text(), ConfigFile: os.DevNull})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer killExampleServer(server)
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "program"})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	arguments := []string{"-c", `printf '%s\n' "$1"; exit 3`, "program", "$HOME"}
+	result, err := session.RunProgram(ctx, "sh", arguments, tmux.RunOptions{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(result.Lines, result.Status)
+	// Output: [$HOME] 3
+}
+
+func ExampleSession_StartProgram() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-start-program-" + rand.Text(), ConfigFile: os.DevNull})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer killExampleServer(server)
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "program"})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	running, err := session.StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("interactive"), Literal: true}); err != nil {
+		fmt.Println(err)
+		return
+	}
+	if err := running.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+		fmt.Println(err)
+		return
+	}
+	result, err := running.Wait(ctx)
+	if err != nil || !slices.Contains(result.Lines, "interactive") {
+		fmt.Println("wait:", result, err)
+		return
+	}
+	fmt.Println("interactive", result.Status)
+	// Output: interactive 0
+}
+
+func ExampleServer_Capability() {
+	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-capability-" + rand.Text(), ConfigFile: os.DevNull})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer killExampleServer(server)
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "capability"}); err != nil {
+		fmt.Println(err)
+		return
+	}
+	feature, err := server.Capability(ctx, "program-lifetime")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// Check feature.Supported before choosing an application workflow.
+	all, err := server.Capabilities(ctx)
+	if err != nil || !slices.ContainsFunc(all, func(row tmux.CapabilityStatus) bool { return row.ID == feature.ID }) {
+		fmt.Println("registry:", err)
+		return
+	}
+	fmt.Println(feature.ID, "requires", feature.Since)
+	// Output: program-lifetime requires 3.8
 }
 
 func ExampleServer_LoadBufferFrom() {
