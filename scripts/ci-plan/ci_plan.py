@@ -29,11 +29,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NoReturn
 
+# Importing a shared module must not leave a __pycache__ in the checkout.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
+from releases import is_release, release_key
+
 MANIFEST = Path(__file__).resolve().parents[2] / ".github" / "ci-matrix.txt"
 
 REF = re.compile(r"[A-Za-z0-9._/-]{1,64}")
 TOOLCHAIN = re.compile(r"[A-Za-z0-9._-]{1,32}")
-RELEASE = re.compile(r"(\d+)\.(\d+)([a-z]?)")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 
 RUNNERS = ("ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04")
@@ -129,7 +134,7 @@ def parse_manifest(text: str) -> Manifest:
             case "control":
                 if not valid_ref(value):
                     die(f"manifest names an invalid tmux ref: {value}")
-                if not RELEASE.fullmatch(value):
+                if not is_release(value):
                     die(f"manifest names a control release that is not a tmux release: {value}")
                 if manifest.control:
                     die("manifest names two control releases")
@@ -139,7 +144,13 @@ def parse_manifest(text: str) -> Manifest:
                     die(f"manifest names an invalid tmux ref: {value}")
                 if value in (*manifest.supported, *manifest.refused, *manifest.development):
                     die(f"manifest repeats tmux {value}")
-                getattr(manifest, kind).append(value)
+                match kind:
+                    case "supported":
+                        manifest.supported.append(value)
+                    case "refused":
+                        manifest.refused.append(value)
+                    case _:
+                        manifest.development.append(value)
             case _:
                 die(f"manifest has an unknown kind: {kind}")
     if not manifest.supported:
@@ -149,17 +160,6 @@ def parse_manifest(text: str) -> Manifest:
     if not manifest.control:
         die("manifest names no control release")
     return manifest
-
-
-def release_key(name: str) -> tuple[int, int, str]:
-    """Order releases as tmux numbers them: a lettered release follows its base.
-
-    >>> release_key("3.7") < release_key("3.7a") < release_key("3.8") < release_key("3.10")
-    True
-    """
-    match = RELEASE.fullmatch(name)
-    assert match is not None, name
-    return int(match[1]), int(match[2]), match[3]
 
 
 @dataclass
@@ -256,7 +256,7 @@ def make_plan(
     for name in refs:
         if name in manifest.development:
             expect, advisory, has_control = "tmux next-*", True, True
-        elif RELEASE.fullmatch(name):
+        elif is_release(name):
             expect, advisory = f"tmux {name}", False
             has_control = release_key(manifest.control) <= release_key(name)
         else:

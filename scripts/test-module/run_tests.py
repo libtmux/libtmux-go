@@ -14,7 +14,6 @@ example prints is named to `go test -skip` instead. The tmux that decides is
 """
 
 import os
-import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -26,6 +25,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 
 import bounded
+from releases import before
 
 
 def work_modules(text: str) -> tuple[str, ...]:
@@ -71,34 +71,13 @@ SKIPPED_BEFORE_37 = {
 }
 
 
-RELEASE = re.compile(r"(\d+)\.(\d+)([a-z]?)")
-
-
-def before(version: str, floor: tuple[int, int, str]) -> bool:
-    """Report whether a release is older than floor, comparing numbers rather than text.
-
-    A name that is not a release, such as a development build's, is not older.
-
-    >>> before("3.5a", CONTROL_FLOOR), before("3.6", CONTROL_FLOOR), before("3.3", CONTROL_FLOOR)
-    (True, True, True)
-    >>> before("3.7", CONTROL_FLOOR), before("3.7a", CONTROL_FLOOR), before("3.10", CONTROL_FLOOR)
-    (False, False, False)
-    >>> before("next-3.9", CONTROL_FLOOR), before("master", CONTROL_FLOOR)
-    (False, False)
-    """
-    match = RELEASE.fullmatch(version)
-    if match is None:
-        return False
-    return (int(match[1]), int(match[2]), match[3]) < floor
-
-
 def skip_pattern(module: str, version: str) -> str:
     """Name the examples `go test -skip` omits for a module on a tmux release.
 
     >>> skip_pattern("workspace", "3.6")
     '^ExampleBuildInto$'
-    >>> skip_pattern("workspace", "3.7")
-    ''
+    >>> skip_pattern("workspace", "3.7"), skip_pattern("workspace", "3.10")
+    ('', '')
     >>> skip_pattern(".", "3.3a").endswith("|^ExamplePane_CaptureToFile$")
     True
     >>> skip_pattern("examples", "3.3a")

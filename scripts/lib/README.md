@@ -4,6 +4,14 @@ Modules the scripts share, so each exists once. A script imports them after
 putting `scripts/lib` on `sys.path`; the tests find it through `pythonpath` in
 `pyproject.toml`.
 
+## releases
+
+Orders tmux releases the way tmux numbers them: `3.10` follows `3.9`, and `3.7a`
+follows `3.7`. `release_key` returns the sort key, `is_release` tells a release
+from a branch or a development build such as `next-3.9`, and `before` compares a
+release with a floor. `run_tests` and `ci_plan` use it. `api-diff` orders Go
+module tags, which are semantic versions, and keeps its own comparison.
+
 ## bounded
 
 Runs external commands under a time limit. When the limit passes, or the script
