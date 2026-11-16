@@ -7,13 +7,14 @@
 
     run_tests.py MODULE [go test flags]
 
-MODULE is `.`, `examples`, `workspace`, `mcp`, `benchmarks` or `internal/tools`.
-An `Example` function has no `t.Skip`, so a release that lacks the feature an
+MODULE is a directory named in go.work's `use` block, relative to the repository
+root. An `Example` function has no `t.Skip`, so a release that lacks the feature an
 example prints is named to `go test -skip` instead. The tmux that decides is
 `$LIBTMUX_TMUX`, or `tmux` on PATH.
 """
 
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -21,9 +22,36 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-MODULES = (".", "examples", "workspace", "mcp", "benchmarks", "internal/tools")
 
-# Releases below 3.7 lack the control client and the notification streams.
+def work_modules(text: str) -> tuple[str, ...]:
+    r"""List the module directories a go.work file names, relative to its directory.
+
+    >>> work_modules("go 1.26.0\n\nuse (\n\t.\n\t./mcp // consumer\n\t./internal/tools\n)\n")
+    ('.', 'mcp', 'internal/tools')
+    >>> work_modules("use ./workspace\n")
+    ('workspace',)
+    """
+    names: list[str] = []
+    inside = False
+    for raw in text.splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if inside:
+            if line == ")":
+                inside = False
+            elif line:
+                names.append(line)
+        elif line == "use (":
+            inside = True
+        elif line.startswith("use "):
+            names.append(line.removeprefix("use ").strip())
+    return tuple(name.removeprefix("./") for name in names)
+
+
+MODULES = work_modules((ROOT / "go.work").read_text())
+
+# Releases below this lack the control client and the notification streams.
+CONTROL_FLOOR = (3, 7, "")
+
 CONTROL_EXAMPLES = (
     "^Example(Server_OpenControl|ControlClient_.*|Session_OpenControl|Pane_OpenObservation"
     "|Server_OpenNotifications|Session_OpenNotifications|Pane_Writer|PaneObservation_.*"
@@ -36,6 +64,27 @@ SKIPPED_BEFORE_37 = {
     "workspace": "^ExampleBuildInto$",
     "mcp": "^Example_watchingAVisibleCommandAcrossTurns$",
 }
+
+
+RELEASE = re.compile(r"(\d+)\.(\d+)([a-z]?)")
+
+
+def before(version: str, floor: tuple[int, int, str]) -> bool:
+    """Report whether a release is older than floor, comparing numbers rather than text.
+
+    A name that is not a release, such as a development build's, is not older.
+
+    >>> before("3.5a", CONTROL_FLOOR), before("3.6", CONTROL_FLOOR), before("3.3", CONTROL_FLOOR)
+    (True, True, True)
+    >>> before("3.7", CONTROL_FLOOR), before("3.7a", CONTROL_FLOOR), before("3.10", CONTROL_FLOOR)
+    (False, False, False)
+    >>> before("next-3.9", CONTROL_FLOOR), before("master", CONTROL_FLOOR)
+    (False, False)
+    """
+    match = RELEASE.fullmatch(version)
+    if match is None:
+        return False
+    return (int(match[1]), int(match[2]), match[3]) < floor
 
 
 def skip_pattern(module: str, version: str) -> str:
@@ -51,7 +100,7 @@ def skip_pattern(module: str, version: str) -> str:
     ''
     """
     skip = ""
-    if version in ("3.3a", "3.4", "3.5", "3.6"):
+    if before(version, CONTROL_FLOOR):
         skip = SKIPPED_BEFORE_37.get(module, "")
     if version == "3.3a" and module == ".":
         skip += "|^ExamplePane_CaptureToFile$"

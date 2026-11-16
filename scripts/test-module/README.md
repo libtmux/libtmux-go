@@ -8,8 +8,9 @@ The `tests` workflow runs it for each module and each tmux lane, and
 [`matrix`](../matrix) runs it for each build in a matrix. The tmux that decides
 is `$LIBTMUX_TMUX`, else `tmux` on `PATH`.
 
-Modules are `.`, `examples`, `workspace`, `mcp`, `benchmarks` and
-`internal/tools`. Flags after the module go to `go test`.
+Modules are the directories in the `use` block of `go.work`. A tmux older than
+3.7 omits the control examples, and the comparison is by release number, so
+`3.5a` is older and `3.10` is not. Flags after the module go to `go test`.
 
 Test the `workspace` module with the race detector:
 
