@@ -28,6 +28,7 @@ exclude-newer = "3 days"
 pythonpath = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
+  "scripts/lane-tests",
   "scripts/matrix",
   "scripts/test-module",
 ]
@@ -49,6 +50,7 @@ line-length = 100
 src = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
+  "scripts/lane-tests",
   "scripts/matrix",
   "scripts/test-module",
 ]
@@ -61,6 +63,7 @@ python-version = "3.12"
 extra-paths = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
+  "scripts/lane-tests",
   "scripts/matrix",
   "scripts/test-module",
 ]
