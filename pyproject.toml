@@ -30,6 +30,7 @@ pythonpath = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/lane-tests",
+  "scripts/lib",
   "scripts/matrix",
   "scripts/test-module",
 ]
@@ -53,6 +54,7 @@ src = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/lane-tests",
+  "scripts/lib",
   "scripts/matrix",
   "scripts/test-module",
 ]
@@ -67,6 +69,7 @@ extra-paths = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/lane-tests",
+  "scripts/lib",
   "scripts/matrix",
   "scripts/test-module",
 ]

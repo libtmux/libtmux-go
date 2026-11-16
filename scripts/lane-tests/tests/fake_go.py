@@ -4,11 +4,14 @@ It records each call as a JSON line in FAKE_GO_LOG: the arguments, the working
 directory, the first directory on PATH and the LIBTMUX_* variables. For a `-run`
 pattern of the form `^(A|B)$` or `^A$` it prints a `--- PASS:` line for each name,
 except the names in FAKE_GO_OMIT. A bare prefix pattern prints the names in
-FAKE_GO_PREFIX_TESTS. FAKE_GO_STATUS is the exit status; FAKE_GO_HANG makes it sleep.
+FAKE_GO_PREFIX_TESTS. FAKE_GO_STATUS is the exit status; FAKE_GO_HANG makes it sleep. FAKE_GO_SLEEPER names a
+FIFO: it starts a child that sleeps, as the test binary below `go test` does, and both
+hold the FIFO's write end until they die.
 """
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -31,6 +34,14 @@ def main() -> int:
     }
     with Path(os.environ["FAKE_GO_LOG"]).open("a") as log:
         log.write(json.dumps(call) + "\n")
+    if sleeper := os.environ.get("FAKE_GO_SLEEPER"):
+        held = os.open(sleeper, os.O_WRONLY)
+        subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdout=subprocess.DEVNULL,
+            pass_fds=[held],
+        )
+        os.write(held, b"x")
     if os.environ.get("FAKE_GO_HANG"):
         time.sleep(30)
     if "-run" in arguments:

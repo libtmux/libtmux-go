@@ -1,7 +1,9 @@
 """Tests for lane_tests.py, with a go that prints what a run would and a tmux that reports a release."""
 
 import json
+import os
 import re
+import select
 import sys
 from pathlib import Path
 
@@ -235,6 +237,26 @@ def test_a_failing_run_and_a_hung_run_fail_the_lane(
     monkeypatch.setattr(lane_tests, "RUN_TIMEOUT", 0.3)
     assert lane.run(*arguments, FAKE_GO_HANG="1") == 1
     assert "ran past 0.3 s" in capsys.readouterr().err
+
+
+def test_a_timed_out_run_stops_the_children_of_go(
+    lane: Lane, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The test binary below `go test` holds the FIFO too; it must not outlive the limit."""
+    fifo = lane.directory / "sleeper.fifo"
+    os.mkfifo(fifo)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        prefix = lane.prefix("tmux", "3.7")
+        monkeypatch.setattr(lane_tests, "RUN_TIMEOUT", 1.0)
+        arguments = ["exact", "--prefix", prefix, "--version", "3.7"]
+        assert lane.run(*arguments, FAKE_GO_HANG="1", FAKE_GO_SLEEPER=str(fifo)) == 1
+        assert os.read(reader, 1) == b"x", "the stand-in go never started its child"
+        ready, _, _ = select.select([reader], [], [], 5)
+        assert ready, "the child of go is still running"
+        assert os.read(reader, 1) == b""
+    finally:
+        os.close(reader)
 
 
 def test_a_missing_socket_directory_variable_is_reported(lane: Lane) -> None:

@@ -17,7 +17,10 @@ A prefix is an install directory with `bin/tmux`, the `prefix` output of the
 The last three run named tests and fail unless each prints `--- PASS:`. A test
 that skips on every other release would otherwise let a lane that built the
 wrong tmux pass without it. Each module run goes through
-[`test-module`](../test-module) and is stopped after `RUN_TIMEOUT` seconds.
+[`test-module`](../test-module) and is stopped after 300 s (`RUN_TIMEOUT`),
+together with every process it started, such as the test binary below `go test`.
+The slowest CI run of the `suite` step, which runs every module, took 248 s
+([measurement](../lib/README.md)). `tmux -V` has the 10 s `PROBE` limit.
 
 Run the exact-release tests for a tmux 3.7 built under `/opt/tmux-3.7`:
 

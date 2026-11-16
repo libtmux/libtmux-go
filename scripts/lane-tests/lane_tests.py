@@ -17,7 +17,7 @@ of the build-tmux action. TMUX_TMPDIR names the socket directory; it is created.
 `suite` runs every module's full suite. The other three run named tests and fail
 unless each one prints `--- PASS:`, because a test that skips on any other release
 passes silently when a lane builds the wrong tmux. Each module run is stopped
-after RUN_TIMEOUT seconds.
+with its children after RUN_TIMEOUT seconds.
 """
 
 import argparse
@@ -25,7 +25,6 @@ import fnmatch
 import os
 import subprocess
 import sys
-import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -34,7 +33,9 @@ RUN_TESTS = ROOT / "scripts" / "test-module" / "run_tests.py"
 # Importing a sibling script must not leave a __pycache__ in the checkout.
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(RUN_TESTS.parent))
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 
+import bounded
 from run_tests import MODULES
 
 # Seconds one test run may take; a hung run would otherwise hold the job.
@@ -116,13 +117,13 @@ def with_prefix(environ: Mapping[str, str], prefix: str) -> dict[str, str]:
 def reported(binary: str, environ: Mapping[str, str]) -> str:
     """Return what a tmux executable reports for -V, found on the environment's PATH."""
     try:
-        result = subprocess.run(
+        result = bounded.run(
             [binary, "-V"],
             env=environ,
             capture_output=True,
             text=True,
             check=True,
-            timeout=RUN_TIMEOUT,
+            timeout=bounded.PROBE,
         )
     except (OSError, subprocess.SubprocessError) as error:
         raise LaneError(f"cannot read the version of {binary}: {error}") from error
@@ -146,36 +147,19 @@ def make_socket_directory(environ: Mapping[str, str]) -> None:
 def run(command: Sequence[str], environ: Mapping[str, str], label: str) -> list[str]:
     """Run a command in the repository root, echo its output as it arrives and return it.
 
-    The command is killed after RUN_TIMEOUT seconds. Standard error goes straight through.
-    ``label`` names the command in a failure.
+    The command and everything it started are killed after RUN_TIMEOUT seconds.
+    Standard error goes straight through. ``label`` names the command in a failure.
     """
-    process = subprocess.Popen(
-        command,
-        env=environ,
-        cwd=ROOT,
-        stdout=subprocess.PIPE,
-        text=True,
-        errors="replace",
-    )
-    expired = threading.Event()
-
-    def expire() -> None:
-        expired.set()
-        process.kill()
-
-    timer = threading.Timer(RUN_TIMEOUT, expire)
-    timer.start()
-    lines: list[str] = []
     try:
-        assert process.stdout is not None
-        for line in process.stdout:
-            print(line, end="", flush=True)
-            lines.append(line)
-    finally:
-        timer.cancel()
-        status = process.wait()
-    if expired.is_set():
-        raise LaneError(f"{label} ran past {RUN_TIMEOUT} s")
+        status, lines = bounded.stream(
+            command,
+            timeout=RUN_TIMEOUT,
+            on_line=lambda line: print(line, end="", flush=True),
+            cwd=ROOT,
+            env=environ,
+        )
+    except subprocess.TimeoutExpired:
+        raise LaneError(f"{label} ran past {RUN_TIMEOUT} s") from None
     if status:
         raise LaneError(f"{label} exited with status {status}")
     return lines
