@@ -11,7 +11,7 @@ was asked for.
 
 ## What is here
 
-Six Go modules, each with its own `go.mod`:
+Six Go modules, each with its own `go.mod`, and the support scripts:
 
 | Path | Module | What it is |
 | --- | --- | --- |
@@ -21,6 +21,7 @@ Six Go modules, each with its own `go.mod`:
 | `examples/` | consumer | Compiles the examples quoted in generated documentation |
 | `benchmarks/` | tool | Prints what each way of reaching tmux costs |
 | `internal/tools/` | developer tool | Rewires MCP clients without shipping in a release module |
+| `scripts/` | Python tooling | `api-diff`, `ci-plan`, `drive-mcp`, `lane-tests`, `matrix` and `test-module`, one directory each with a README and tests; [CONTRIBUTING.md](.github/CONTRIBUTING.md) has the four checks |
 
 Inside the tmux module, `tmuxq` holds model-free generics, `tmuxtest` gives
 tests a real tmux server that cleans itself up, and `internal/` holds the
