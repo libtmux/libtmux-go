@@ -69,6 +69,18 @@ def test_a_release_with_every_feature_omits_nothing(fakes: Path) -> None:
     }
 
 
+def test_a_tmux_that_hangs_on_version_is_reported_and_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``tmux -V`` has a limit, so a hung binary fails the run instead of holding the job."""
+    hang = tmp_path / "tmux"
+    hang.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(30)\n")
+    hang.chmod(0o755)
+    monkeypatch.setattr(run_tests.bounded, "PROBE", 0.3)
+    assert run_tests.run(["workspace"], {"LIBTMUX_TMUX": str(hang)}) == 1
+    assert "cannot read the tmux version" in capsys.readouterr().err
+
+
 def test_the_tmux_comes_from_libtmux_tmux_when_set(fakes: Path, tmp_path: Path) -> None:
     other = tmp_path / "other"
     other.mkdir()

@@ -21,6 +21,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+# Importing a shared module must not leave a __pycache__ in the checkout.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+
+import bounded
 
 
 def work_modules(text: str) -> tuple[str, ...]:
@@ -109,8 +114,8 @@ def skip_pattern(module: str, version: str) -> str:
 
 def tmux_version(binary: str) -> str:
     """Return the release a tmux executable reports, without the leading name."""
-    reported = subprocess.run(
-        [binary, "-V"], capture_output=True, text=True, check=True
+    reported = bounded.run(
+        [binary, "-V"], capture_output=True, text=True, check=True, timeout=bounded.PROBE
     ).stdout.strip()
     return reported.removeprefix("tmux ")
 
@@ -140,7 +145,7 @@ def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:
         return 1
     try:
         version = tmux_version(environ.get("LIBTMUX_TMUX") or "tmux")
-    except (OSError, subprocess.CalledProcessError) as error:
+    except (OSError, subprocess.SubprocessError) as error:
         print(f"test-module: cannot read the tmux version: {error}", file=sys.stderr)
         return 1
     arguments, skip = command(module, version, flags)

@@ -12,6 +12,9 @@ Modules are the directories in the `use` block of `go.work`. A tmux older than
 3.7 omits the control examples, and the comparison is by release number, so
 `3.5a` is older and `3.10` is not. Flags after the module go to `go test`.
 
+`tmux -V` has a 10 s limit (`bounded.PROBE`), so a hung binary fails the run
+with the cannot-read-the-version message.
+
 Test the `workspace` module with the race detector:
 
 ```console
