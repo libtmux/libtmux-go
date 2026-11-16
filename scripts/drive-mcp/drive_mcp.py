@@ -54,9 +54,11 @@ def parse_plan(text: str) -> list[Message]:
 
     >>> parse_plan('[{"method": "tools/list"}]')
     [{'method': 'tools/list'}]
-    >>> parse_plan('[{"params": {}}]')
-    Traceback (most recent call last):
-    drive_mcp.DriveError: plan step 1 has no "method"
+    >>> try:
+    ...     parse_plan('[{"params": {}}]')
+    ... except DriveError as error:
+    ...     print(error)
+    plan step 1 has no "method"
     """
     try:
         plan = json.loads(text)

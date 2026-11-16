@@ -76,10 +76,11 @@ def split_list(text: str, label: str) -> list[str]:
 
     >>> split_list(" 3.7 , master,3.7", "tmux-ref")
     ['3.7', 'master']
-    >>> split_list("3.8,", "tmux-ref")
-    Traceback (most recent call last):
-        ...
-    ci_plan.PlanError: tmux-ref has an empty item: 3.8,
+    >>> try:
+    ...     split_list("3.8,", "tmux-ref")
+    ... except PlanError as error:
+    ...     print(error)
+    tmux-ref has an empty item: 3.8,
     """
     if not text.strip():
         die(f"{label} is empty")

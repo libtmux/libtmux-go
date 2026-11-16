@@ -36,6 +36,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 RUN_TESTS = ROOT / "scripts" / "test-module" / "run_tests.py"
 MANIFEST = ROOT / ".github" / "ci-matrix.txt"
+# Importing a sibling script must not leave a __pycache__ in the checkout.
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(RUN_TESTS.parent))
 
 from run_tests import MODULES

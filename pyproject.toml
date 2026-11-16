@@ -23,7 +23,8 @@ exclude-newer = "3 days"
 
 [tool.pytest.ini_options]
 # Each script is a plain module in its own directory, so tests import it by
-# directory.
+# directory. The stand-in programs under tests/ share names across scripts, so
+# modules are imported by path.
 pythonpath = [
   "scripts/ci-plan",
   "scripts/drive-mcp",
@@ -35,6 +36,7 @@ asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 addopts = [
   "--doctest-modules",
+  "--import-mode=importlib",
   "--strict-config",
   "--strict-markers",
   "-p",
