@@ -29,10 +29,6 @@ Check a `needs` result the way the `required` job does:
 $ NEEDS_JSON='{"plan":{"result":"success"}}' uv run scripts/ci-plan/ci_plan.py verify
 ```
 
-The script it replaced is `git show 85329357~1:scripts/ci-plan.sh`.
-The comparison loop and its result (294 of 294 plan combinations agree) are in
-[issue 172](https://github.com/libtmux/libtmux-go/issues/172#issuecomment-6906832709).
-
 Run its tests:
 
 ```console
