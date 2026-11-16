@@ -26,6 +26,7 @@ exclude-newer = "3 days"
 # directory. The stand-in programs under tests/ share names across scripts, so
 # modules are imported by path.
 pythonpath = [
+  "scripts/api-diff",
   "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/lane-tests",
@@ -48,6 +49,7 @@ addopts = [
 target-version = "py312"
 line-length = 100
 src = [
+  "scripts/api-diff",
   "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/lane-tests",
@@ -61,6 +63,7 @@ extend-select = ["ANN", "B", "C4", "I", "PT", "PTH", "RUF", "SIM", "UP"]
 [tool.ty.environment]
 python-version = "3.12"
 extra-paths = [
+  "scripts/api-diff",
   "scripts/ci-plan",
   "scripts/drive-mcp",
   "scripts/lane-tests",
