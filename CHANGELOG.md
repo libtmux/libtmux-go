@@ -23,7 +23,8 @@ span modules, such as documentation, CI and release tooling, are listed here.
 - `Session.RunProgram` and `Session.StartProgram` accept an executable and
   literal arguments, including a singleton executable and empty arguments.
   They require tmux 3.8.
-  Cancellation closes the pane/PTY; a hangup-ignoring application may survive.
+  Cancellation attempts pane/PTY cleanup; a hangup-ignoring application may
+  survive.
 - `Server.Capability` and `Server.Capabilities` report feature availability
   against the connected daemon. The queries start no server and distinguish
   the literal-argument primitive's tmux 3.3a floor from owned lifetime on 3.8.
@@ -31,9 +32,9 @@ span modules, such as documentation, CI and release tooling, are listed here.
   Owners from `StartProgram` refuse stale input and destruction with
   `ErrProgramReplaced`. Startup and cleanup preserve panes added by others;
   partial owning-run results identify the intended pane after uncertain launch.
-- `RunProgram` captures the final screen through a private buffer and file,
-  excluding capture-hook messages. A failed capture retains its private file
-  and reports the path through `os.PathError` for recovery.
+- `Running.Wait` captures managed screens through a private buffer and file,
+  excluding capture-hook messages. Cleanup removes the owned temporary
+  directory after success or failure and reports removal errors.
 - Format decoding accepts tmux's quoted newline and tab bytes, preserving
   arguments containing whitespace when a pane is materialized.
 
