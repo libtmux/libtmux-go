@@ -27,9 +27,13 @@ span modules, such as documentation, CI and release tooling, are listed here.
 - `Server.Capability` and `Server.Capabilities` report feature availability
   against the connected daemon. The queries start no server and distinguish
   the literal-argument primitive's tmux 3.3a floor from owned lifetime on 3.8.
-- `Running` from `StartProgram` refuses stale destructive operations with
-  `ErrProgramReplaced` and preserves other panes added to its window. Partial
-  owning-run results identify the intended pane after an uncertain launch.
+- `Running.SendKeys`, `SendKeySequence`, `Enter` and `Writer` deliver input.
+  Owners from `StartProgram` refuse stale input and destruction with
+  `ErrProgramReplaced`. Startup and cleanup preserve panes added by others;
+  partial owning-run results identify the intended pane after uncertain launch.
+- `RunProgram` captures the final screen through a private buffer and file,
+  excluding capture-hook messages. A failed capture retains its private file
+  and reports the path through `os.PathError` for recovery.
 - Format decoding accepts tmux's quoted newline and tab bytes, preserving
   arguments containing whitespace when a pane is materialized.
 
