@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -189,8 +190,8 @@ func (s Session) RunProgram(ctx context.Context, executable string, arguments []
 // with ErrProgramReplaced. On uncertain launch, a nonnil Running may accompany
 // the error: inspect its Pane before choosing manual recovery. A dropped handle
 // or a crashed controller supplies no automatic application cleanup.
-// A failed final capture retains its private file and reports its path through
-// [os.PathError]: an in-flight daemon write may still reach that file.
+// Final capture uses an owned private directory, removed even after a failed
+// write. Cleanup failures report their path through [os.PathError].
 func (s Session) StartProgram(ctx context.Context, executable string, arguments []string, options RunOptions) (*Running, error) {
 	operands, err := programArguments(executable, arguments)
 	if err != nil {
@@ -727,31 +728,17 @@ func captureFinishedScreen(ctx context.Context, pane Pane, owned bool) (lines []
 	if !owned && !pane.server.ConnectionBound() {
 		return pane.Capture(ctx, request)
 	}
-	file, err := os.CreateTemp("", "libtmux-go-run-*")
+	directory, err := os.MkdirTemp("", "libtmux-go-run-*")
 	if err != nil {
 		return nil, err
 	}
-	path := file.Name()
-	retained := false
 	defer func() {
-		if retained {
-			return
-		}
-		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			err = errors.Join(err, fmt.Errorf("remove capture file: %w", removeErr))
+		// A late save-buffer cannot recreate a removed parent directory.
+		if removeErr := os.RemoveAll(directory); removeErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove capture directory: %w", removeErr))
 		}
 	}()
-	if err := file.Close(); err != nil {
-		return nil, err
-	}
-	lines, err = pane.CaptureToFile(ctx, path, request)
-	if err != nil {
-		// Removing an uncertain write's destination could let tmux recreate it
-		// with its own, less restrictive umask.
-		retained = true
-		err = errors.Join(err, &os.PathError{Op: "retained capture", Path: path, Err: ErrOutcomeUnknown})
-	}
-	return lines, err
+	return pane.CaptureToFile(ctx, filepath.Join(directory, "screen"), request)
 }
 
 // StreamTo copies what the command prints into destination as it prints it and

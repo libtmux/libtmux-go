@@ -262,11 +262,10 @@ interleaving; terminal ownership is not filesystem, network or privilege
 confinement. Pane cleanup closes its terminal and does not attest that every
 descendant has exited.
 
-A failed final capture leaves its mode-0600 file in place and includes its
-path in an `os.PathError`. The daemon may still write after a transport or
-context failure; removing the file then could let it recreate the path with
-less restrictive permissions. Inspect and remove that file after settling the
-native operation. Successful capture removes it and reports removal failures.
+Each final capture uses a private buffer and an owned mode-0700 directory.
+Cleanup removes that directory after success or failure. A late daemon write
+cannot recreate the removed parent directory with looser permissions. Cleanup
+failures include their path through `os.PathError` for manual recovery.
 
 Stdout and stderr share one terminal. The result is tmux's final rendered
 screen with bounded history, not a byte transcript; missing history is not

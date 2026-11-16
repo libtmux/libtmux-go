@@ -658,33 +658,33 @@ func TestProgramRemovalReportsObserverCloseFailure(t *testing.T) {
 	// Shutdown has finished, preserving the error the owner must report.
 	client.closeOnce.Do(func() {})
 	server := rawVersionServer(t, &versionRunner{binary: "3.8", daemon: "3.8"})
-	pane := Pane{paneID: PaneID("%42"), windowID: WindowID("@42")}
+	pane := Pane{server: server, paneID: PaneID("%42"), windowID: WindowID("@42")}
 	lifetime := &programLifetime{
 		session: Session{server: server}, pane: pane, gate: make(chan struct{}, 1),
 		current: &programWitness{client: client, finished: make(chan struct{})},
 	}
 	running := &Running{pane: pane, lifetime: lifetime}
-	if err := running.remove(t.Context()); !errors.Is(err, closeFailure) {
+	if err := running.remove(t.Context()); !errors.Is(err, closeFailure) || err.Error() != closeFailure.Error() {
 		t.Fatalf("program removal hid observer close failure: %v", err)
 	}
 }
 
-func TestProgramCaptureRetainsPrivateFileOnFailure(t *testing.T) {
+func TestProgramCaptureCleansPrivateDirectoryOnFailure(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("TMPDIR", directory)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	server := rawVersionServer(t, &versionRunner{binary: "3.8", daemon: "3.8"})
 	pane := Pane{server: server, sessionID: "$0", windowID: "@0", paneID: "%0"}
 	_, err := captureFinishedScreen(ctx, pane, true)
-	retained, ok := errors.AsType[*os.PathError](err)
-	if !ok {
-		t.Fatalf("failed capture omitted its retained file: %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("capture after cancellation = %v", err)
 	}
-	t.Cleanup(func() { _ = os.Remove(retained.Path) })
-	info, statErr := os.Stat(retained.Path)
-	if statErr != nil {
-		t.Fatal(statErr)
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("retained capture permissions = %v", info.Mode().Perm())
+	if len(entries) != 0 {
+		t.Fatalf("capture left %d temporary artifacts", len(entries))
 	}
 }
