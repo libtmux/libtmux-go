@@ -212,7 +212,7 @@ func TestNewServerFromEnvRejectsMalformedValuesWithoutDisclosingThem(t *testing.
 				t.Fatalf("NewServerFromEnv() error = %#v, want *FromEnvError for TMUX", err)
 			}
 			if test.name == "unset" && err.Error() != "tmux: not inside tmux: $TMUX is unset or empty" {
-				t.Fatalf("NewServerFromEnv() error = %q, want Python-parity variable grammar", err)
+				t.Fatalf("NewServerFromEnv() error = %q, want the unset-variable message for $TMUX", err)
 			}
 			for _, private := range []string{"private-server-value", "private-pid", "private-session"} {
 				if strings.Contains(err.Error(), private) {
@@ -239,7 +239,7 @@ func TestPaneIDFromEnvironmentRejectsMalformedStableIDsWithoutDisclosure(t *test
 				t.Fatalf("PaneFromEnv() error = %#v, want *FromEnvError for TMUX_PANE", err)
 			}
 			if paneID == "" && err.Error() != "tmux: not inside tmux: $TMUX_PANE is unset or empty" {
-				t.Fatalf("PaneFromEnv() error = %q, want Python-parity variable grammar", err)
+				t.Fatalf("PaneFromEnv() error = %q, want the unset-variable message for $TMUX_PANE", err)
 			}
 			if paneID != "" && strings.Contains(err.Error(), paneID) {
 				t.Fatalf("PaneFromEnv() error disclosed TMUX_PANE: %v", err)
