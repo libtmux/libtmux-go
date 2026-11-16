@@ -22,6 +22,11 @@ from pathlib import Path
 from typing import TextIO
 
 ROOT = Path(__file__).resolve().parents[2]
+# Importing a shared module must not leave a __pycache__ in the checkout.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+
+import bounded
 
 # The published modules; examples, benchmarks and internal/tools are not released.
 MODULES = (".", "workspace", "mcp")
@@ -81,7 +86,7 @@ def latest_tag(tags: Iterable[str], module: str) -> str | None:
 
 def list_tags(root: Path) -> list[str]:
     """List the repository's tags."""
-    result = subprocess.run(
+    result = bounded.run(
         ["git", "tag", "--list"],
         cwd=root,
         capture_output=True,
@@ -98,14 +103,13 @@ def section(module: str, tag: str | None, gorelease: str, root: Path) -> tuple[s
         return f"### {module}\n\nNo tag to compare against.\n\n", 0
     base = tag.removeprefix(tag_prefix(module))
     try:
-        result = subprocess.run(
+        result = bounded.run(
             ["go", "run", gorelease, "-base", base],
             cwd=root / module,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             errors="replace",
-            check=False,
             timeout=RUN_TIMEOUT,
         )
         output, status = result.stdout, result.returncode

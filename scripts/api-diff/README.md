@@ -10,7 +10,9 @@ purpose, and a gate that forbids that would be turned off.
 The newest tag is the highest semantic version with the module's prefix, so a
 pre-release ranks below its release and `alpha.10` above `alpha.9`.
 `GORELEASE` names the package and version to run, and the workflow pins it.
-Each `gorelease` run stops after `RUN_TIMEOUT` seconds.
+Each `gorelease` run stops, with the compiler and binary it started, after 120 s
+(`RUN_TIMEOUT`). The slowest CI run of the whole step, which covers three
+modules, took 26 s ([measurement](../lib/README.md)).
 
 Print the report for the checkout:
 
