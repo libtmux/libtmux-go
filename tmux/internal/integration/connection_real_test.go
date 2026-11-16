@@ -611,6 +611,9 @@ func TestManagedProgramKillWhileWaitUsesOneLane(t *testing.T) {
 		completed <- waitErr
 	}()
 	awaitClientBeyond(ctx, t, server, 2)
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("bound-literal;\\雪"), Literal: true}); err != nil {
+		t.Fatal(err)
+	}
 	if err := running.Kill(ctx); err != nil {
 		t.Fatal(err)
 	}

@@ -161,7 +161,7 @@ var capabilityRegistry = []capabilityRecord{
 	},
 	{
 		ID: "program-lifetime", Name: "Owned program lifetime",
-		Summary: "Run a literal program and refuse destructive operations after its pane is respawned.",
+		Summary: "Run a literal program and refuse owned input or destruction after its pane is respawned.",
 		Since:   "3.8", Handling: handlingRefuse, Error: versionTooLowAPI,
 		APIs:     []string{"tmux.Session.RunProgram", "tmux.Session.StartProgram"},
 		Commands: []capabilityCommand{{Command: "wait-for", Flags: []string{"-E", "-F", "-l", "-w"}}},

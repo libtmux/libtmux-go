@@ -48,7 +48,7 @@ type RunOptions struct {
 var ErrOutcomeUnrecorded = errors.New("tmux: command outcome was never recorded")
 
 // ErrProgramReplaced reports a changed pane generation or loss of its lifetime
-// witness. The owner refuses destructive operations without that evidence.
+// witness. The owner refuses input and destruction without that evidence.
 var ErrProgramReplaced = errors.New("tmux: program generation or placement was lost")
 
 // RunResult reports how a command finished and what its terminal showed.
@@ -178,16 +178,19 @@ func (s Session) RunProgram(ctx context.Context, executable string, arguments []
 // creation. A singleton uses /bin/sh with a fixed positional exec script.
 // Argument values never become shell source.
 //
-// The program-lifetime capability requires tmux 3.8 and a local filesystem
-// that can hard-link the tmux socket. One control client stays open until Wait
+// The program-lifetime capability requires tmux 3.8, a filesystem that can
+// hard-link the tmux socket, and capture files readable by this process and
+// writable by the daemon. One control client stays open until Wait
 // finishes or ownership is lost; Kill alone does not release that observation.
 // A canceled Wait leaves the program available for another wait. Keep retains
 // the completed pane; cleanup preserves other panes added to its window.
 //
-// Respawn, movement or observation loss makes destructive operations refuse
+// Respawn, movement or observation loss makes owned input and destruction refuse
 // with ErrProgramReplaced. On uncertain launch, a nonnil Running may accompany
 // the error: inspect its Pane before choosing manual recovery. A dropped handle
 // or a crashed controller supplies no automatic application cleanup.
+// A failed final capture retains its private file and reports its path through
+// [os.PathError]: an in-flight daemon write may still reach that file.
 func (s Session) StartProgram(ctx context.Context, executable string, arguments []string, options RunOptions) (*Running, error) {
 	operands, err := programArguments(executable, arguments)
 	if err != nil {
@@ -260,6 +263,9 @@ func (s Session) Start(
 }
 
 func (s Session) start(ctx context.Context, respawn RespawnRequest, operands []string, options RunOptions) (running *Running, err error) {
+	if operands != nil {
+		return s.startManagedProgram(ctx, operands, options)
+	}
 	// The command's own exit would destroy the window before remain-on-exit
 	// could be set on it, so the window starts with cat, which holds its
 	// terminal until it is replaced once the pane is armed.
@@ -277,14 +283,7 @@ func (s Session) start(ctx context.Context, respawn RespawnRequest, operands []s
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		if running != nil && running.lifetime != nil {
-			err = errors.Join(err, running.remove(cleanupCtx))
-		} else {
-			cleanupErr := window.Kill(cleanupCtx)
-			if operands != nil {
-				err = errors.Join(err, cleanupErr)
-			}
-		}
+		_ = window.Kill(cleanupCtx)
 	}()
 	pane, err := window.ResolveActivePane(ctx)
 	if err != nil {
@@ -321,26 +320,18 @@ func (s Session) start(ctx context.Context, respawn RespawnRequest, operands []s
 	if options.StartDirectory != "" {
 		respawn.StartDirectory = &options.StartDirectory
 	}
-	var lifetime *programLifetime
-	var respawned Pane
-	if operands == nil {
-		respawned, err = pane.Respawn(ctx, respawn)
-	} else {
-		lifetime, respawned, err = launchProgram(ctx, s, pane, respawn, operands)
-	}
-	if lifetime != nil {
-		running = &Running{session: s, window: window, pane: pane, channel: channel, keep: options.Keep, installedPipe: installedPipe, lifetime: lifetime}
-	}
+	respawned, err := pane.Respawn(ctx, respawn)
 	if err != nil {
-		return running, fmt.Errorf("start command: %w", err)
+		return nil, fmt.Errorf("start command: %w", err)
 	}
-	return &Running{session: s, window: window, pane: respawned, channel: channel, keep: options.Keep, installedPipe: installedPipe, lifetime: lifetime}, nil
+	return &Running{session: s, window: window, pane: respawned, channel: channel, keep: options.Keep, installedPipe: installedPipe}, nil
 }
 
 // Running is a command started by [Session.Start] or [Session.StartProgram]:
-// a real process in a pane of its own. [Running.Pane] exposes that pane so its
-// output can be streamed with [Pane.OpenObservation] or typed into with
-// [Pane.Writer] while the command runs; [Running.Wait] and [Running.Kill]
+// a real process in a pane of its own. [Running.Pane] exposes that pane for
+// [Pane.OpenObservation]; [Running.Writer], [Running.SendKeys] and
+// [Running.SendKeySequence] deliver input while the command runs.
+// [Running.Wait] and [Running.Kill]
 // wait for and stop it. A line printed with nothing separating it from the
 // command's own exit can race tmux's control-mode notification of it and
 // never reach [PaneObservation.Reader]. [RunResult.Lines] from Wait captures
@@ -371,6 +362,8 @@ type Running struct {
 // Pane returns the pane the command runs in, materialized immediately after
 // Start returned. Like any materialized record it does not refresh itself; a
 // call after Wait or Kill may no longer describe a live pane.
+// Pane methods operate on the raw tmux object without the program's generation
+// admission. Use Running's input methods to preserve managed ownership.
 func (r *Running) Pane() Pane {
 	return r.pane
 }
@@ -868,6 +861,9 @@ func (r *Running) checkProgram(ctx context.Context) error {
 func (r *Running) remove(ctx context.Context) error {
 	if r.lifetime == nil {
 		return r.window.Kill(ctx)
+	}
+	if r.lifetime.birthPID != "" {
+		return r.lifetime.removePlaceholder(ctx)
 	}
 	_, err := r.lifetime.operation(ctx, false, "kill-pane", "-t", r.pane.ID().String())
 	return err

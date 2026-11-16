@@ -339,18 +339,36 @@ func TestManagedProgramPreservesArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("literal-input"), Literal: true}); err != nil {
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("literal-input"), Literal: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+	literal := "quote'\\$HOME;#{pane_id}雪;"
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: &literal, Literal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{";"}, Literal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.Enter(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := running.Writer(ctx).Write([]byte("writer-input\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{KeyName: true, Command: new("x")}); err == nil {
+		t.Fatal("owned input accepted client key routing")
+	}
+	if err := running.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
 		t.Fatal(err)
 	}
 	finished, err := running.Wait(ctx)
 	if err != nil || finished.Status != 0 {
 		t.Fatalf("singleton Wait() = %#v, %v", finished, err)
 	}
-	if !slices.Contains(finished.Lines, "literal-input") {
-		t.Fatalf("singleton output = %q", finished.Lines)
+	for _, line := range []string{"literal-input", literal, ";", "writer-input"} {
+		if !slices.Contains(finished.Lines, line) {
+			t.Fatalf("singleton output = %q; missing %q", finished.Lines, line)
+		}
 	}
 	if got := launches.Load(); got != 6 || badTrace.Load() {
 		t.Fatalf("program launch traces = %d, invalid outcome %v", got, badTrace.Load())
@@ -410,10 +428,10 @@ func TestManagedProgramKeepReleasesWitnessAfterConcurrentWaits(t *testing.T) {
 	if _, err := running.Wait(canceled); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled Wait = %v", err)
 	}
-	if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("retained-input"), Literal: true}); err != nil {
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("retained-input"), Literal: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+	if err := running.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
 		t.Fatal(err)
 	}
 	type completion struct {
@@ -460,7 +478,7 @@ func TestManagedProgramCleanupPreservesAddedPane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+	if err := running.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
 		t.Fatal(err)
 	}
 	if result, err := running.Wait(ctx); err != nil || result.Status != 0 {
@@ -486,9 +504,9 @@ func TestManagedProgramRefusesRespawnAtDispatch(t *testing.T) {
 	doneFile := filepath.Join(directory, "respawned")
 	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
 for argument do
-    case "$argument" in __libtmux_program_moved_*) protected=1;; esac
+    case "$argument" in __libtmux_program_moved_*|send-keys) protected=1;; esac
 done
-if [ "$protected" = 1 ] && [ ! -e "$RACE_DONE" ]; then
+if [ "$protected" = 1 ] && [ -e "$RACE_TARGET" ] && [ ! -e "$RACE_DONE" ]; then
     IFS= read -r target < "$RACE_TARGET" || exit
     : > "$RACE_DONE"
     "$RACE_REAL" -S "$RACE_SOCKET" respawn-pane -k -t "$target" cat || exit
@@ -509,25 +527,57 @@ exec "$RACE_REAL" "$@"
 	if err != nil || len(sessions) != 1 {
 		t.Fatalf("sessions = %v, %v", sessions, err)
 	}
-	running, err := sessions[0].StartProgram(ctx, "cat", nil, tmux.RunOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(targetFile, []byte(running.Pane().ID().String()+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := running.Kill(ctx); !errors.Is(err, tmux.ErrProgramReplaced) {
-		t.Fatalf("Kill across dispatch-boundary respawn = %v", err)
-	}
-	if _, err := os.Stat(doneFile); err != nil {
-		t.Fatal("dispatch-boundary respawn did not execute:", err)
-	}
-	replacement, err := running.Pane().Refresh(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dead, _ := replacement.Dead(); dead {
-		t.Fatal("dispatch killed the replacement")
+	for _, operation := range []struct {
+		name string
+		send func(*tmux.Running) error
+	}{
+		{"kill", func(r *tmux.Running) error { return r.Kill(ctx) }},
+		{"text", func(r *tmux.Running) error {
+			return r.SendKeys(ctx, tmux.SendKeysRequest{Command: new("stale-owner-input"), Literal: true})
+		}},
+		{"sequence", func(r *tmux.Running) error {
+			return r.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"stale-owner-input"}, Literal: true})
+		}},
+		{"enter", func(r *tmux.Running) error { return r.Enter(ctx) }},
+		{"writer", func(r *tmux.Running) error {
+			_, err := r.Writer(ctx).Write([]byte("stale-owner-input\n"))
+			return err
+		}},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			for _, file := range []string{targetFile, doneFile} {
+				if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
+					t.Fatal(err)
+				}
+			}
+			running, err := sessions[0].StartProgram(ctx, "cat", nil, tmux.RunOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(targetFile, []byte(running.Pane().ID().String()+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := operation.send(running); !errors.Is(err, tmux.ErrProgramReplaced) {
+				t.Errorf("input across dispatch-boundary respawn = %v", err)
+			}
+			if _, err := os.Stat(doneFile); err != nil {
+				t.Fatal("dispatch-boundary respawn did not execute:", err)
+			}
+			replacement, err := running.Pane().Refresh(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dead, _ := replacement.Dead(); dead {
+				t.Fatal("dispatch killed the replacement")
+			}
+			lines, err := replacement.Capture(ctx, tmux.CapturePaneRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(strings.Join(lines, "\n"), "stale-owner-input") {
+				t.Error("stale owner typed into the replacement")
+			}
+		})
 	}
 }
 
@@ -587,6 +637,95 @@ func TestManagedProgramCaptureExcludesHookOutput(t *testing.T) {
 			after, err := filepath.Glob(filepath.Join(os.TempDir(), "libtmux-go-run-*"))
 			if err != nil || !slices.Equal(before, after) {
 				t.Fatalf("capture files changed: %v -> %v, %v", before, after, err)
+			}
+		})
+	}
+}
+
+func TestManagedProgramBirthPreservesHookPanes(t *testing.T) {
+	ctx := t.Context()
+	base := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, base, "3.8")
+	for _, mode := range []string{"active", "respawn", "late-respawn", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			session, err := base.NewSession(ctx, tmux.NewSessionRequest{Name: "birth-" + mode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			foreign := "foreign-birth-" + mode
+			hook := "split-window -h 'printf " + foreign + "; exec cat'"
+			if mode == "respawn" {
+				hook = "respawn-pane -k 'printf " + foreign + "; exec cat'"
+			}
+			hookName := "after-new-window"
+			if mode == "late-respawn" {
+				hookName = "after-set-hook"
+				hook = `if-shell -F '#{==:#{window_name},birth-program-late-respawn}' "respawn-pane -k 'printf ` + foreign + `; exec cat'"`
+			}
+			if err := session.SetHook(ctx, hookName, hook); err != nil {
+				t.Fatal(err)
+			}
+			callCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			var interrupted atomic.Bool
+			server, err := tmux.NewServer(tmux.ServerOptions{
+				SocketPath: base.SocketPath(), ConfigFile: base.ConfigFile(), ProcessEnvironment: base.ProcessEnvironment(),
+				CommandObserver: func(trace tmux.CommandTrace) {
+					if mode == "cancel" && (trace.Subcommand == "set-option" || trace.Subcommand == "if-shell") && interrupted.CompareAndSwap(false, true) {
+						cancel()
+					}
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sessions, err := server.Sessions(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, candidate := range sessions {
+				if candidate.ID() == session.ID() {
+					session = candidate
+					break
+				}
+			}
+			launched := filepath.Join(t.TempDir(), "application-launched")
+			running, startErr := session.StartProgram(callCtx, "sh", []string{
+				"-c", `printf executed > "$1"; printf owned`, "birth-test", launched,
+			}, tmux.RunOptions{WindowName: "birth-program-" + mode})
+			if mode == "active" {
+				if startErr != nil {
+					t.Fatal(startErr)
+				}
+				result, err := running.Wait(ctx)
+				if err != nil || result.Status != 0 || !slices.Equal(result.Lines, []string{"owned"}) {
+					t.Fatalf("owned outcome = %#v, %v", result, err)
+				}
+			} else if mode == "respawn" || mode == "late-respawn" {
+				if startErr == nil && running != nil {
+					_, _ = running.Wait(ctx)
+				}
+				if !errors.Is(startErr, tmux.ErrProgramReplaced) {
+					_, effect := os.Stat(launched)
+					t.Errorf("respawned placeholder start = %v; application effect = %v", startErr, effect == nil)
+				}
+			} else if !interrupted.Load() || !errors.Is(startErr, context.Canceled) {
+				t.Fatalf("setup interruption = %t, %v", interrupted.Load(), startErr)
+			}
+			panes, err := server.Panes(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preserved := false
+			for _, pane := range panes {
+				command, _ := pane.StartCommand()
+				dead, _ := pane.Dead()
+				if strings.Contains(command, foreign) && !dead {
+					preserved = true
+				}
+			}
+			if !preserved {
+				t.Error("startup or cleanup replaced an externally created pane")
 			}
 		})
 	}

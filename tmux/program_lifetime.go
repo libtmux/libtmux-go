@@ -21,13 +21,14 @@ type programWitness struct {
 }
 
 type programLifetime struct {
-	session Session
-	pane    Pane
-	gate    chan struct{}
-	current *programWitness
+	session  Session
+	pane     Pane
+	gate     chan struct{}
+	current  *programWitness
+	birthPID string
 }
 
-func openProgramWitness(ctx context.Context, session Session, pane Pane, launch []string) (*programWitness, error) {
+func openProgramWitness(ctx context.Context, session Session, pane Pane, launch [][]string) (*programWitness, error) {
 	server := session.server
 	var client *ControlClient
 	var pool *controlLanePool
@@ -52,19 +53,21 @@ func openProgramWitness(ctx context.Context, session Session, pane Pane, launch 
 		"wait-for", "-E", "-F",
 		"#{==:#{pane}," + pane.ID().String() + "}", "pane-created",
 	}
-	line, err := encodeControlCommand(wait, false)
-	if err != nil {
-		return nil, errors.Join(err, witness.close())
-	}
-	arguments := slices.Clone(wait)
-	if len(launch) != 0 {
-		launchLine, encodeErr := encodeControlCommand(launch, false)
+	commands := append(slices.Clone(launch), wait)
+	var lines []string
+	var arguments []string
+	for _, command := range commands {
+		line, encodeErr := encodeControlCommand(command, false)
 		if encodeErr != nil {
 			return nil, errors.Join(encodeErr, witness.close())
 		}
-		line = launchLine + " ; " + line
-		arguments = append(append(slices.Clone(launch), ";"), wait...)
+		lines = append(lines, line)
+		if len(arguments) != 0 {
+			arguments = append(arguments, ";")
+		}
+		arguments = append(arguments, command...)
 	}
+	line := strings.Join(lines, " ; ")
 	request := &controlRequest{
 		ctx: context.WithoutCancel(ctx), command: arguments, line: line,
 		response: make(chan controlResponse, 1), progress: witness.progress,
@@ -190,53 +193,51 @@ func (l *programLifetime) operation(ctx context.Context, rollover bool, argument
 	}
 	l.current = next
 	defer func() { err = errors.Join(err, old.close()) }()
-	marker := "__libtmux_program_moved_" + rand.Text()
 	condition := "#{==:#{window_id}," + l.pane.windowID.String() + "}"
-	group := []string{
-		"if-shell", "-F", "-t", l.pane.ID().String(), condition, "", marker, ";",
-		"wait-for", "-E", "-w", old.client.clientName.String(), "pane-created",
+	consume := []string{"wait-for", "-E", "-w", old.client.clientName.String(), "pane-created"}
+	result, err = guardedProgramCommand(ctx, l.pane, condition, consume, arguments)
+	if errors.Is(err, ErrProgramReplaced) && next != nil {
+		l.current = nil
+		err = errors.Join(err, next.close())
 	}
-	subcommand := "wait-for"
-	if len(arguments) != 0 {
-		subcommand = arguments[0]
-		group = append(group, ";")
-		if !l.session.server.ConnectionBound() {
-			arguments = escapeCommandListSeparators(arguments)
+	return result, err
+}
+
+func guardedProgramCommand(ctx context.Context, pane Pane, condition string, commands ...[]string) (CommandResult, error) {
+	marker := "__libtmux_program_moved_" + rand.Text()
+	var lines []string
+	subcommand := "program"
+	for _, command := range commands {
+		if len(command) == 0 {
+			continue
 		}
-		group = append(group, arguments...)
+		subcommand = command[0]
+		line, err := encodeControlCommand(command, false)
+		if err != nil {
+			return CommandResult{}, err
+		}
+		lines = append(lines, line)
 	}
-	result, err = l.session.server.Cmd(ctx, group...)
+	// The branch is parsed once as tmux commands; caller values stay quoted
+	// even when an operand is itself a semicolon or contains backslashes.
+	result, err := pane.server.literalCmd(ctx,
+		"if-shell", "-F", "-t", pane.ID().String(), condition, strings.Join(lines, " ; "), marker)
 	for _, line := range result.Stderr {
 		if line == "unknown command: "+marker || (strings.HasPrefix(line, "waiter ") && strings.HasSuffix(line, " not found")) {
-			var closeErr error
-			if next != nil {
-				closeErr = next.close()
-				l.current = nil
-			}
-			return result, errors.Join(ErrProgramReplaced, closeErr)
+			return result, ErrProgramReplaced
 		}
 	}
 	return result, requireRedactedServerCommandNoStderr(subcommand, result, err)
 }
 
-func launchProgram(ctx context.Context, session Session, pane Pane, request RespawnRequest, operands []string) (*programLifetime, Pane, error) {
-	target, err := exactPaneTarget(pane)
-	if err != nil {
-		return nil, Pane{}, err
-	}
-	arguments, err := respawnArguments("respawn-pane", target, request)
-	if err != nil {
-		return nil, Pane{}, err
-	}
-	arguments = append(arguments, "--")
-	arguments = append(arguments, operands...)
-	lifetime := &programLifetime{session: session, pane: pane, gate: make(chan struct{}, 1)}
-	observer := session.server.commandObserver()
+func (l *programLifetime) launch(ctx context.Context, arguments []string) (Pane, error) {
+	observer := l.session.server.commandObserver()
 	var started time.Time
 	if observer != nil {
 		started = time.Now()
 	}
-	witness, err := openProgramWitness(ctx, session, pane, arguments)
+	guard := []string{"if-shell", "-F", "-t", l.pane.ID().String(), l.birthCondition(), "", "__libtmux_program_moved_" + rand.Text()}
+	witness, err := openProgramWitness(ctx, l.session, l.pane, [][]string{guard, arguments})
 	if observer != nil {
 		exitCode := 0
 		if err != nil {
@@ -247,13 +248,12 @@ func launchProgram(ctx context.Context, session Session, pane Pane, request Resp
 		}
 		observeCommand(observer, arguments, started, CommandTransportConnection, exitCode, err)
 	}
-	lifetime.current = witness
-	if witness == nil {
-		return nil, pane, err
+	l.current = witness
+	if witness != nil {
+		l.birthPID = ""
 	}
 	if err != nil {
-		return lifetime, pane, fmt.Errorf("observe program launch: %w", err)
+		return l.pane, fmt.Errorf("observe program launch: %w", err)
 	}
-	refreshed, err := pane.Refresh(ctx)
-	return lifetime, refreshed, err
+	return l.pane.Refresh(ctx)
 }
