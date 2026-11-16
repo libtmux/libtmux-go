@@ -39,7 +39,9 @@ MANIFEST = ROOT / ".github" / "ci-matrix.txt"
 # Importing a sibling script must not leave a __pycache__ in the checkout.
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(RUN_TESTS.parent))
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 
+import bounded
 from run_tests import MODULES
 
 # Seconds one module may run against one tmux build; a hung cell would otherwise
@@ -117,9 +119,16 @@ def check_version(matrix: Path, version: str) -> None:
     binary = matrix / version / "bin" / "tmux"
     if not (binary.is_file() and os.access(binary, os.X_OK)):
         raise MatrixError(f"{binary} is not executable")
-    result = subprocess.run(
-        [str(binary), "-V"], capture_output=True, text=True, check=False, errors="replace"
-    )
+    try:
+        result = bounded.run(
+            [str(binary), "-V"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=bounded.PROBE,
+        )
+    except subprocess.TimeoutExpired:
+        raise MatrixError(f"{binary} did not report its version within {bounded.PROBE} s") from None
     reported = (result.stdout + result.stderr).rstrip("\n")
     if result.returncode:
         raise MatrixError(f"{binary} could not report its version: {reported}")
@@ -168,8 +177,10 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
         print(f"matrix: {version} (tmux {version})")
         binary_directory = matrix / version / "bin"
         for module in modules:
+            # Name the cell before it starts: it may run for CELL_TIMEOUT seconds.
+            print(f"  {module:<14} ", end="", flush=True)
             try:
-                result = subprocess.run(
+                result = bounded.run(
                     [sys.executable, str(RUN_TESTS), module, "-count=1"],
                     env={
                         **cell_environment,
@@ -180,17 +191,16 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
                     stderr=subprocess.STDOUT,
                     text=True,
                     errors="replace",
-                    check=False,
                     timeout=CELL_TIMEOUT,
                 )
             except subprocess.TimeoutExpired:
-                print(f"  {module:<14} FAILED\n  timed out after {CELL_TIMEOUT} s")
+                print(f"FAILED\n  timed out after {CELL_TIMEOUT} s")
                 failed.append(f"{version}:{module}")
                 continue
             if result.returncode == 0:
-                print(f"  {module:<14} ok")
+                print("ok")
             else:
-                print(f"  {module:<14} FAILED")
+                print("FAILED")
                 matching = [line for line in result.stdout.splitlines() if FAILURE_LINE.match(line)]
                 for line in matching[:8]:
                     print(line)

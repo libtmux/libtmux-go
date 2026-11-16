@@ -235,6 +235,26 @@ def test_a_socket_directory_holding_a_socket_is_kept(sweep: Sweep, tmp_path: Pat
         directory.rmdir()
 
 
+def test_a_cell_is_named_before_it_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A cell may run for ``CELL_TIMEOUT`` seconds, so its name is out before the run."""
+    install_tmux(tmp_path, "3.7c")
+    shown: list[str] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1:] == ["-V"]:
+            return subprocess.CompletedProcess(command, 0, "tmux 3.7c", "")
+        shown.append(capsys.readouterr().out)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(matrix.bounded, "run", run)
+    environ = {"LIBTMUX_MATRIX_VERSIONS": "3.7c", "LIBTMUX_MATRIX_MODULES": "."}
+    assert matrix.sweep(environ, tmp_path, tmp_path) == 0
+    assert shown == ["matrix: 3.7c (tmux 3.7c)\n  .              "]
+    assert capsys.readouterr().out.startswith("ok\n")
+
+
 def test_a_cell_that_runs_past_its_timeout_fails_the_sweep(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -248,7 +268,7 @@ def test_a_cell_that_runs_past_its_timeout_fails_the_sweep(
         limits.append(kwargs.get("timeout"))
         raise subprocess.TimeoutExpired(command, matrix.CELL_TIMEOUT)
 
-    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(matrix.bounded, "run", run)
     environ = {"LIBTMUX_MATRIX_VERSIONS": "3.7c", "LIBTMUX_MATRIX_MODULES": ". workspace"}
     assert matrix.sweep(environ, tmp_path, tmp_path) == 1
     assert limits == [matrix.CELL_TIMEOUT, matrix.CELL_TIMEOUT]

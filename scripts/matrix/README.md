@@ -23,7 +23,10 @@ and `LIBTMUX_SOCKET*`, in a socket directory made for the run and removed after
 it.
 
 A socket left in that directory keeps it and fails the sweep. A cell that runs
-past `CELL_TIMEOUT` seconds in `matrix.py` fails with that reason.
+past 600 s (`CELL_TIMEOUT`) fails with that reason, and everything it started is
+killed. The slowest CI run of a lane step, which runs every module against one
+build, took 248 s ([measurement](../lib/README.md)). The sweep prints a cell's
+name before it starts, so a slow cell shows which one it is.
 
 Run every module against every supported build found in the matrix:
 
