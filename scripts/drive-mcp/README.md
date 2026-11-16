@@ -27,6 +27,10 @@ $ uv run scripts/drive-mcp/drive_mcp.py \
     <<< '[{"method":"tools/call","params":{"name":"list_panes","arguments":{}}}]'
 ```
 
+The script it replaced is `git show 4d394a7c~1:.agents/skills/testing-the-mcp-server/references/drive.py`.
+The comparison loop and its result (both drivers print identical output for one plan) are in
+[issue 172](https://github.com/libtmux/libtmux-go/issues/172#issuecomment-6906832709).
+
 Run its tests:
 
 ```console

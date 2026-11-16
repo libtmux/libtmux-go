@@ -34,6 +34,10 @@ $ uv run scripts/matrix/matrix.py
 Set `LIBTMUX_MATRIX_REQUIRED=1` in the environment of that command for a
 release gate.
 
+The script it replaced is `git show e602b164~1:scripts/matrix.sh`.
+The comparison loop and its result (its tests at that commit pass against both scripts) are in
+[issue 172](https://github.com/libtmux/libtmux-go/issues/172#issuecomment-6906832709).
+
 Run its tests:
 
 ```console

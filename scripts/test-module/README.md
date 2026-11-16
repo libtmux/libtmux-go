@@ -18,6 +18,10 @@ Test the `workspace` module with the race detector:
 $ uv run scripts/test-module/run_tests.py workspace -race -count=1
 ```
 
+The script it replaced is `git show 0c3212b3~1:scripts/test-module.sh`.
+The comparison loop and its result (112 of 112 combinations of release, module and flags agree) are in
+[issue 172](https://github.com/libtmux/libtmux-go/issues/172#issuecomment-6906832709).
+
 Run its tests:
 
 ```console
