@@ -21,6 +21,9 @@ the shell that runs this script would hide.
 To exercise self-detection, run this script itself inside a pane of the tmux
 server under test. It keeps TMUX and TMUX_PANE unless you replace them, so the
 server sees the pane it is running in.
+
+With `--strict` before the binary, the exit status is 1 when a tool declares an
+`outputSchema` and answers without structured content, so a script can gate on it.
 """
 
 import asyncio
@@ -28,7 +31,14 @@ import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, TextIO
+
+# Importing a shared module must not leave a __pycache__ in the checkout.
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
+import bounded
 
 type Message = dict[str, Any]
 
@@ -39,6 +49,9 @@ class DriveError(Exception):
 
 # Long enough for a wait tool asked to wait, short enough to fail a hang.
 REPLY_TIMEOUT = 60.0
+
+# Seconds a server may take to exit after its stdin closes, before it is killed.
+CLOSE_TIMEOUT = 10.0
 
 # A tools/list reply carries every tool's schema, far past asyncio's default
 # line limit of 64 KiB.
@@ -166,13 +179,16 @@ class Connection:
             return {"error": {"message": f"no reply within {timeout:.0f}s"}}
 
     async def close(self) -> None:
-        """Close stdin, give the server ten seconds to exit, and collect stderr."""
+        """Close stdin, give the server CLOSE_TIMEOUT seconds to exit, and collect stderr.
+
+        A server that stays is killed with everything it started.
+        """
         assert self.process.stdin is not None
         self.process.stdin.close()
         try:
-            await asyncio.wait_for(self.process.wait(), timeout=10)
+            await asyncio.wait_for(self.process.wait(), timeout=CLOSE_TIMEOUT)
         except TimeoutError:
-            self.process.kill()
+            bounded.stop_group(self.process.pid)
             await self.process.wait()
         await asyncio.gather(*self._readers)
 
@@ -182,8 +198,8 @@ async def drive(
     assignments: Sequence[str],
     plan: Sequence[Message],
     environ: Mapping[str, str],
-) -> None:
-    """Run a plan against the server and print what each step returned."""
+) -> int:
+    """Run a plan against the server, print what each step returned and count the flags."""
     try:
         process = await asyncio.create_subprocess_exec(
             binary,
@@ -192,20 +208,22 @@ async def drive(
             stderr=asyncio.subprocess.PIPE,
             env=build_environment(environ, assignments),
             limit=LINE_LIMIT,
+            start_new_session=True,
         )
     except OSError as error:
         raise DriveError(f"cannot start {binary}: {error.strerror or error}") from error
     server = Connection(process)
     try:
-        await run_plan(server, plan)
+        flagged = await run_plan(server, plan)
     finally:
         await server.close()
     if (stderr := server.stderr.decode(errors="replace")).strip():
         print("=== stderr\n" + stderr[:3000])
+    return flagged
 
 
-async def run_plan(server: Connection, plan: Sequence[Message]) -> None:
-    """Handshake, run each step, and report what the plan left uncalled."""
+async def run_plan(server: Connection, plan: Sequence[Message]) -> int:
+    """Handshake, run each step, report what the plan left uncalled, and count the flags."""
     handshake = await server.rpc(
         "initialize",
         {
@@ -221,6 +239,7 @@ async def run_plan(server: Connection, plan: Sequence[Message]) -> None:
     listed = (await server.rpc("tools/list", {})).get("result", {}).get("tools", [])
     advertised = {tool["name"]: tool for tool in listed}
     called: set[str] = set()
+    flagged = 0
 
     for step in plan:
         method = step["method"]
@@ -237,6 +256,7 @@ async def run_plan(server: Connection, plan: Sequence[Message]) -> None:
             result = reply.get("result", {})
             if not result.get("isError") and result.get("structuredContent") is None:
                 print(f"!!! {name} declares an outputSchema and returned none")
+                flagged += 1
 
     if uncalled := sorted(set(advertised) - called):
         print(f"=== {len(uncalled)} of {len(advertised)} tools were never called")
@@ -245,19 +265,22 @@ async def run_plan(server: Connection, plan: Sequence[Message]) -> None:
         print(f"=== {len(server.notifications)} notifications")
         for message in server.notifications[:20]:
             print("    " + json.dumps(message)[:200])
+    return flagged
 
 
 def main(argv: Sequence[str], environ: Mapping[str, str], stdin: TextIO = sys.stdin) -> int:
+    strict = argv[:1] == ["--strict"]
+    argv = argv[1:] if strict else argv
     if not argv:
         print(__doc__, file=sys.stderr)
         return 2
     try:
         plan = parse_plan(stdin.read())
-        asyncio.run(drive(argv[0], argv[1:], plan, environ))
+        flagged = asyncio.run(drive(argv[0], argv[1:], plan, environ))
     except DriveError as error:
         print(f"drive-mcp: {error}", file=sys.stderr)
         return 1
-    return 0
+    return 1 if strict and flagged else 0
 
 
 if __name__ == "__main__":

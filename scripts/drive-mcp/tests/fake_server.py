@@ -8,11 +8,17 @@ driver sends. How it behaves is chosen by the tool a plan calls:
 - environment answers with the names in its own environment
 - hang never answers
 - wide answers with a reply far past 64 KiB
+
+FAKE_SLEEPER names a FIFO: the server starts a child that sleeps, and both hold the
+FIFO's write end until they die. FAKE_LINGER makes the server sleep after its stdin
+closes instead of exiting.
 """
 
 import json
 import os
+import subprocess
 import sys
+import time
 from typing import Any
 
 TOOLS = [
@@ -42,6 +48,16 @@ def result_for(name: str) -> dict[str, Any]:
 
 def serve() -> None:
     print("server started", file=sys.stderr, flush=True)
+    if sleeper := os.environ.get("FAKE_SLEEPER"):
+        held = os.open(sleeper, os.O_WRONLY)
+        subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            pass_fds=[held],
+        )
+        os.write(held, b"x")
     for line in sys.stdin:
         message = json.loads(line)
         method, identifier = message.get("method"), message.get("id")
@@ -65,6 +81,8 @@ def serve() -> None:
             send({"jsonrpc": "2.0", "id": identifier, "result": result_for(name)})
         else:
             send({"jsonrpc": "2.0", "id": identifier, "error": {"message": f"no method {method}"}})
+    if os.environ.get("FAKE_LINGER"):
+        time.sleep(60)
     print("server stopped", file=sys.stderr, flush=True)
 
 

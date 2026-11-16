@@ -12,7 +12,12 @@ stdin open, matches replies by id, and declines any question the server asks.
 
 It lists the tools a plan never called and flags a tool that declares an
 `outputSchema` and answers without structured content. It does not validate JSON
-Schema.
+Schema. `--strict` before the binary makes a flagged tool exit 1, so a script can
+gate on it; without it the exit status is 0.
+
+When the plan ends the driver closes the server's stdin and waits 10 s
+(`CLOSE_TIMEOUT`) for it to exit. A server still running then is killed with
+everything it started, because it runs in its own process group.
 
 Pass the binary, then `NAME=VALUE` settings for its environment. `PATH`, `HOME`,
 `TMUX`, `TMUX_PANE`, `LANG` and `LC_ALL` carry over from the caller. A step may

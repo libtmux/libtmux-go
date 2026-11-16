@@ -2,6 +2,8 @@
 
 import io
 import json
+import os
+import select
 import subprocess
 import sys
 from pathlib import Path
@@ -79,6 +81,41 @@ async def test_a_tool_that_declares_an_output_schema_and_returns_none_is_flagged
     binary = install_server(tmp_path, FAKE_UNSTRUCTURED="1")
     out = await drive(binary, [call("list_panes")], capsys)
     assert "!!! list_panes declares an outputSchema and returned none" in out
+
+
+@pytest.mark.parametrize(
+    ("unstructured", "strict", "status"),
+    [(False, True, 0), (True, False, 0), (True, True, 1)],
+    ids=["clean", "flagged", "flagged-strict"],
+)
+def test_strict_fails_only_when_a_tool_is_flagged(
+    tmp_path: Path, unstructured: bool, strict: bool, status: int
+) -> None:
+    """``--strict`` makes a flagged tool the exit status; without it the status stays 0."""
+    binary = install_server(tmp_path, **({"FAKE_UNSTRUCTURED": "1"} if unstructured else {}))
+    argv = [*(["--strict"] if strict else []), binary]
+    plan = io.StringIO(json.dumps([call("list_panes")]))
+    assert drive_mcp.main(argv, {"PATH": "/usr/bin"}, plan) == status
+
+
+@pytest.mark.asyncio
+async def test_a_server_that_outstays_the_close_is_killed_with_its_children(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The child holds the FIFO too; it reaches end-of-file only when both are dead."""
+    fifo = tmp_path / "sleeper.fifo"
+    os.mkfifo(fifo)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    monkeypatch.setattr(drive_mcp, "CLOSE_TIMEOUT", 0.3)
+    try:
+        binary = install_server(tmp_path, FAKE_SLEEPER=str(fifo), FAKE_LINGER="1")
+        await drive_mcp.drive(binary, [], [], {"PATH": "/usr/bin"})
+        assert os.read(reader, 1) == b"x", "the server never started its child"
+        ready, _, _ = select.select([reader], [], [], 5)
+        assert ready, "a child of the server is still running"
+        assert os.read(reader, 1) == b""
+    finally:
+        os.close(reader)
 
 
 @pytest.mark.asyncio
