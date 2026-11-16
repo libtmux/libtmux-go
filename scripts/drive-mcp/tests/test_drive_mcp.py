@@ -176,3 +176,52 @@ def test_the_script_runs_as_a_program(tmp_path: Path) -> None:
 def test_without_a_binary_it_prints_its_usage(capsys: pytest.CaptureFixture[str]) -> None:
     assert drive_mcp.main([], {}, io.StringIO("[]")) == 2
     assert "Drive the MCP server over stdio JSON-RPC" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("plan", "message"),
+    [
+        ("not json", "the plan is not JSON"),
+        ('{"method": "tools/list"}', "the plan must be a JSON list of steps"),
+        ('[{"params": {}}]', 'plan step 1 has no "method"'),
+        ('[{"method": "tools/list"}, 7]', 'plan step 2 has no "method"'),
+        ('[{"method": "tools/call", "params": "x"}]', 'plan step 1 has "params" that is not'),
+    ],
+)
+def test_a_bad_plan_is_one_line_and_starts_no_server(
+    plan: str, message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert drive_mcp.main(["/does/not/run"], {}, io.StringIO(plan)) == 1
+    error = capsys.readouterr().err
+    assert error.startswith(f"drive-mcp: {message}")
+    assert error.count("\n") == 1
+
+
+def test_a_missing_binary_is_one_line(capsys: pytest.CaptureFixture[str]) -> None:
+    assert drive_mcp.main(["/does/not/exist"], {}, io.StringIO("[]")) == 1
+    assert (
+        capsys.readouterr().err
+        == "drive-mcp: cannot start /does/not/exist: No such file or directory\n"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_server_is_closed_when_the_plan_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure in the middle of a plan still shuts the server down."""
+    closed: list[int] = []
+    real_close = drive_mcp.Connection.close
+
+    async def close(self: drive_mcp.Connection) -> None:
+        closed.append(self.process.pid)
+        await real_close(self)
+
+    async def fail(server: drive_mcp.Connection, plan: object) -> None:
+        raise RuntimeError("plan failed")
+
+    monkeypatch.setattr(drive_mcp.Connection, "close", close)
+    monkeypatch.setattr(drive_mcp, "run_plan", fail)
+    with pytest.raises(RuntimeError, match="plan failed"):
+        await drive_mcp.drive(install_server(tmp_path), [], [], {"PATH": "/usr/bin"})
+    assert len(closed) == 1

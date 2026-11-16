@@ -13,10 +13,10 @@ wherever the binary does.
      {"method": "tools/call", "params": {"name": "list_panes", "arguments": {}}}]
     PLAN
 
-Environment is replaced rather than inherited, which is what a client does:
-pass only what the server needs, as NAME=VALUE arguments after the binary.
-Inheriting a shell's environment hides a whole class of bug, such as a missing
-UTF-8 locale that makes tmux rewrite a tab separator.
+Environment is replaced rather than inherited, as a client does it: pass what
+the server needs as NAME=VALUE arguments after the binary. A server started
+without a UTF-8 locale makes tmux rewrite a tab separator, which the locale of
+the shell that runs this script would hide.
 
 To exercise self-detection, run this script itself inside a pane of the tmux
 server under test. It keeps TMUX and TMUX_PANE unless you replace them, so the
@@ -32,6 +32,11 @@ from typing import Any, TextIO
 
 type Message = dict[str, Any]
 
+
+class DriveError(Exception):
+    """A plan or a server this script cannot start; the message says which."""
+
+
 # Long enough for a wait tool asked to wait, short enough to fail a hang.
 REPLY_TIMEOUT = 60.0
 
@@ -42,6 +47,29 @@ LINE_LIMIT = 1 << 24
 # What a client passes its servers: enough for tmux to run, and the markers a
 # server uses to find the pane it was started in.
 KEPT = ("TMUX", "TMUX_PANE", "LANG", "LC_ALL")
+
+
+def parse_plan(text: str) -> list[Message]:
+    """Read a plan: a JSON list of steps, each with a ``method``.
+
+    >>> parse_plan('[{"method": "tools/list"}]')
+    [{'method': 'tools/list'}]
+    >>> parse_plan('[{"params": {}}]')
+    Traceback (most recent call last):
+    drive_mcp.DriveError: plan step 1 has no "method"
+    """
+    try:
+        plan = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise DriveError(f"the plan is not JSON: {error}") from error
+    if not isinstance(plan, list):
+        raise DriveError("the plan must be a JSON list of steps")
+    for number, step in enumerate(plan, 1):
+        if not isinstance(step, dict) or not isinstance(step.get("method"), str):
+            raise DriveError(f'plan step {number} has no "method"')
+        if not isinstance(step.get("params", {}), dict):
+            raise DriveError(f'plan step {number} has "params" that is not an object')
+    return plan
 
 
 def build_environment(environ: Mapping[str, str], assignments: Sequence[str]) -> dict[str, str]:
@@ -154,16 +182,28 @@ async def drive(
     environ: Mapping[str, str],
 ) -> None:
     """Run a plan against the server and print what each step returned."""
-    process = await asyncio.create_subprocess_exec(
-        binary,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=build_environment(environ, assignments),
-        limit=LINE_LIMIT,
-    )
+    try:
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=build_environment(environ, assignments),
+            limit=LINE_LIMIT,
+        )
+    except OSError as error:
+        raise DriveError(f"cannot start {binary}: {error.strerror or error}") from error
     server = Connection(process)
+    try:
+        await run_plan(server, plan)
+    finally:
+        await server.close()
+    if (stderr := server.stderr.decode(errors="replace")).strip():
+        print("=== stderr\n" + stderr[:3000])
 
+
+async def run_plan(server: Connection, plan: Sequence[Message]) -> None:
+    """Handshake, run each step, and report what the plan left uncalled."""
     handshake = await server.rpc(
         "initialize",
         {
@@ -204,17 +244,17 @@ async def drive(
         for message in server.notifications[:20]:
             print("    " + json.dumps(message)[:200])
 
-    await server.close()
-    if (stderr := server.stderr.decode(errors="replace")).strip():
-        print("=== stderr\n" + stderr[:3000])
-
 
 def main(argv: Sequence[str], environ: Mapping[str, str], stdin: TextIO = sys.stdin) -> int:
     if not argv:
         print(__doc__, file=sys.stderr)
         return 2
-    plan = json.load(stdin)
-    asyncio.run(drive(argv[0], argv[1:], plan, environ))
+    try:
+        plan = parse_plan(stdin.read())
+        asyncio.run(drive(argv[0], argv[1:], plan, environ))
+    except DriveError as error:
+        print(f"drive-mcp: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
