@@ -204,19 +204,26 @@ $ uv run pytest scripts
 ```
 
 One tmux is not enough. The supported range is a claim the README makes, and
-version-specific breakage is real: tmux 3.4 stopped accepting `split-window`'s
-`-p` flag that 3.3a and 3.5 both take. Everything above runs against whichever
-tmux is on `PATH`, so run the supported releases before anything ships.
-`scripts/matrix/matrix.py` runs every compatible module suite, given a
-directory of tmux builds with `<version>/bin/tmux` inside it. Every module runs
-across the whole 3.3a-through-3.8 range, with the feature example omissions
-above. It sweeps in a fresh socket directory of its own and drops `TMUX`,
-`TMUX_PANE`, and `LIBTMUX_SOCKET*` from the environment, so it never reaches the
-tmux you are using. With no matrix directory, the script skips with an
-explanation rather than reporting a pass it did not earn. Set `LIBTMUX_MATRIX_REQUIRED=1` for a
-release gate, where absence must fail. With no explicit
-`LIBTMUX_MATRIX_VERSIONS`, required mode checks every supported build; setting
-it intentionally narrows the run:
+a release can lack what another has. In tmux 3.4, `split-window -p` reads the
+value of `-l` and fails with `size missing`, while 3.3a and 3.5 take `-p`; the
+fix is [tmux commit bd29a48b5](https://github.com/tmux/tmux/commit/bd29a48b56ae649d425fd6939d60f75d79d767da),
+released in 3.5. Everything above runs against whichever tmux is on `PATH`, so
+run the supported releases before anything ships.
+
+`scripts/matrix/matrix.py` runs every compatible module suite against each
+supported release, given a directory of tmux builds with `<version>/bin/tmux`
+inside it.
+
+- Every module runs across the whole 3.3a-through-3.8 range, with the feature
+  example omissions above.
+- It sweeps in a fresh socket directory of its own and drops `TMUX`,
+  `TMUX_PANE` and `LIBTMUX_SOCKET*`, so it never reaches the tmux you use.
+- With no matrix directory it skips with an explanation, not a pass it did not
+  earn.
+- `LIBTMUX_MATRIX_REQUIRED=1` makes absence fail, for a release gate. Required
+  mode checks every supported build unless `LIBTMUX_MATRIX_VERSIONS` narrows
+  the run.
+- A cell that runs past its limit fails with that reason.
 
 ```console
 $ LIBTMUX_MATRIX_REQUIRED=1 uv run scripts/matrix/matrix.py
@@ -354,6 +361,9 @@ whole table, tmux master and the refused releases run for a `v*` tag and for a
 dispatch with `scope=full`. `.github/ci-matrix.txt` lists the releases and Go
 toolchains, and `scripts/ci-plan/ci_plan.py` turns it into the matrices. The
 `required` job is the one check that passes only when every planned job did.
+`scripts/lane-tests/lane_tests.py` runs the tmux lanes' test steps, and
+`scripts/api-diff/api_diff.py` reports the exported API difference since each
+module's last tag.
 
 Before tagging a release, run the whole table on the release commit and wait
 for it to pass:
@@ -397,8 +407,8 @@ move the pins in `.github/workflows/tests.yml` to the new commit.
 
 A validated installation is saved before the module suites run. GitHub caches
 are immutable: repairing an invalid exact hit fixes the current job but cannot
-overwrite that entry, and a change to the build script invalidates its key for
-later jobs. Never add a broad restore-key fallback for native binaries.
+overwrite that entry. Never add a broad restore-key fallback for native
+binaries.
 
 ## Where a test goes
 
