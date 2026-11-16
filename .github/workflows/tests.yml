@@ -166,18 +166,24 @@ jobs:
       # directive and so resolves the core from the proxy. Asking one run both
       # questions is how nineteen commits of core reached the mcp job as a
       # release nobody had built against it.
+      - name: Report the tmux version
+        run: tmux -V
+
+      # The floor is only tested if the go command cannot leave it. Left to its
+      # default, a go.mod requiring more than the matrix version makes the go
+      # command fetch that newer toolchain and pass, so the oldest entry would
+      # prove nothing. Both Go steps below set GOTOOLCHAIN for that reason.
+      - name: Vet ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        env:
+          GOTOOLCHAIN: local
+        run: go vet ./...
+
       - name: Test ${{ matrix.module }}
         working-directory: ${{ matrix.module }}
         env:
-          # The floor is only tested if the go command cannot leave it. Left to
-          # its default, a go.mod requiring more than the matrix version makes
-          # the go command fetch that newer toolchain and pass, so the oldest
-          # entry would prove nothing.
           GOTOOLCHAIN: local
-        run: |
-          tmux -V
-          go vet ./...
-          uv run "$GITHUB_WORKSPACE/scripts/test-module/run_tests.py" "${{ matrix.module }}" -race -count=1 -coverpkg=./... -coverprofile=coverage.out
+        run: uv run "$GITHUB_WORKSPACE/scripts/test-module/run_tests.py" "${{ matrix.module }}" -race -count=1 -coverpkg=./... -coverprofile=coverage.out
 
       # An artifact name cannot contain a path separator, and one module is
       # nested, so the separator becomes a dash.
@@ -207,13 +213,20 @@ jobs:
           version: '0.12.0'
           enable-cache: false
 
-      - name: Format, lint, type check and test the scripts
-        run: |
-          uv sync --locked
-          uv run --locked ruff format --check scripts
-          uv run --locked ruff check scripts
-          uv run --locked ty check scripts
-          uv run --locked pytest scripts
+      - name: Install the script tools from the lock file
+        run: uv sync --locked
+
+      - name: Check script formatting (ruff format)
+        run: uv run --locked ruff format --check scripts
+
+      - name: Lint the scripts (ruff check)
+        run: uv run --locked ruff check scripts
+
+      - name: Type check the scripts (ty check)
+        run: uv run --locked ty check scripts
+
+      - name: Test the scripts (pytest)
+        run: uv run --locked pytest scripts
 
   # Generated output is checked in, so the check is that regenerating it changes
   # nothing. The Go in the README is generated from the examples, which is what
@@ -231,17 +244,16 @@ jobs:
             go.mod
             mcp/go.mod
 
-      - name: Regenerate
-        run: |
-          go generate ./...
-          go -C mcp generate ./...
+      - name: Regenerate the root module
+        run: go generate ./...
 
-      - name: Report anything regenerating changed
-        run: |
-          if ! git diff --exit-code; then
-            echo "::error::generated files are out of date; run both module generators" >&2
-            exit 1
-          fi
+      - name: Regenerate the mcp module
+        run: go -C mcp generate ./...
+
+      # Fails with the diff when either generator changed a file: run both
+      # module generators and commit the result.
+      - name: Fail if regenerating changed anything
+        run: git diff --exit-code
 
   # An exported identifier can change or vanish without anything saying so: the
   # changelog is written by hand, and nothing compares what a release exports
@@ -265,34 +277,15 @@ jobs:
             workspace/go.mod
             mcp/go.mod
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
+
       - name: Report the exported API difference since each module's last tag
         env:
           GORELEASE: golang.org/x/exp/cmd/gorelease@v0.0.0-20250620022241-b7579e27df2b
-        run: |
-          set -u
-          status=0
-          for module in . workspace mcp; do
-            case $module in
-              .) prefix='v' ;;
-              *) prefix="$module/v" ;;
-            esac
-            tag=$(git tag --list "$prefix*" | sort -V | tail -1)
-            # A nested module is tagged with its directory, and carries the
-            # bare semantic version that tag encodes.
-            base=${tag#"$module/"}
-            if [ -z "$tag" ]; then
-              printf '### %s\n\nNo tag to compare against.\n\n' "$module" \
-                >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            printf '### %s since %s\n\n```\n' "$module" "$tag" \
-              >> "$GITHUB_STEP_SUMMARY"
-            (cd "$module" && go run "$GORELEASE" -base "$base" 2>&1) \
-              >> "$GITHUB_STEP_SUMMARY" || status=$?
-            printf '```\n\n' >> "$GITHUB_STEP_SUMMARY"
-          done
-          printf 'gorelease reported status %s; this job does not fail on it.\n' \
-            "$status"
+        run: uv run scripts/api-diff/api_diff.py
 
   lint:
     runs-on: ubuntu-latest
@@ -310,18 +303,11 @@ jobs:
           check-latest: true
           cache-dependency-path: ${{ matrix.module }}/go.mod
 
+      # -d prints the diff of each file that is not gofumpt-formatted and exits
+      # nonzero, so this step fails with what to change.
       - name: Check formatting
         working-directory: ${{ matrix.module }}
-        run: |
-          if ! output=$(go run mvdan.cc/gofumpt@v0.12.0 -l .); then
-            echo "gofumpt failed" >&2
-            exit 1
-          fi
-          if [ -n "$output" ]; then
-            echo "these files are not gofumpt-formatted:" >&2
-            echo "$output" >&2
-            exit 1
-          fi
+        run: go run mvdan.cc/gofumpt@v0.12.0 -d .
 
       # verify is off here and run explicitly below. Each module has its own
       # configuration, including module-specific directive policy, so each one
@@ -362,10 +348,11 @@ jobs:
             go.mod
             workspace/go.mod
 
+      - name: Vet the executable resolution package on Windows
+        run: go vet ./tmux/internal/tmuxcmd
+
       - name: Test Windows executable resolution
-        run: |
-          go vet ./tmux/internal/tmuxcmd
-          go test -count=1 -run '^TestResolveExecutable' ./tmux/internal/tmuxcmd
+        run: go test -count=1 -run '^TestResolveExecutable' ./tmux/internal/tmuxcmd
 
       - name: Vet the workspace module on Windows
         run: go -C workspace vet ./...
@@ -386,10 +373,11 @@ jobs:
 
       # go test exits zero with only a warning when -fuzz matches no target.
       # Check the names first so a rename cannot silently disable this job.
-      - name: Verify fuzz targets
-        run: |
-          test "$(go test ./tmux -list '^FuzzDecodeArgsEscapedValueRoundTrip$' | sed -n '1p')" = 'FuzzDecodeArgsEscapedValueRoundTrip'
-          test "$(go test ./tmux -list '^FuzzDecodeFormatRecordsRoundTrip$' | sed -n '1p')" = 'FuzzDecodeFormatRecordsRoundTrip'
+      - name: Verify the escaped option value fuzz target exists
+        run: test "$(go test ./tmux -list '^FuzzDecodeArgsEscapedValueRoundTrip$' | sed -n '1p')" = 'FuzzDecodeArgsEscapedValueRoundTrip'
+
+      - name: Verify the format records fuzz target exists
+        run: test "$(go test ./tmux -list '^FuzzDecodeFormatRecordsRoundTrip$' | sed -n '1p')" = 'FuzzDecodeFormatRecordsRoundTrip'
 
       - name: Fuzz escaped option values
         run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeArgsEscapedValueRoundTrip$' -fuzztime 30s
@@ -417,18 +405,20 @@ jobs:
           update: "true"
           args: install --yes tmux
 
+      - name: Create the tmux socket directory
+        run: mkdir -p "$TMUX_TMPDIR"
+
+      - name: Open the switch matrix block in the summary
+        run: printf '### Switch matrix\n\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish the switch matrix
         continue-on-error: true
         working-directory: benchmarks
-        run: |
-          mkdir -p "$TMUX_TMPDIR"
-          {
-            echo '### Switch matrix'
-            echo
-            echo '```'
-            go run .
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: go run . >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Close the switch matrix block in the summary
+        if: always()
+        run: printf '```\n' >> "$GITHUB_STEP_SUMMARY"
 
   # The supported tmux range is a claim the README makes, so something has to
   # check it. Ubuntu ships one tmux; version-specific breakage is why this
@@ -490,21 +480,8 @@ jobs:
         env:
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
           TMUX_EXPECT: ${{ matrix.expect }}
-        run: |
-          export PATH="$TMUX_PREFIX/bin:$PATH"
-          actual_version=$(tmux -V)
-          # The expected version is a glob: master reports next-X.Y.
-          # shellcheck disable=SC2254
-          case "$actual_version" in
-            $TMUX_EXPECT) ;;
-            *) echo "::error::expected $TMUX_EXPECT, got $actual_version" >&2; exit 1 ;;
-          esac
-          printf '%s\n' "$actual_version"
-          mkdir -p "$TMUX_TMPDIR"
-          for module in . examples workspace mcp benchmarks internal/tools; do
-            echo "--- $module: full suite ---"
-            uv run scripts/test-module/run_tests.py "$module" -count=1
-          done
+        # The expected version is a glob: master reports next-X.Y.
+        run: uv run scripts/lane-tests/lane_tests.py suite --prefix "$TMUX_PREFIX" --expect "$TMUX_EXPECT"
 
       # These tests skip on every release but the one they exercise, and the
       # step above is not verbose, so a lane that stopped running its own would
@@ -516,27 +493,7 @@ jobs:
         env:
           TMUX_VERSION: ${{ matrix.tmux-version }}
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
-        run: |
-          export PATH="$TMUX_PREFIX/bin:$PATH"
-          test "$(tmux -V)" = "tmux $TMUX_VERSION"
-          mkdir -p "$TMUX_TMPDIR"
-          set -o pipefail
-          case "$TMUX_VERSION" in
-            3.3a)
-              required='TestRawSelectLayoutIsRefusedWhereItKillsTheServer TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer'
-              ;;
-            3.4|3.5|3.6)
-              required='TestRawRefreshClientClipboardQueryIsRefusedWhereItKillsTheServer'
-              ;;
-            3.7)
-              required='TestExact37RefusesWindowNamesWithColonOrPeriod TestExact37ConnectionCallRefusesNamesWithColonOrPeriod TestOptionalExact37BreakPaneKeepsItsNamingContract TestOptionalExact37ConnectionCallRefusesRawBreakPane TestOpenControlBindsTheVersionItChecked'
-              ;;
-          esac
-          regex="^($(printf '%s ' $required | sed 's/ $//; s/ /|/g'))\$"
-          uv run scripts/test-module/run_tests.py . -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/exact.log"
-          for name in $required; do
-            grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/exact.log" || { echo "::error::$name did not run and pass"; exit 1; }
-          done
+        run: uv run scripts/lane-tests/lane_tests.py exact --prefix "$TMUX_PREFIX" --version "$TMUX_VERSION"
 
       # Tests that put a 3.3a daemon beside this lane's newer client skip
       # without a 3.3a build, and a lane that skips them proves nothing. Lanes
@@ -561,33 +518,7 @@ jobs:
         env:
           TMUX_PREFIX: ${{ steps.tmux.outputs.prefix }}
           OLDER_PREFIX: ${{ steps.older.outputs.prefix }}
-        run: |
-          export PATH="$TMUX_PREFIX/bin:$PATH"
-          export LIBTMUX_OPTIONAL_OLD_TMUX="$OLDER_PREFIX/bin/tmux"
-          test "$("$LIBTMUX_OPTIONAL_OLD_TMUX" -V)" = 'tmux 3.3a'
-          mkdir -p "$TMUX_TMPDIR"
-          set -o pipefail
-          run_required() {
-            module=$1; shift
-            regex="^($(printf '%s|' "$@" | sed 's/|$//'))\$"
-            uv run scripts/test-module/run_tests.py "$module" -count=1 -v -run "$regex" | tee "$RUNNER_TEMP/older.log"
-            for name in "$@"; do
-              grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/older.log" || { echo "::error::$name did not run and pass"; exit 1; }
-            done
-          }
-          run_required . \
-            TestOptionalControlRejectsOlderSupportedDaemon \
-            TestOptionalColdControlRejectsOlderExecutable \
-            TestOptionalColdBootstrapKeepsItsFeatureFloor \
-            TestPinnedControlSocketPreventsReplacement \
-            TestOptionalRefusalsLeaveOlderCoreStateIntact \
-            TestStartControlModeRefusesOlderSupportedDaemon
-          run_required workspace TestWorkspaceChoosesAnEligibleTransport
-          run_required mcp \
-            TestOlderCoreRuntimeKeepsItsProcessLane \
-            TestOlderCoreRuntimeBootstrapsWithoutControl \
-            TestOlderPasteStagingRefusesBeforeTheFirstChunk \
-            TestOlderWaitForTextPollsInsteadOfRefusing
+        run: uv run scripts/lane-tests/lane_tests.py older-daemon --prefix "$TMUX_PREFIX" --older-prefix "$OLDER_PREFIX"
 
       - name: Open a tmate session after a failure
         if: ${{ failure() && matrix.tmate == 'on-failure' }}
@@ -612,6 +543,10 @@ jobs:
         with:
           go-version: stable
           cache-dependency-path: go.mod
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
       - name: Build the supported floor tmux
         id: floor
         uses: libtmux/.github/actions/build-tmux@30f81842b1e639ea4e25f93f1f2543504178e228
@@ -636,31 +571,9 @@ jobs:
           FLOOR_PREFIX: ${{ steps.floor.outputs.prefix }}
           REJECTED_PREFIX: ${{ steps.rejected.outputs.prefix }}
           NEWER_PREFIX: ${{ steps.newer.outputs.prefix }}
-        run: |
-          export PATH="$FLOOR_PREFIX/bin:$PATH"
-          export LIBTMUX_REJECTED_TMUX="$REJECTED_PREFIX/bin/tmux"
-          export LIBTMUX_FLOOR_TMUX="$FLOOR_PREFIX/bin/tmux"
-          test "$(tmux -V)" = 'tmux 3.3a'
-          test "$("$LIBTMUX_REJECTED_TMUX" -V)" = "tmux $REJECTED_VERSION"
-          mkdir -p "$TMUX_TMPDIR"
-          # A skipped test or a filter that matches nothing must fail this job.
-          export LIBTMUX_REQUIRE_REJECTED=1
-          required='TestCoreMinimumRejectsExplicitOlderDaemon TestCoreMinimumOpaqueExecutableOn33a'
-          case "$REJECTED_VERSION" in
-            3.0a|3.1c)
-              export LIBTMUX_REQUIRE_PRE32=1
-              required="$required TestCoreMinimumRefusesDaemonBeforeProbeExisted TestCoreMinimumRefusesExecutableBeforeProbeExisted TestCoreMinimumRefusesPre32DaemonPromptly"
-              ;;
-          esac
-          set -o pipefail
-          go test -count=1 -timeout 2m -v ./tmux/internal/integration -run '^TestCoreMinimum' | tee "$RUNNER_TEMP/rejected.log"
-          for name in $required; do
-            grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/rejected.log" || { echo "::error::$name did not run and pass"; exit 1; }
-          done
-          if [ "$REJECTED_VERSION" = 3.3 ]; then
-            # A configured 3.7c executable replaced by the 3.3a floor build must
-            # be checked afresh, which needs both on hand.
-            name=TestCoreMinimumColdFeatureRequirementUsesFreshExecutable
-            PATH="$NEWER_PREFIX/bin:$PATH" go test -count=1 -timeout 2m -v ./tmux/internal/integration -run "^$name\$" | tee "$RUNNER_TEMP/cold.log"
-            grep -q -- "^--- PASS: $name " "$RUNNER_TEMP/cold.log" || { echo "::error::$name did not run and pass"; exit 1; }
-          fi
+        run: >-
+          uv run scripts/lane-tests/lane_tests.py rejected
+          --version "$REJECTED_VERSION"
+          --floor-prefix "$FLOOR_PREFIX"
+          --rejected-prefix "$REJECTED_PREFIX"
+          --newer-prefix "$NEWER_PREFIX"
