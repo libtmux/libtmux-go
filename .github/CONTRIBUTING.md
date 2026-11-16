@@ -363,7 +363,8 @@ toolchains, and `scripts/ci-plan/ci_plan.py` turns it into the matrices. The
 `required` job is the one check that passes only when every planned job did.
 `scripts/lane-tests/lane_tests.py` runs the tmux lanes' test steps, and
 `scripts/api-diff/api_diff.py` reports the exported API difference since each
-module's last tag.
+module's last tag. `scripts/fuzz-targets/fuzz_targets.py` runs the `fuzz` job's
+targets and fails when one no longer exists.
 
 Before tagging a release, run the whole table on the release commit and wait
 for it to pass:

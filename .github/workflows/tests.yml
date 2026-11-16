@@ -371,19 +371,19 @@ jobs:
           go-version: stable
           cache-dependency-path: go.mod
 
-      # go test exits zero with only a warning when -fuzz matches no target.
-      # Check the names first so a rename cannot silently disable this job.
-      - name: Verify the escaped option value fuzz target exists
-        run: test "$(go test ./tmux -list '^FuzzDecodeArgsEscapedValueRoundTrip$' | sed -n '1p')" = 'FuzzDecodeArgsEscapedValueRoundTrip'
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.12.0'
+          enable-cache: false
 
-      - name: Verify the format records fuzz target exists
-        run: test "$(go test ./tmux -list '^FuzzDecodeFormatRecordsRoundTrip$' | sed -n '1p')" = 'FuzzDecodeFormatRecordsRoundTrip'
-
+      # go test exits zero with only a warning when -fuzz matches no target, so
+      # the script lists the targets first and a rename cannot silently disable
+      # this job.
       - name: Fuzz escaped option values
-        run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeArgsEscapedValueRoundTrip$' -fuzztime 30s
+        run: uv run scripts/fuzz-targets/fuzz_targets.py ./tmux FuzzDecodeArgsEscapedValueRoundTrip --seconds 30
 
       - name: Fuzz format records
-        run: go test ./tmux -run '^$' -fuzz '^FuzzDecodeFormatRecordsRoundTrip$' -fuzztime 30s
+        run: uv run scripts/fuzz-targets/fuzz_targets.py ./tmux FuzzDecodeFormatRecordsRoundTrip --seconds 30
 
   # The benchmarks module prints the table BENCHMARKS.md holds. Publishing it
   # here is what lets the checked-in numbers be compared against a run other
