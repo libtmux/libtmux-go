@@ -7,7 +7,8 @@ This file is how we work. For how we write — doc comments, `CHANGELOG.md`,
 release notes, commit messages, Markdown, source comments — follow
 [WRITING.md](WRITING.md). For anything under `mcp/`, read
 [`mcp/AGENTS.md`](../mcp/AGENTS.md) as well; testing that server needs a real
-client, which the Go tests do not provide.
+client, which the Go tests do not provide. `scripts/drive-mcp/drive_mcp.py` is
+one: it sends a plan of JSON-RPC calls to the built server over stdio.
 
 ## Getting set up
 
