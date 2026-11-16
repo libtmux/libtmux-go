@@ -22,7 +22,8 @@ The sweep never reaches the tmux you use: it runs without `TMUX`, `TMUX_PANE`
 and `LIBTMUX_SOCKET*`, in a socket directory made for the run and removed after
 it.
 
-A socket left in that directory keeps it and fails the sweep.
+A socket left in that directory keeps it and fails the sweep. A cell that runs
+past `CELL_TIMEOUT` seconds in `matrix.py` fails with that reason.
 
 Run every module against every supported build found in the matrix:
 

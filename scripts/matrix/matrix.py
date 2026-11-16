@@ -6,25 +6,27 @@
 """Run each module's compatible tests against the tmux releases it supports.
 
 The ordinary gate runs against whichever tmux is on PATH, which is one
-version, and version-specific breakage is not hypothetical: tmux 3.4 stopped
-accepting split-window's -p flag that 3.3a and 3.5 both take, and
-pane_start_path does not exist before 3.3. A single-version gate cannot see
-either.
+release, and a release can lack a flag or format variable another has:
 
-It is separate from the ordinary gate because it is slow -- every module
-against every tmux build -- and because it needs a matrix of tmux builds a
-checkout does not come with. Point LIBTMUX_TMUX_MATRIX at a directory holding
-<version>/bin/tmux, or let it look where the matrix is usually built. Narrow
-what runs with LIBTMUX_MATRIX_MODULES and LIBTMUX_MATRIX_VERSIONS. Set
-LIBTMUX_MATRIX_REQUIRED=1 when absence must fail rather than skip. The
-versions it covers are the supported ones in .github/ci-matrix.txt.
+- tmux 3.4 reads the value of split-window's `-l` where `-p` was meant, so
+  `-p` alone fails there while 3.3a and 3.5 take it. The fix is tmux commit
+  bd29a48b5 ("Check for the right flag to fix split-window -p"), released in
+  3.5. Compare `cmd-split-window.c` at the 3.4 and 3.5 tags.
+- `pane_start_path` is new in 3.3 (tmux CHANGES, "CHANGES FROM 3.2a TO 3.3").
+
+A sweep runs every module against every build, so it is slow, and it needs a
+directory of tmux builds that a checkout does not come with. Point
+LIBTMUX_TMUX_MATRIX at a directory holding <version>/bin/tmux, or let it look
+where the matrix is usually built. Narrow what runs with LIBTMUX_MATRIX_MODULES
+and LIBTMUX_MATRIX_VERSIONS. Set LIBTMUX_MATRIX_REQUIRED=1 when absence must
+fail rather than skip. The versions it covers are the supported ones in
+.github/ci-matrix.txt. A cell that runs past CELL_TIMEOUT seconds fails.
 """
 
 import io
 import os
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
@@ -34,8 +36,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 RUN_TESTS = ROOT / "scripts" / "test-module" / "run_tests.py"
 MANIFEST = ROOT / ".github" / "ci-matrix.txt"
+sys.path.insert(0, str(RUN_TESTS.parent))
 
-MODULES = (".", "examples", "workspace", "mcp", "benchmarks", "internal/tools")
+from run_tests import MODULES
+
+# Seconds one module may run against one tmux build; a hung cell would otherwise
+# hold the whole sweep.
+CELL_TIMEOUT = 600
 
 # A line of a failing cell's output that names what failed.
 FAILURE_LINE = re.compile(r"^(---|\s+[a-z_]+_test)")
@@ -100,11 +107,7 @@ def available_versions(matrix: Path, supported: list[str]) -> list[str]:
 
 def holds_socket(directory: Path) -> bool:
     """Report whether a socket file sits anywhere under directory."""
-    for parent, _, names in os.walk(directory):
-        for name in names:
-            if stat.S_ISSOCK(os.lstat(Path(parent) / name).st_mode):
-                return True
-    return False
+    return any(path.is_socket() for path in directory.rglob("*"))
 
 
 def check_version(matrix: Path, version: str) -> None:
@@ -158,26 +161,30 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
     cell_environment["TMUX_TMPDIR"] = str(socket_directory)
 
     failed: list[str] = []
-    selected_cells = len(versions) * len(modules)
-    run_cells = 0
+    cells = len(versions) * len(modules)
     for version in versions:
         print(f"matrix: {version} (tmux {version})")
         binary_directory = matrix / version / "bin"
         for module in modules:
-            run_cells += 1
-            result = subprocess.run(
-                [sys.executable, str(RUN_TESTS), module, "-count=1"],
-                env={
-                    **cell_environment,
-                    "PATH": f"{binary_directory}{os.pathsep}{environ.get('PATH', '')}",
-                    "LIBTMUX_TMUX": str(binary_directory / "tmux"),
-                },
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                errors="replace",
-                check=False,
-            )
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(RUN_TESTS), module, "-count=1"],
+                    env={
+                        **cell_environment,
+                        "PATH": f"{binary_directory}{os.pathsep}{environ.get('PATH', '')}",
+                        "LIBTMUX_TMUX": str(binary_directory / "tmux"),
+                    },
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    errors="replace",
+                    check=False,
+                    timeout=CELL_TIMEOUT,
+                )
+            except subprocess.TimeoutExpired:
+                print(f"  {module:<14} FAILED\n  timed out after {CELL_TIMEOUT} s")
+                failed.append(f"{version}:{module}")
+                continue
             if result.returncode == 0:
                 print(f"  {module:<14} ok")
             else:
@@ -188,12 +195,10 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
                 failed.append(f"{version}:{module}")
 
     print()
-    if run_cells != selected_cells:
-        raise MatrixError(f"ran {run_cells} of {selected_cells} selected cells")
     if not failed:
-        print(f"matrix: {run_cells} cells across {len(versions)} tmux versions, all green")
+        print(f"matrix: {cells} cells across {len(versions)} tmux versions, all green")
         return 0
-    print(f"matrix: {len(failed)} of {selected_cells} cells failed: {' '.join(failed)}")
+    print(f"matrix: {len(failed)} of {cells} cells failed: {' '.join(failed)}")
     return 1
 
 

@@ -12,48 +12,29 @@ import matrix
 SCRIPT = Path(matrix.__file__)
 SUPPORTED = matrix.supported_versions(matrix.MANIFEST)
 
-FAKE_GO = """\
-import os, socket
-log = os.environ.get("MATRIX_TEST_LOG")
-if log:
-    with open(log, "a") as handle:
-        handle.write(os.getcwd() + "\\n")
-env_log = os.environ.get("MATRIX_TEST_ENV_LOG")
-if env_log:
-    with open(env_log, "a") as handle:
-        for name, value in os.environ.items():
-            if name == "TMUX_TMPDIR":
-                handle.write(f"tmpdir {value}\\n")
-            elif name == "TMUX" or name.startswith(("TMUX_", "LIBTMUX_SOCKET")):
-                handle.write(f"env {name}\\n")
-if os.environ.get("MATRIX_TEST_STALE_SOCKET"):
-    stale = socket.socket(socket.AF_UNIX)
-    stale.bind(os.path.join(os.environ["TMUX_TMPDIR"], "stale.sock"))
-    stale.close()
-if os.environ.get("MATRIX_TEST_FAIL") == os.getcwd().rsplit("/", 1)[-1]:
-    print("--- FAIL: TestRecorded (0.00s)")
-    print("    recorded_test.go:1: failed")
-    raise SystemExit(1)
-"""
+TESTS = Path(__file__).parent
 
 
 def install(path: Path, source: str) -> None:
+    """Install a stand-in program, run by the interpreter that runs the tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"#!{sys.executable}\n{source}")
+    path.write_text(f"#!{sys.executable}\n{(TESTS / source).read_text()}")
     path.chmod(0o755)
 
 
 def install_tmux(matrix_directory: Path, version: str, reported: str | None = None) -> None:
-    install(
-        matrix_directory / version / "bin" / "tmux",
-        f"print({(reported or f'tmux {version}')!r})\n",
+    """Install a tmux for ``version`` that reports ``reported``, which defaults to the same."""
+    binary = matrix_directory / version / "bin" / "tmux"
+    install(binary, "fake_tmux.py")
+    binary.with_name("tmux.version").write_text(
+        (reported or f"tmux {version}").removeprefix("tmux ")
     )
 
 
 @pytest.fixture
 def bin_directory(tmp_path: Path) -> Path:
     directory = tmp_path / "bin"
-    install(directory / "go", FAKE_GO)
+    install(directory / "go", "fake_go.py")
     return directory
 
 
@@ -252,3 +233,25 @@ def test_a_socket_directory_holding_a_socket_is_kept(sweep: Sweep, tmp_path: Pat
     finally:
         (directory / "stale.sock").unlink(missing_ok=True)
         directory.rmdir()
+
+
+def test_a_cell_that_runs_past_its_timeout_fails_the_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A hung module is a failed cell with a reason, not a sweep that never ends."""
+    install_tmux(tmp_path, "3.7c")
+    limits: list[object] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1:] == ["-V"]:
+            return subprocess.CompletedProcess(command, 0, "tmux 3.7c", "")
+        limits.append(kwargs.get("timeout"))
+        raise subprocess.TimeoutExpired(command, matrix.CELL_TIMEOUT)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    environ = {"LIBTMUX_MATRIX_VERSIONS": "3.7c", "LIBTMUX_MATRIX_MODULES": ". workspace"}
+    assert matrix.sweep(environ, tmp_path, tmp_path) == 1
+    assert limits == [matrix.CELL_TIMEOUT, matrix.CELL_TIMEOUT]
+    out = capsys.readouterr().out
+    assert f"  .              FAILED\n  timed out after {matrix.CELL_TIMEOUT} s\n" in out
+    assert "matrix: 2 of 2 cells failed: 3.7c:. 3.7c:workspace" in out
