@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -665,5 +666,25 @@ func TestProgramRemovalReportsObserverCloseFailure(t *testing.T) {
 	running := &Running{pane: pane, lifetime: lifetime}
 	if err := running.remove(t.Context()); !errors.Is(err, closeFailure) {
 		t.Fatalf("program removal hid observer close failure: %v", err)
+	}
+}
+
+func TestProgramCaptureRetainsPrivateFileOnFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	server := rawVersionServer(t, &versionRunner{binary: "3.8", daemon: "3.8"})
+	pane := Pane{server: server, sessionID: "$0", windowID: "@0", paneID: "%0"}
+	_, err := captureFinishedScreen(ctx, pane, true)
+	retained, ok := errors.AsType[*os.PathError](err)
+	if !ok {
+		t.Fatalf("failed capture omitted its retained file: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(retained.Path) })
+	info, statErr := os.Stat(retained.Path)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("retained capture permissions = %v", info.Mode().Perm())
 	}
 }

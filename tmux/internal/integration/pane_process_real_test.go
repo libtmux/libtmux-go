@@ -530,3 +530,64 @@ exec "$RACE_REAL" "$@"
 		t.Fatal("dispatch killed the replacement")
 	}
 }
+
+func TestManagedProgramCaptureExcludesHookOutput(t *testing.T) {
+	ctx := t.Context()
+	server := tmuxtest.NewServer(ctx, t)
+	tmuxtest.RequireVersion(ctx, t, server, "3.8")
+	borrowed := "managed-capture-borrowed"
+	if err := server.SetBuffer(ctx, tmux.SetBufferRequest{Name: &borrowed, Data: "untouched"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bound := range []bool{false, true} {
+		t.Run(strconv.FormatBool(bound), func(t *testing.T) {
+			var session tmux.Session
+			if bound {
+				_, connection, err := server.NewSessionConnection(ctx,
+					tmux.NewSessionRequest{Name: "capture-bound"}, tmux.ConnectionOptions{Lanes: 1})
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = connection.Close() }()
+				session = connection.Session()
+			} else {
+				var err error
+				session, err = server.NewSession(ctx, tmux.NewSessionRequest{Name: "capture-process"})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := session.SetHook(ctx, "after-capture-pane",
+				"display-message -p hook-capture-only ; set-option -g @managed_capture_hook yes"); err != nil {
+				t.Fatal(err)
+			}
+			before, err := filepath.Glob(filepath.Join(os.TempDir(), "libtmux-go-run-*"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"application", "%begin 1 2 3", "%end 1 2 3", "quote'\\雪"}
+			arguments := append([]string{"%s\n"}, want...)
+			result, err := session.RunProgram(ctx, "printf", arguments, tmux.RunOptions{Keep: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(result.Lines, want) {
+				t.Fatalf("captured screen = %q, want %q", result.Lines, want)
+			}
+			if value, present, err := server.GlobalSessionScope().RawOption(ctx, "@managed_capture_hook"); err != nil || !present || value != "yes" {
+				t.Fatalf("capture hook execution = %q, %t, %v", value, present, err)
+			}
+			if content, err := server.ShowBuffer(ctx, &borrowed); err != nil || content != "untouched" {
+				t.Fatalf("borrowed buffer = %q, %v", content, err)
+			}
+			buffers, err := server.ListBuffers(ctx, tmux.ListBuffersRequest{Format: new("#{buffer_name}")})
+			if err != nil || len(buffers) != 1 {
+				t.Fatalf("buffers after capture = %v, %v", buffers, err)
+			}
+			after, err := filepath.Glob(filepath.Join(os.TempDir(), "libtmux-go-run-*"))
+			if err != nil || !slices.Equal(before, after) {
+				t.Fatalf("capture files changed: %v -> %v, %v", before, after, err)
+			}
+		})
+	}
+}

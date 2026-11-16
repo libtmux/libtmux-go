@@ -711,25 +711,27 @@ func (r *Running) finish(ctx context.Context) (result RunResult, err error) {
 	}
 	reported, _ := finished.DeadSignal()
 	result.Signal = deadSignal(reported)
-	lines, err := captureFinishedScreen(ctx, finished)
-	if err != nil {
-		return RunResult{}, fmt.Errorf("read screen: %w", err)
-	}
+	lines, captureErr := captureFinishedScreen(ctx, finished, r.lifetime != nil)
 	if err := r.checkProgram(ctx); err != nil {
-		return RunResult{}, err
+		return RunResult{}, errors.Join(captureErr, err)
 	}
 	result.Lines = trimScreen(lines)
+	if captureErr != nil {
+		if r.lifetime == nil {
+			result = RunResult{}
+		}
+		return result, fmt.Errorf("read screen: %w", captureErr)
+	}
 	return result, nil
 }
 
-// captureFinishedScreen reads pane's screen. A connection cannot print a
-// capture safely, so a bound pane stages it through a tmux buffer and a
-// scratch file, which tmux writes and this process reads.
-func captureFinishedScreen(ctx context.Context, pane Pane) ([]string, error) {
+// Owned programs and connections stage captures through a buffer/file, so hook
+// output and application text resembling control frames cannot become results.
+func captureFinishedScreen(ctx context.Context, pane Pane, owned bool) (lines []string, err error) {
 	request := CapturePaneRequest{
 		Start: CaptureBoundary, End: CaptureBoundary, JoinWrapped: true,
 	}
-	if !pane.server.ConnectionBound() {
+	if !owned && !pane.server.ConnectionBound() {
 		return pane.Capture(ctx, request)
 	}
 	file, err := os.CreateTemp("", "libtmux-go-run-*")
@@ -737,11 +739,26 @@ func captureFinishedScreen(ctx context.Context, pane Pane) ([]string, error) {
 		return nil, err
 	}
 	path := file.Name()
-	defer func() { _ = os.Remove(path) }()
+	retained := false
+	defer func() {
+		if retained {
+			return
+		}
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			err = errors.Join(err, fmt.Errorf("remove capture file: %w", removeErr))
+		}
+	}()
 	if err := file.Close(); err != nil {
 		return nil, err
 	}
-	return pane.CaptureToFile(ctx, path, request)
+	lines, err = pane.CaptureToFile(ctx, path, request)
+	if err != nil {
+		// Removing an uncertain write's destination could let tmux recreate it
+		// with its own, less restrictive umask.
+		retained = true
+		err = errors.Join(err, &os.PathError{Op: "retained capture", Path: path, Err: ErrOutcomeUnknown})
+	}
+	return lines, err
 }
 
 // StreamTo copies what the command prints into destination as it prints it and
