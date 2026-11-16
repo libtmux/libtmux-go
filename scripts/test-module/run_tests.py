@@ -147,7 +147,11 @@ def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:
     if skip:
         print(f"test-module: tmux {version}; feature examples omitted: {skip}", flush=True)
     os.chdir(ROOT / module)
-    os.execvp(arguments[0], arguments)
+    try:
+        os.execvp(arguments[0], arguments)
+    except OSError as error:
+        print(f"test-module: cannot run {arguments[0]}: {error.strerror}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

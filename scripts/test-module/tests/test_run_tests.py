@@ -129,3 +129,10 @@ def test_the_modules_are_the_ones_go_work_uses() -> None:
     """Every module the scripts run has a go.mod, and the module at the root comes first."""
     assert run_tests.MODULES[0] == "."
     assert all((ROOT / module / "go.mod").is_file() for module in run_tests.MODULES)
+
+
+def test_a_missing_go_is_one_line(fakes: Path) -> None:
+    (fakes / "go").unlink()
+    result = invoke(fakes, ".")
+    assert result.returncode == 1
+    assert result.stderr == "test-module: cannot run go: No such file or directory\n"
