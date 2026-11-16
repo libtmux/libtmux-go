@@ -33,7 +33,10 @@ span modules, such as documentation, CI and release tooling, are listed here.
   `scripts/test-module/run_tests.py`, `scripts/matrix/matrix.py` and
   `scripts/ci-plan/ci_plan.py`. The `testing-the-mcp-server` skill's driver
   moved from `references/drive.py` to `scripts/drive-mcp/drive_mcp.py`. A
-  `scripts` CI job formats, lints, type-checks and tests all four.
+  `scripts` CI job formats, lints, type-checks and tests every script. A script
+  that runs a command stops it, with everything it started, when it runs past its
+  limit. `drive_mcp.py --strict` exits 1 when a tool declares an `outputSchema`
+  and answers without structured content.
 - `PARITY.md`, `mcp/PARITY.md`, the Python parity manifest and its tests, the
   `libtmux:parity` markers, the tmuxp-generated expected outputs under
   `workspace/testdata/tmuxp`, and the script that compared this MCP server with
