@@ -204,22 +204,26 @@ bootstrap; the executable remains a positional argument and becomes the pane
 process. Resolving a leading-dash singleton may give it a resolved path as
 argv[0]; a custom argv[0] is not supported. Application argv never becomes
 shell source. Setup still uses the
-existing placeholder command and tmux's inherited window geometry.
+existing placeholder command and tmux's inherited window geometry. A native
+creation receipt pins the original pane and live placeholder PID before hooks
+run. Setup, launch and failed-start cleanup check that receipt in the daemon
+queue, so a hook selecting or adding another pane does not transfer ownership.
 
 These methods require `program-lifetime`, qualified on tmux 3.8. Retention and
 exit signaling are armed before launch. Launch and a pending `pane-created`
 event waiter share one daemon command group. A later respawn consumes that
-waiter. Cleanup and termination must consume the still-pending waiter in the
-same command group as the destructive operation, so a client-side check does
-not authorize later destruction. `program-argv` records the independently
+waiter. Cleanup, termination and keyboard input must consume the still-pending
+waiter in the same command group as the operation, so a client-side check does
+not authorize a later effect. `program-argv` records the independently
 available literal-argument primitive at the supported core floor; it alone
 does not enable these owned entry points. Existing `Run` and `Start` keep
 their shell-string behavior and requirements.
 
 The owner holds a control client until `Wait` finishes or ownership is lost;
-termination briefly opens a second witness before retiring the first. Like
-other control clients, it needs a local filesystem that can hard-link the tmux
-socket. A connection-bound owner uses exclusive clients rather than shared
+input and termination briefly open a second witness before retiring the first.
+Like other control clients, it needs a filesystem that can hard-link the tmux
+socket. Final capture stages through a private file that the daemon can write
+and this process can read; hook messages cannot become application output. A connection-bound owner uses exclusive clients rather than shared
 lanes, so waiting cannot occupy the lane needed for input or `Kill`.
 Closing the connection ends observation; it does not prove application exit.
 
@@ -231,11 +235,16 @@ ignores terminal hangup. Use `StartProgram`, explicit `Kill`, and `Wait` when
 the main process's exit must be observed. `Keep` retains a
 completed pane and releases its witness. Cleanup removes only the owned pane,
 preserving panes others added to its window; the window disappears when its
-last pane is removed. Input and resize use `Running.Pane`. Geometry changes
-after launch do not alter what the application saw at startup.
+last pane is removed. `Running.SendKeys`, `SendKeySequence`, `Enter` and
+`Writer` preserve input ownership. Client key-table routing is rejected.
+Each writer chunk and Enter has its own admission; a whole write is not atomic.
+`Running.Pane` exposes the raw object for observation, resizing and deliberate
+unmanaged operations; its input methods bypass generation admission. Geometry
+changes after launch do not alter what the application saw at startup.
 
 `ErrProgramReplaced` reports respawn, placement change or lost lifetime
-observation. Destructive operations refuse and preserve the replacement. A
+observation. Owned input and destructive operations refuse and preserve the
+replacement. Once `Wait` releases the witness, input authority is gone. A
 partial `Running` may accompany a launch error; an owning run's partial result
 names its intended pane when known. Inspect that pane before manual recovery,
 and use an explicit `WindowName` when an uncertain creation must be found by
@@ -245,13 +254,19 @@ followed by `Wait`. Shutting down a disposable tmux server also closes PTYs;
 it does not guarantee that HUP-ignoring applications have exited.
 
 `Kill` dispatches SIGKILL to the group ID tmux expands in the protected queue.
-The signal job runs asynchronously. Kernel PID/group reuse before delivery,
-descendants that leave the group, deliberately reused control-client names,
-and user-configured commands/hooks that interfere with ownership are outside
-the guarantee. Native queue serialization protects ordinary command
+The signal job runs asynchronously. Kernel PID reuse during placeholder
+replacement, group reuse before signal delivery, descendants that leave the
+group, and deliberate witness/receipt forgery by another tmux controller are
+outside the guarantee. Native queue serialization protects ordinary command
 interleaving; terminal ownership is not filesystem, network or privilege
 confinement. Pane cleanup closes its terminal and does not attest that every
 descendant has exited.
+
+A failed final capture leaves its mode-0600 file in place and includes its
+path in an `os.PathError`. The daemon may still write after a transport or
+context failure; removing the file then could let it recreate the path with
+less restrictive permissions. Inspect and remove that file after settling the
+native operation. Successful capture removes it and reports removal failures.
 
 Stdout and stderr share one terminal. The result is tmux's final rendered
 screen with bounded history, not a byte transcript; missing history is not

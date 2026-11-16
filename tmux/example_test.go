@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2279,7 +2280,7 @@ func ExampleSession_Run() {
 func ExampleSession_RunProgram() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-run-program", ConfigFile: os.DevNull})
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-run-program-" + rand.Text(), ConfigFile: os.DevNull})
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -2303,7 +2304,7 @@ func ExampleSession_RunProgram() {
 func ExampleSession_StartProgram() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-start-program", ConfigFile: os.DevNull})
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-start-program-" + rand.Text(), ConfigFile: os.DevNull})
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -2319,11 +2320,11 @@ func ExampleSession_StartProgram() {
 		fmt.Println(err)
 		return
 	}
-	if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("interactive"), Literal: true}); err != nil {
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("interactive"), Literal: true}); err != nil {
 		fmt.Println(err)
 		return
 	}
-	if err := running.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+	if err := running.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -2339,7 +2340,7 @@ func ExampleSession_StartProgram() {
 func ExampleServer_Capability() {
 	ctx, cancel := context.WithTimeout(context.Background(), exampleWaitBudget)
 	defer cancel()
-	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-capability", ConfigFile: os.DevNull})
+	server, err := tmux.NewServer(tmux.ServerOptions{SocketName: "libtmux-go-example-capability-" + rand.Text(), ConfigFile: os.DevNull})
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -86,7 +86,7 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, observation.Close()) }()
-	if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("live output"), Literal: true}); err != nil {
+	if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("live output"), Literal: true}); err != nil {
 		return err
 	}
 	line, err := bufio.NewReader(observation.Reader(ctx)).ReadString('\n')
@@ -112,10 +112,15 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := terminal.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello terminal"), Literal: true}); err != nil {
+	canceled, stopWait := context.WithCancel(ctx)
+	stopWait()
+	if _, err := terminal.Wait(canceled); !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("canceled wait: %w", err)
+	}
+	if err := terminal.SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello terminal"), Literal: true}); err != nil {
 		return err
 	}
-	if err := terminal.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+	if err := terminal.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
 		return err
 	}
 	echoed, err := terminal.Wait(ctx)

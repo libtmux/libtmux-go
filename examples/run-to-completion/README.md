@@ -86,7 +86,7 @@ if err != nil {
 	return err
 }
 defer func() { err = errors.Join(err, observation.Close()) }()
-if err := running.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("live output"), Literal: true}); err != nil {
+if err := running.SendKeys(ctx, tmux.SendKeysRequest{Command: new("live output"), Literal: true}); err != nil {
 	return err
 }
 line, err := bufio.NewReader(observation.Reader(ctx)).ReadString('\n')
@@ -111,8 +111,9 @@ fmt.Println("stopped:", streamed.Signal)
 
 The observation opens before input triggers output. Closing it leaves the
 program running; `Kill` dispatches SIGKILL to its process group, and `Wait`
-reports the main process's exit. The ownership check and destructive command
-share a daemon queue group, so a respawned replacement is refused. Signal
+reports the main process's exit. Owned input and destruction consume the
+pending generation witness in the same daemon queue group as their effect,
+so a respawned replacement is refused. Signal
 delivery is asynchronous, and descendants that leave the group are outside
 this guarantee.
 

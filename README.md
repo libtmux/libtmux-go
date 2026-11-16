@@ -1115,10 +1115,15 @@ terminal, err := session.StartProgram(ctx, "cat", nil, tmux.RunOptions{})
 if err != nil {
 	return err
 }
-if err := terminal.Pane().SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello terminal"), Literal: true}); err != nil {
+canceled, stopWait := context.WithCancel(ctx)
+stopWait()
+if _, err := terminal.Wait(canceled); !errors.Is(err, context.Canceled) {
+	return fmt.Errorf("canceled wait: %w", err)
+}
+if err := terminal.SendKeys(ctx, tmux.SendKeysRequest{Command: new("hello terminal"), Literal: true}); err != nil {
 	return err
 }
-if err := terminal.Pane().SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
+if err := terminal.SendKeySequence(ctx, tmux.SendKeySequenceRequest{Keys: []string{"C-d"}}); err != nil {
 	return err
 }
 echoed, err := terminal.Wait(ctx)
