@@ -5,7 +5,6 @@ package mcp
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -17,14 +16,7 @@ import (
 func TestRunCommandPreservesAnOpaqueExecutableRoute(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	executable, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
-	executable, err = filepath.Abs(executable)
-	if err != nil {
-		t.Fatal(err)
-	}
+	executable := testTmuxExecutable(t)
 	opaque := filepath.Join(t.TempDir(), "tmux'"+string([]byte{0xff}))
 	if err := os.Symlink(executable, opaque); err != nil {
 		t.Fatal(err)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -36,10 +38,21 @@ func TestCaptureToFileLeavesNoScratchBufferOnRealTmux(t *testing.T) {
 	defer cancel()
 	runner := &cancelAfterCaptureLive{}
 	search := "/usr/local/bin:/usr/bin:/bin"
-	if override := os.Getenv("LIBTMUX_GO_TEST_TMUX_DIR"); override != "" {
+	var binary string
+	if configured, ok := configuredLiveTestTmux(); ok {
+		resolved, err := exec.LookPath(configured)
+		if err != nil {
+			t.Fatalf("resolve configured test tmux: %v", err)
+		}
+		binary, err = filepath.Abs(resolved)
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else if override := strings.TrimSpace(os.Getenv("LIBTMUX_GO_TEST_TMUX_DIR")); override != "" {
 		search = override + ":" + search
 	}
 	server, err := newServer(ServerOptions{
+		Binary:     binary,
 		SocketPath: directory + "/s",
 		ConfigFile: os.DevNull,
 	}, serverDependencies{

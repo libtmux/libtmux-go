@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -51,10 +50,7 @@ func TestRunCommandRoutePreservesOpaqueSafeBytes(t *testing.T) {
 }
 
 func TestRunCommandRouteRejectsConfiguredControlBeforeTmux(t *testing.T) {
-	executable, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	executable := testTmuxExecutable(t)
 	malformed := filepath.Join(t.TempDir(), "tmux\nroute")
 	if err := os.Symlink(executable, malformed); err != nil {
 		t.Fatal(err)

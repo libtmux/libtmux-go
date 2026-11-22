@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,22 @@ const hostileConfig = "set -g base-index 5\n" +
 // tmux and holds what it prints to output.txt, which its page and the package
 // page publish.
 func TestBuildWorkspacePrintsItsPublishedOutput(t *testing.T) {
+	for _, entry := range os.Environ() {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == "TMUX" || name == "TMUX_PANE" || strings.HasPrefix(name, "LIBTMUX_SOCKET") {
+			t.Setenv(name, value)
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	tmuxBinary := "tmux"
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			tmuxBinary = value
+			break
+		}
+	}
 	home := t.TempDir()
 	if err := os.WriteFile(filepath.Join(home, ".tmux.conf"), []byte(hostileConfig), 0o600); err != nil {
 		t.Fatal(err)
@@ -43,7 +60,7 @@ func TestBuildWorkspacePrintsItsPublishedOutput(t *testing.T) {
 		left, _ := filepath.Glob(filepath.Join(sockets, "tmux-*", "*"))
 		for _, socket := range left {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = exec.CommandContext(ctx, "tmux", "-S", socket, "kill-server").Run()
+			_ = exec.CommandContext(ctx, tmuxBinary, "-S", socket, "kill-server").Run()
 			cancel()
 		}
 		_ = os.RemoveAll(sockets)

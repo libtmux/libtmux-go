@@ -22,9 +22,20 @@ func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
 }
 
+func catalogTmuxBinary(t *testing.T) string {
+	t.Helper()
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return "tmux"
+}
+
 func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	binary := catalogTmuxBinary(t)
 
 	//nolint:usetesting // t.TempDir can exceed the Unix socket path limit.
 	directory, err := os.MkdirTemp("", "ltg-formats")
@@ -41,7 +52,7 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cleanupCancel()
-		command := exec.CommandContext(cleanupCtx, "tmux", "-S", socket, "kill-server")
+		command := exec.CommandContext(cleanupCtx, binary, "-S", socket, "kill-server")
 		output, _ := command.CombinedOutput()
 		if err := cleanupCtx.Err(); err != nil {
 			t.Errorf("kill isolated tmux server: %v: %s", err, strings.TrimSpace(string(output)))
@@ -120,7 +131,7 @@ func TestFormatCatalogCoversRealTmuxInventory(t *testing.T) {
 func attachCatalogClient(ctx context.Context, t *testing.T, socket string) {
 	t.Helper()
 
-	client := exec.CommandContext(ctx, "tmux", "-S", socket, "-C",
+	client := exec.CommandContext(ctx, catalogTmuxBinary(t), "-S", socket, "-C",
 		"attach-session", "-t", "catalog")
 	held, err := client.StdinPipe()
 	if err != nil {
@@ -159,7 +170,7 @@ func runCatalogTmux(
 	t.Helper()
 
 	commandArguments := append([]string{"-S", socket}, arguments...)
-	command := exec.CommandContext(ctx, "tmux", commandArguments...)
+	command := exec.CommandContext(ctx, catalogTmuxBinary(t), commandArguments...)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf(

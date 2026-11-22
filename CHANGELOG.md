@@ -26,6 +26,13 @@ span modules, such as documentation, CI and release tooling, are listed here.
   `server exited unexpectedly` instead of starting a replacement daemon. `Kill`
   reports a daemon still accepting connections after ten seconds.
 
+### tmux/tmuxtest
+
+- `NewServer`, `NewServerWithOptions`, and `Main` now select the `tmux`
+  executable from `LIBTMUX_TEST_TMUX` before falling back to `LIBTMUX_TMUX` and
+  `PATH`. An empty or whitespace-only value counts as unset, and
+  `ServerOptions.Binary` still overrides the environment. (#190)
+
 ### Development
 
 - `scripts/test-module.sh`, `scripts/matrix.sh` and `scripts/ci-plan.sh` are

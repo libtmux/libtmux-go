@@ -88,6 +88,7 @@ def test_the_suite_runs_every_module_in_go_work_order(
         str((ROOT / module).resolve()) for module in lane_tests.MODULES
     ]
     assert all(call["path"] == f"{prefix}/bin" for call in calls)
+    assert all(env_of(call)["LIBTMUX_TEST_TMUX"] == f"{prefix}/bin/tmux" for call in calls)
     assert calls[0]["argv"] == ["test", "-count=1", "./..."]
     assert Path(lane.environ["TMUX_TMPDIR"]).is_dir()
     out = capsys.readouterr().out
@@ -198,6 +199,7 @@ def test_a_rejected_release_runs_the_core_minimum_tests_on_the_floor_build(
     assert argv_of(first)[:2] == ["test", "-count=1"]
     assert first["path"] == f"{floor}/bin"
     environment = env_of(first)
+    assert environment["LIBTMUX_TEST_TMUX"] == f"{floor}/bin/tmux"
     assert environment["LIBTMUX_REJECTED_TMUX"] == f"{refused}/bin/tmux"
     assert environment["LIBTMUX_FLOOR_TMUX"] == f"{floor}/bin/tmux"
     assert environment["LIBTMUX_REQUIRE_REJECTED"] == "1"
@@ -206,6 +208,7 @@ def test_a_rejected_release_runs_the_core_minimum_tests_on_the_floor_build(
         (fresh,) = rest
         assert run_pattern(fresh) == f"^{lane_tests.FRESH_EXECUTABLE_TEST}$"
         assert fresh["path"] == f"{newer}/bin"
+        assert env_of(fresh)["LIBTMUX_TEST_TMUX"] == f"{newer}/bin/tmux"
     else:
         assert rest == []
 

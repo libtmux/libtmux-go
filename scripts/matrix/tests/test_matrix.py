@@ -196,16 +196,22 @@ def test_a_sweep_gets_a_socket_directory_of_its_own_without_selectors(
             MATRIX_TEST_ENV_LOG=str(env_log),
             TMUX="/tmp/decoy,1,0",
             TMUX_PANE="%9",
+            LIBTMUX_TMUX="/tmp/decoy/tmux",
             LIBTMUX_SOCKET="decoy",
             LIBTMUX_SOCKET_PATH="/tmp/decoy/path",
             LIBTMUX_SOCKET_DIR="/tmp/decoy",
         )
         assert result.returncode == 0, output_of(result)
         seen = set()
+        test_binaries = set()
         for line in env_log.read_text().splitlines():
             kind, _, value = line.partition(" ")
+            if kind == "test_tmux":
+                test_binaries.add(value)
+                continue
             assert kind == "tmpdir", f"a cell was handed {value}"
             seen.add(value)
+        assert test_binaries == {str(sweep.matrix_directory / "3.7c" / "bin" / "tmux")}
         assert len(seen) == 1, "the cells share one TMUX_TMPDIR"
         (directory,) = seen
         assert directory != str(sweep.sockets)

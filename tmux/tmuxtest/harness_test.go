@@ -177,6 +177,7 @@ func TestHarnessSetupAndCleanupFailuresAreRedacted(t *testing.T) {
 		wantStatus string
 	}{
 		{name: "resolution", wantStatus: "resolve tmux executable failed: not found"},
+		{name: "test-tmux", wantStatus: "resolve tmux executable failed: not found"},
 		{name: "startup", wantStatus: "create initial session failed: command failed"},
 		{name: "cleanup", wantStatus: "harness-owned socket cleanup failed"},
 	}
@@ -189,7 +190,7 @@ func TestHarnessSetupAndCleanupFailuresAreRedacted(t *testing.T) {
 			}
 			binary := filepath.Join(fixtureRoot, "tmux-"+sentinel)
 			recordPath := filepath.Join(t.TempDir(), "recorded-arguments")
-			if mode.name != "resolution" {
+			if mode.name != "resolution" && mode.name != "test-tmux" {
 				script := "#!/bin/sh\nprintf '%s\\n' \"$HARNESS_FAILURE_SENTINEL\"\n" +
 					"printf '%s %s\\n' \"$HARNESS_FAILURE_SENTINEL\" \"$*\" >&2\n" +
 					"printf '%s\\n' \"$*\" >> \"$HARNESS_FAILURE_RECORD\"\n" +
@@ -239,7 +240,14 @@ func TestHarnessFailureRedactionHelper(t *testing.T) {
 	sentinel := os.Getenv("LIBTMUX_REDACTION_SENTINEL")
 	binary := os.Getenv("LIBTMUX_REDACTION_BINARY")
 	if mode == "resolution" {
+		t.Setenv("LIBTMUX_TEST_TMUX", "")
+		t.Setenv("LIBTMUX_TMUX", "")
 		t.Setenv("PATH", filepath.Dir(binary))
+		tmuxtest.NewServer(context.Background(), t)
+		return
+	}
+	if mode == "test-tmux" {
+		t.Setenv("LIBTMUX_TEST_TMUX", binary)
 		tmuxtest.NewServer(context.Background(), t)
 		return
 	}
@@ -481,4 +489,81 @@ func TestNewServerGivesATestAServerOfItsOwn(t *testing.T) {
 		t.Errorf("session name = %q, want under-test", name)
 	}
 	// docs:end
+}
+
+func TestMainSuiteTestTmuxHelper(t *testing.T) {
+	if os.Getenv("LIBTMUX_SUITE_TEST_TMUX_HELPER") != "1" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	server, err := tmux.NewServer(tmux.ServerOptions{
+		SocketName: "suite-test-tmux-helper",
+		ConfigFile: os.DevNull,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Kill(context.Background()) })
+	if _, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "from-suite-path"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMainStagesTestTmuxOnPathAndRedactsInvalidTestTmux(t *testing.T) {
+	baseline := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{})
+	realBinary := baseline.Executable()
+
+	t.Run("stages configured LIBTMUX_TEST_TMUX for bare tmux callers", func(t *testing.T) {
+		logPath := filepath.Join(t.TempDir(), "suite-tmux.log")
+		wrapper := filepath.Join(t.TempDir(), "custom-tmux-binary")
+		script := "#!/bin/sh\nprintf 'suite\\n' >> " + strconv.Quote(logPath) + "\nexec " + strconv.Quote(realBinary) + " \"$@\"\n"
+		if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		emptyPath := t.TempDir()
+		for _, tool := range []string{"sh"} {
+			if resolved, err := exec.LookPath(tool); err == nil {
+				_ = os.Symlink(resolved, filepath.Join(emptyPath, tool))
+			}
+		}
+
+		command := exec.Command(os.Args[0], "-test.run=^TestMainSuiteTestTmuxHelper$", "-test.count=1")
+		command.Env = slices.DeleteFunc(slices.Clone(os.Environ()), func(entry string) bool {
+			name, _, _ := strings.Cut(entry, "=")
+			return name == "PATH" || name == "LIBTMUX_TEST_TMUX" || name == "LIBTMUX_TMUX"
+		})
+		command.Env = append(command.Env,
+			"PATH="+emptyPath,
+			"LIBTMUX_TEST_TMUX="+wrapper,
+			"LIBTMUX_SUITE_TEST_TMUX_HELPER=1",
+		)
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("child suite failed: %v\n%s", err, output)
+		}
+		if _, err := os.Stat(logPath); err != nil {
+			t.Fatalf("staged LIBTMUX_TEST_TMUX wrapper never ran: %v", err)
+		}
+	})
+
+	t.Run("refuses unresolvable LIBTMUX_TEST_TMUX with exit 2 and redacts value", func(t *testing.T) {
+		sentinel := "private-main-test-tmux-sentinel"
+		missing := filepath.Join(t.TempDir(), sentinel, "tmux")
+
+		command := exec.Command(os.Args[0], "-test.run=^TestMainSuiteTestTmuxHelper$", "-test.count=1")
+		command.Env = append(os.Environ(), "LIBTMUX_TEST_TMUX="+missing)
+		output, err := command.CombinedOutput()
+		exited, ok := errors.AsType[*exec.ExitError](err)
+		if !ok || exited.ExitCode() != 2 {
+			t.Fatalf("child exit = (%v, %v), want ExitError with code 2\n%s", exited, err, output)
+		}
+		text := string(output)
+		if !strings.Contains(text, "tmuxtest: resolve tmux executable failed: not found") {
+			t.Fatalf("stderr = %q, want redacted resolution failure", text)
+		}
+		if strings.Contains(text, sentinel) || strings.Contains(text, missing) {
+			t.Fatalf("stderr leaked sensitive LIBTMUX_TEST_TMUX value: %q", text)
+		}
+	})
 }

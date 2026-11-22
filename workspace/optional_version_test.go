@@ -17,10 +17,7 @@ func TestWorkspaceChoosesAnEligibleTransport(t *testing.T) {
 	if old == "" {
 		t.Skip("set LIBTMUX_OPTIONAL_OLD_TMUX to exact tmux3.3a")
 	}
-	modern, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	modern := testTmuxBinary(t)
 	for _, test := range []struct {
 		name, binary         string
 		existingOld, control bool

@@ -5,7 +5,6 @@ package tmuxtest
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -92,7 +91,7 @@ func TestOnlyALiveDaemonKeepsTheSuiteRoot(t *testing.T) {
 }
 
 func TestFailedCleanupPreservesSocketForSuiteRetry(t *testing.T) {
-	realBinary, err := exec.LookPath("tmux")
+	realBinary, err := resolveTestTmux()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +170,7 @@ func TestCleanupDiscoversMissingRecordedPID(t *testing.T) {
 }
 
 func TestCleanupTracksReplacementDaemonOnOwnedSocket(t *testing.T) {
-	realBinary, err := exec.LookPath("tmux")
+	realBinary, err := resolveTestTmux()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +346,7 @@ func TestRetryCleanupReportsEveryFailureWhenNoneSucceed(t *testing.T) {
 }
 
 func TestCleanupRetriesTransientKillFailure(t *testing.T) {
-	realBinary, err := exec.LookPath("tmux")
+	realBinary, err := resolveTestTmux()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,13 +19,13 @@ func optionalOldTmux(t *testing.T) string {
 
 func optionalFeatureTmux(t *testing.T, variable, version string) string {
 	t.Helper()
-	binary := os.Getenv(variable)
+	binary := strings.TrimSpace(os.Getenv(variable))
 	if binary == "" {
-		binary, _ = exec.LookPath("tmux")
+		binary, _ = lookupTestTmux()
 	}
 	output, err := exec.CommandContext(t.Context(), binary, "-V").Output()
 	if err != nil || strings.TrimSpace(string(output)) != "tmux "+version {
-		if os.Getenv(variable) == "" {
+		if strings.TrimSpace(os.Getenv(variable)) == "" {
 			t.Skipf("set %s to exact tmux %s", variable, version)
 		}
 		t.Fatalf("optional fixture: %q %v", output, err)
@@ -188,10 +188,7 @@ func TestOptional34BufferAnd35OutputBoundaries(t *testing.T) {
 
 func TestOptionalControlRejectsOlderSupportedDaemon(t *testing.T) {
 	old := optionalOldTmux(t)
-	nativeBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	nativeBinary := testTmuxBinary(t)
 	socket := filepath.Join(t.TempDir(), "s")
 	versionNativeCommand(t, old, socket, "new-session", "-d", "-s", "keeper", "sleep 300")
 	t.Cleanup(func() { versionNativeCommand(t, old, socket, "kill-server") })
@@ -504,10 +501,7 @@ func TestOptionalRefusalsLeaveOlderCoreStateIntact(t *testing.T) {
 
 func optionalControlBinary(t *testing.T) string {
 	t.Helper()
-	binary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	binary := testTmuxBinary(t)
 	server, err := tmux.NewServer(tmux.ServerOptions{Binary: binary, SocketPath: filepath.Join(t.TempDir(), "s"), ConfigFile: os.DevNull})
 	if err != nil {
 		t.Fatal(err)

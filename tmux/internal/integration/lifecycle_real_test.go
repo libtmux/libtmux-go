@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -292,10 +291,7 @@ func TestLifecycleCreationOptionsAgainstRealTmux(t *testing.T) {
 
 func TestNewSessionScrubsAmbientTMUXAgainstRealTmux(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	proxyPath := filepath.Join(t.TempDir(), "tmux-lifecycle-proxy")
 	proxy := []byte("#!/bin/sh\n" +
 		"if [ \"${TMUX+x}\" = x ]; then\n" +

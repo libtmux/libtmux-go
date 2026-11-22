@@ -178,13 +178,13 @@ func defaultSocketTail() string {
 	return "/tmux-" + strconv.Itoa(os.Getuid()) + "/default"
 }
 
-// requireTmux returns the tmux on PATH, or skips the test.
+// requireTmux returns the selected test tmux executable, or skips the test.
 func requireTmux(t *testing.T) string {
 	t.Helper()
 
-	path, err := exec.LookPath("tmux")
+	path, err := resolveTestTmux()
 	if err != nil {
-		t.Skip("tmux is not on PATH")
+		t.Skip("tmux is not available")
 	}
 	return path
 }

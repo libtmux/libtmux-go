@@ -77,17 +77,46 @@ def test_a_tmux_that_hangs_on_version_is_reported_and_stopped(
     hang.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(30)\n")
     hang.chmod(0o755)
     monkeypatch.setattr(run_tests.bounded, "PROBE", 0.3)
-    assert run_tests.run(["workspace"], {"LIBTMUX_TMUX": str(hang)}) == 1
+    assert run_tests.run(["workspace"], {"LIBTMUX_TEST_TMUX": str(hang)}) == 1
     assert "cannot read the tmux version" in capsys.readouterr().err
 
 
-def test_the_tmux_comes_from_libtmux_tmux_when_set(fakes: Path, tmp_path: Path) -> None:
-    other = tmp_path / "other"
-    other.mkdir()
-    install_tmux(other, "3.3a")
-    result = invoke(fakes, "mcp", LIBTMUX_TMUX=str(other / "tmux"))
+def test_the_tmux_comes_from_libtmux_test_tmux_before_legacy_or_path(
+    fakes: Path, tmp_path: Path
+) -> None:
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    install_tmux(legacy, "3.8")
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    install_tmux(selected, "3.3a")
+    result = invoke(
+        fakes,
+        "mcp",
+        LIBTMUX_TEST_TMUX=str(selected / "tmux"),
+        LIBTMUX_TMUX=str(legacy / "tmux"),
+    )
     assert "tmux 3.3a; feature examples omitted" in result.stdout
     assert "^Example_watchingAVisibleCommandAcrossTurns$" in result.stdout
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t\n"])
+def test_a_blank_libtmux_test_tmux_falls_back_to_legacy_then_path(
+    fakes: Path, tmp_path: Path, blank: str
+) -> None:
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    install_tmux(legacy, "3.3a")
+    with_legacy = invoke(
+        fakes,
+        "mcp",
+        LIBTMUX_TEST_TMUX=blank,
+        LIBTMUX_TMUX=str(legacy / "tmux"),
+    )
+    assert "tmux 3.3a; feature examples omitted" in with_legacy.stdout
+
+    from_path = invoke(fakes, "workspace", LIBTMUX_TEST_TMUX=blank, LIBTMUX_TMUX=blank)
+    assert "tmux 3.5; feature examples omitted: ^ExampleBuildInto$" in from_path.stdout
 
 
 @pytest.mark.parametrize(

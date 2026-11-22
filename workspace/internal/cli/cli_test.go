@@ -960,3 +960,26 @@ func TestServerForSelectsTheSocketByFlagThenVariableThenTmux(t *testing.T) {
 		})
 	}
 }
+
+func TestServerForIgnoresTestTmuxEnvironment(t *testing.T) {
+	pathDir := t.TempDir()
+	pathBinary := filepath.Join(pathDir, "tmux")
+	if err := os.WriteFile(pathBinary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	decoy := filepath.Join(t.TempDir(), "test-only-tmux")
+	if err := os.WriteFile(decoy, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", pathDir)
+	t.Setenv("LIBTMUX_TEST_TMUX", decoy)
+	t.Setenv("LIBTMUX_TMUX", decoy)
+
+	server, err := serverFor(&options{})
+	if err != nil {
+		t.Fatalf("serverFor() error = %v", err)
+	}
+	if server.Executable() != filepath.Clean(pathBinary) {
+		t.Fatalf("server.Executable() = %q, want %q from PATH", server.Executable(), pathBinary)
+	}
+}

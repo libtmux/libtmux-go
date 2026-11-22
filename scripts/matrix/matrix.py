@@ -167,7 +167,8 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
     cell_environment = {
         name: value
         for name, value in environ.items()
-        if name not in ("TMUX", "TMUX_PANE") and not name.startswith("LIBTMUX_SOCKET")
+        if name not in ("TMUX", "TMUX_PANE", "LIBTMUX_TMUX")
+        and not name.startswith("LIBTMUX_SOCKET")
     }
     cell_environment["TMUX_TMPDIR"] = str(socket_directory)
 
@@ -185,7 +186,7 @@ def sweep(environ: Mapping[str, str], matrix: Path, socket_directory: Path) -> i
                     env={
                         **cell_environment,
                         "PATH": f"{binary_directory}{os.pathsep}{environ.get('PATH', '')}",
-                        "LIBTMUX_TMUX": str(binary_directory / "tmux"),
+                        "LIBTMUX_TEST_TMUX": str(binary_directory / "tmux"),
                     },
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

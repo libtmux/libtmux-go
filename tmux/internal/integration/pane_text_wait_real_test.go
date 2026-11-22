@@ -291,10 +291,7 @@ func TestWaitForTextReportsAKilledServerWithAStoppedClient(t *testing.T) {
 	server, pane := textWaitPane(ctx, t, "printf 'before-kill\\n'; exec sleep 60", 0, 0, "")
 	screenHolds(ctx, t, pane, "before-kill")
 
-	binary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	binary := testTmuxBinary(t)
 	client := exec.Command(binary, "-S", server.SocketPath(), "-C", "attach")
 	stdin, err := client.StdinPipe()
 	if err != nil {

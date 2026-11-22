@@ -235,6 +235,36 @@ func TestTheSocketAndBinaryComeFromTheEnvironmentToo(t *testing.T) {
 			t.Errorf("binaryFrom() = %q, want the path from the environment", got)
 		}
 	})
+	t.Run("test executable variables are ignored", func(t *testing.T) {
+		clearTargetEnvironment(t)
+		t.Setenv("LIBTMUX_TMUX_BIN", "")
+		if err := os.Unsetenv("LIBTMUX_TMUX_BIN"); err != nil {
+			t.Fatal(err)
+		}
+		pathDir := t.TempDir()
+		pathBinary := filepath.Join(pathDir, "tmux")
+		if err := os.WriteFile(pathBinary, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		decoy := filepath.Join(t.TempDir(), "test-only-tmux")
+		if err := os.WriteFile(decoy, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", pathDir)
+		t.Setenv("LIBTMUX_TEST_TMUX", decoy)
+		t.Setenv("LIBTMUX_TMUX", decoy)
+
+		if got := binaryFrom(""); got != "" {
+			t.Fatalf("binaryFrom() = %q, want empty when LIBTMUX_TMUX_BIN is unset", got)
+		}
+		target, err := tmux.NewServer(tmux.ServerOptions{Binary: binaryFrom("")})
+		if err != nil {
+			t.Fatalf("tmux.NewServer() error = %v", err)
+		}
+		if target.Executable() != filepath.Clean(pathBinary) {
+			t.Fatalf("target.Executable() = %q, want %q from PATH", target.Executable(), pathBinary)
+		}
+	})
 }
 
 func TestDoctorReportsWhetherInputMayReachAViewedPane(t *testing.T) {

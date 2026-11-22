@@ -55,13 +55,9 @@ func newWaitScenario(ctx context.Context, t *testing.T, loop string) waitScenari
 	if err != nil {
 		t.Fatal(err)
 	}
-	binary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
 	return waitScenario{
 		target: target, client: client, pane: listed.Stdout[0],
-		control: version.AtLeast(minimum), binary: binary,
+		control: version.AtLeast(minimum), binary: target.Executable(),
 	}
 }
 

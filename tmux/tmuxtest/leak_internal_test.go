@@ -237,8 +237,8 @@ func TestSuiteChildHelper(t *testing.T) {
 func TestRunFailsWhenAServerIsLeft(t *testing.T) {
 	t.Parallel()
 
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux is not on PATH")
+	if _, err := resolveTestTmux(); err != nil {
+		t.Skip("tmux is not available")
 	}
 	for _, test := range []struct {
 		mode string
@@ -279,7 +279,11 @@ func TestRunKeepsTheRootOfAServerItCannotStop(t *testing.T) {
 	t.Parallel()
 
 	ignoring := writeExecutable(t, "#!/bin/sh\nexit 0\n")
-	output, root := runLeakingChild(t, "survivor", []string{"PATH=" + filepath.Dir(ignoring) + ":" + os.Getenv("PATH")})
+	output, root := runLeakingChild(t, "survivor", []string{
+		"LIBTMUX_TEST_TMUX=",
+		"LIBTMUX_TMUX=",
+		"PATH=" + filepath.Dir(ignoring) + ":" + os.Getenv("PATH"),
+	})
 	t.Cleanup(func() {
 		if root != "" && filepath.IsAbs(root) {
 			_ = os.RemoveAll(root)

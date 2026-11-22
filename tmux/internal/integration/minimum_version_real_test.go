@@ -139,10 +139,7 @@ func TestCoreMinimumFencesDaemonAppearingAtColdStart(t *testing.T) {
 		t.Skip("the race fixture uses a POSIX executable proxy")
 	}
 	old := postProbeRejectedTmuxBinary(t)
-	modern, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	modern := testTmuxBinary(t)
 	version, err := exec.CommandContext(t.Context(), modern, "-V").Output()
 	if err != nil {
 		t.Fatal(err)
@@ -182,13 +179,9 @@ func TestCoreMinimumBoundHandleDoesNotStartOlderExecutable(t *testing.T) {
 		t.Skip("the configuration marker uses a POSIX shell")
 	}
 	old := postProbeRejectedTmuxBinary(t)
-	modern := os.Getenv("LIBTMUX_FLOOR_TMUX")
+	modern := strings.TrimSpace(os.Getenv("LIBTMUX_FLOOR_TMUX"))
 	if modern == "" {
-		var err error
-		modern, err = exec.LookPath("tmux")
-		if err != nil {
-			t.Fatal(err)
-		}
+		modern = testTmuxBinary(t)
 	}
 	root := t.TempDir()
 	socket := filepath.Join(root, "s")
@@ -253,10 +246,7 @@ func TestCoreMinimumColdVersionCheckIgnoresCachedExecutable(t *testing.T) {
 		t.Skip("the executable replacement fixture uses a POSIX shell")
 	}
 	old := postProbeRejectedTmuxBinary(t)
-	modern, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	modern := testTmuxBinary(t)
 	root := t.TempDir()
 	socket := filepath.Join(root, "s")
 	marker := filepath.Join(root, "started")
@@ -302,14 +292,11 @@ func TestCoreMinimumColdFeatureRequirementUsesFreshExecutable(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the executable replacement fixture uses a POSIX shell")
 	}
-	olderSupported := os.Getenv("LIBTMUX_FLOOR_TMUX")
+	olderSupported := strings.TrimSpace(os.Getenv("LIBTMUX_FLOOR_TMUX"))
 	if olderSupported == "" {
 		t.Skip("set LIBTMUX_FLOOR_TMUX to exact tmux 3.3a")
 	}
-	modern, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	modern := testTmuxBinary(t)
 	root := t.TempDir()
 	proxy := filepath.Join(root, "tmux-proxy")
 	selectBinary := func(binary string) {

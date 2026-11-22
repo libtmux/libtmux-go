@@ -7,7 +7,6 @@ import (
 	"errors"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -371,10 +370,7 @@ func TestTypedArrayOptionReplacementPreservesRealState(t *testing.T) {
 
 func TestTypedArrayOptionReplacementReportsRealPartialFailure(t *testing.T) {
 	server := tmuxtest.NewServer(context.Background(), t)
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	proxyPath := filepath.Join(t.TempDir(), "tmux-option-proxy")
 	proxy := []byte("#!/bin/sh\n" +
 		"for argument in \"$@\"; do\n" +

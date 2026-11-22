@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,44 @@ func Server(t *testing.T, run func(context.Context, tmux.Server) error) {
 func privateSockets(t *testing.T) {
 	t.Helper()
 
+	for _, entry := range os.Environ() {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == "TMUX" || name == "TMUX_PANE" || strings.HasPrefix(name, "LIBTMUX_SOCKET") {
+			t.Setenv(name, value)
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatalf("exampletest: clear %s: %v", name, err)
+			}
+		}
+	}
+	tmuxBinary := "tmux"
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			resolved, err := exec.LookPath(value)
+			if err != nil {
+				t.Fatalf("exampletest: resolve %s: %v", variable, err)
+			}
+			abs, err := filepath.Abs(resolved)
+			if err != nil {
+				t.Fatalf("exampletest: resolve %s path: %v", variable, err)
+			}
+			binDir := filepath.Join(t.TempDir(), "bin")
+			if err := os.Mkdir(binDir, 0o700); err != nil {
+				t.Fatalf("exampletest: create bin directory: %v", err)
+			}
+			if err := os.Symlink(abs, filepath.Join(binDir, "tmux")); err != nil {
+				t.Fatalf("exampletest: stage tmux: %v", err)
+			}
+			currentPath := os.Getenv("PATH")
+			if currentPath != "" {
+				t.Setenv("PATH", binDir+string(os.PathListSeparator)+currentPath)
+			} else {
+				t.Setenv("PATH", binDir)
+			}
+			tmuxBinary = abs
+			break
+		}
+	}
+
 	// t.TempDir names the test, and a socket path may hold only 103 bytes.
 	directory, err := os.MkdirTemp("", "ex") //nolint:usetesting // see above
 	if err != nil {
@@ -83,7 +122,7 @@ func privateSockets(t *testing.T) {
 		sockets, _ := filepath.Glob(filepath.Join(directory, "tmux-*", "*"))
 		for _, socket := range sockets {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = exec.CommandContext(ctx, "tmux", "-S", socket, "kill-server").Run()
+			_ = exec.CommandContext(ctx, tmuxBinary, "-S", socket, "kill-server").Run()
 			cancel()
 		}
 		if err := os.RemoveAll(directory); err != nil {
