@@ -27,5 +27,5 @@ slowest list step took 14 s ([measurement](../lib/README.md)).
 Run its tests:
 
 ```console
-$ uv run pytest scripts/fuzz-targets
+$ uv run --project scripts pytest scripts/fuzz-targets
 ```

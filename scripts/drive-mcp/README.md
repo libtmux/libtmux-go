@@ -35,5 +35,5 @@ $ uv run scripts/drive-mcp/drive_mcp.py \
 Run its tests:
 
 ```console
-$ uv run pytest scripts/drive-mcp
+$ uv run --project scripts pytest scripts/drive-mcp
 ```

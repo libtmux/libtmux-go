@@ -23,5 +23,5 @@ $ GORELEASE=golang.org/x/exp/cmd/gorelease@latest uv run scripts/api-diff/api_di
 Run its tests:
 
 ```console
-$ uv run pytest scripts/api-diff
+$ uv run --project scripts pytest scripts/api-diff
 ```

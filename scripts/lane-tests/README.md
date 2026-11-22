@@ -34,5 +34,5 @@ A test that the tables name must exist: the tests fail when a name is not a
 `Test` function in the repository. Run them:
 
 ```console
-$ uv run pytest scripts/lane-tests
+$ uv run --project scripts pytest scripts/lane-tests
 ```

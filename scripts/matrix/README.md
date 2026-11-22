@@ -40,5 +40,5 @@ release gate.
 Run its tests:
 
 ```console
-$ uv run pytest scripts/matrix
+$ uv run --project scripts pytest scripts/matrix
 ```
