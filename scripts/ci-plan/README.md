@@ -32,5 +32,5 @@ $ NEEDS_JSON='{"plan":{"result":"success"}}' uv run scripts/ci-plan/ci_plan.py v
 Run its tests:
 
 ```console
-$ uv run pytest scripts/ci-plan
+$ uv run --project scripts pytest scripts/ci-plan
 ```

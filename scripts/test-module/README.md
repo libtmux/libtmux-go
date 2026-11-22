@@ -24,5 +24,5 @@ $ uv run scripts/test-module/run_tests.py workspace -race -count=1
 Run its tests:
 
 ```console
-$ uv run pytest scripts/test-module
+$ uv run --project scripts pytest scripts/test-module
 ```

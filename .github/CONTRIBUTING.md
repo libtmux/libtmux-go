@@ -183,25 +183,25 @@ type-checks and tests them; run the same four checks after changing one. Format
 them:
 
 ```console
-$ uv run ruff format --check scripts
+$ uv run --project scripts ruff format --check scripts
 ```
 
 Lint them:
 
 ```console
-$ uv run ruff check scripts
+$ uv run --project scripts ruff check scripts
 ```
 
 Type-check them:
 
 ```console
-$ uv run ty check scripts
+$ uv run --project scripts ty check --project scripts
 ```
 
 Test them, with the doctests in each script:
 
 ```console
-$ uv run pytest scripts
+$ uv run --project scripts pytest scripts
 ```
 
 One tmux is not enough. The supported range is a claim the README makes, and

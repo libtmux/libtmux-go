@@ -2,7 +2,7 @@
 
 Modules the scripts share, so each exists once. A script imports them after
 putting `scripts/lib` on `sys.path`; the tests find it through `pythonpath` in
-`pyproject.toml`.
+`scripts/pyproject.toml`.
 
 ## releases
 
@@ -63,5 +63,5 @@ $ gh run list \
 Run the tests, which start a command that starts a child and check that both die:
 
 ```console
-$ uv run --locked --offline pytest scripts/lib
+$ uv run --project scripts --locked --offline pytest scripts/lib
 ```
