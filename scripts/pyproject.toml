@@ -17,30 +17,32 @@ dev = [
 [tool.uv]
 package = false
 # Lock only releases at least three days old. Project settings override a
-# contributor's own uv configuration, so `uv lock --check` gives the same
-# answer on every machine. A relative value needs uv 0.9.17 or newer.
+# contributor's own uv configuration, so `uv lock --project scripts --check`
+# gives the same answer on every machine. A relative value needs uv 0.9.17 or
+# newer.
 exclude-newer = "3 days"
 
 [tool.pytest.ini_options]
 # Each script is a plain module in its own directory, so tests import it by
-# directory. The stand-in programs under tests/ share names across scripts, so
-# modules are imported by path.
+# directory. Stand-in executables under tests/ share names across scripts and
+# hold no doctests; importlib mode cannot be used here because rootdir scripts/
+# would shadow matrix/matrix.py with a namespace package for matrix/.
 pythonpath = [
-  "scripts/api-diff",
-  "scripts/ci-plan",
-  "scripts/drive-mcp",
-  "scripts/fuzz-targets",
-  "scripts/lane-tests",
-  "scripts/lib",
-  "scripts/matrix",
-  "scripts/test-module",
+  "api-diff",
+  "ci-plan",
+  "drive-mcp",
+  "fuzz-targets",
+  "lane-tests",
+  "lib",
+  "matrix",
+  "test-module",
 ]
-testpaths = ["scripts"]
+testpaths = ["."]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 addopts = [
   "--doctest-modules",
-  "--import-mode=importlib",
+  "--ignore-glob=**/fake_*.py",
   "--strict-config",
   "--strict-markers",
   "-p",
@@ -51,14 +53,14 @@ addopts = [
 target-version = "py312"
 line-length = 100
 src = [
-  "scripts/api-diff",
-  "scripts/ci-plan",
-  "scripts/drive-mcp",
-  "scripts/fuzz-targets",
-  "scripts/lane-tests",
-  "scripts/lib",
-  "scripts/matrix",
-  "scripts/test-module",
+  "api-diff",
+  "ci-plan",
+  "drive-mcp",
+  "fuzz-targets",
+  "lane-tests",
+  "lib",
+  "matrix",
+  "test-module",
 ]
 
 [tool.ruff.lint]
@@ -67,15 +69,12 @@ extend-select = ["ANN", "B", "C4", "I", "PT", "PTH", "RUF", "SIM", "UP"]
 [tool.ty.environment]
 python-version = "3.12"
 extra-paths = [
-  "scripts/api-diff",
-  "scripts/ci-plan",
-  "scripts/drive-mcp",
-  "scripts/fuzz-targets",
-  "scripts/lane-tests",
-  "scripts/lib",
-  "scripts/matrix",
-  "scripts/test-module",
+  "api-diff",
+  "ci-plan",
+  "drive-mcp",
+  "fuzz-targets",
+  "lane-tests",
+  "lib",
+  "matrix",
+  "test-module",
 ]
-
-[tool.ty.src]
-include = ["scripts"]
