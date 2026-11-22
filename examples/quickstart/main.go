@@ -34,7 +34,8 @@ func run(ctx context.Context) (err error) {
 	}
 	// Cleanup runs even when ctx is the reason the program is leaving.
 	defer func() {
-		if cleanup := server.Kill(context.WithoutCancel(ctx)); !errors.Is(cleanup, tmux.ErrNoServer) {
+		cleanup := server.Kill(context.WithoutCancel(ctx))
+		if !errors.Is(cleanup, tmux.ErrNoServer) {
 			err = errors.Join(err, cleanup)
 		}
 	}()

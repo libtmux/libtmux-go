@@ -30,10 +30,17 @@ func ExampleWindow_SplitPane_complete() {
 		}
 		defer func() {
 			// Cleanup has its own deadline because the operation may have timed out.
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cleanup, cancel := context.WithTimeout(
+				context.Background(),
+				5*time.Second,
+			)
 			defer cancel()
-			if err := server.Kill(cleanup); err != nil && !errors.Is(err, tmux.ErrNoServer) {
-				runErr = errors.Join(runErr, fmt.Errorf("stop server at %s: %w", directory, err))
+			killErr := server.Kill(cleanup)
+			if killErr != nil && !errors.Is(killErr, tmux.ErrNoServer) {
+				runErr = errors.Join(
+					runErr,
+					fmt.Errorf("stop server at %s: %w", directory, killErr),
+				)
 				return
 			}
 			runErr = errors.Join(runErr, os.RemoveAll(directory))
@@ -67,7 +74,9 @@ func ExampleWindow_SplitPane_complete() {
 			return fmt.Errorf("send keys: %w", err)
 		}
 		// Capture reads one moment, so wait for the typed line to show first.
-		if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{Text: text}); err != nil {
+		if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{
+			Text: text,
+		}); err != nil {
 			return fmt.Errorf("wait for text: %w", err)
 		}
 		lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})

@@ -210,7 +210,9 @@ started fails the test through `t.Fatal`, so there is no error to check.
 // Given: ctx context.Context; t *testing.T
 server := tmuxtest.NewServer(ctx, t)
 
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+	Name: "under-test",
+})
 if err != nil {
 	t.Fatal(err)
 }
