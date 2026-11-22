@@ -471,7 +471,9 @@ func TestNewServerGivesATestAServerOfItsOwn(t *testing.T) {
 	// docs:new-server given:ctx context.Context; t *testing.T
 	server := tmuxtest.NewServer(ctx, t)
 
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+	session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+		Name: "under-test",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

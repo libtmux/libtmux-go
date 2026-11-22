@@ -25,8 +25,9 @@ as typed accessors, and [errors][topic-errors] classified by what tmux refused.
 </div>
 
 [Run a command][tmux-session-run], [find][tmux-server-sessions] and
-[filter][tmuxq-matching] what tmux holds, [type and wait][tmux-pane-waitfortext]
-for an answer, and [hear changes][tmux-session-opennotifications] as they happen.
+[filter][tmuxq-matching] what tmux holds, [type and
+wait][tmux-pane-waitfortext] for an answer, and [hear
+changes][tmux-session-opennotifications] as they happen.
 
 It suits tools that drive a terminal program, test suites that need a real
 tmux, and agents that share a terminal.
@@ -57,8 +58,7 @@ library, under [Packages](#packages).
 [Watch tmux](#watch-tmux-change) ·
 [Choosing a path](#choosing-how-to-reach-tmux) ·
 [Testing](#testing-your-own-code) · [Packages](#packages) ·
-[Leaves out](#what-it-leaves-out) · [Support](#support-and-status) ·
-[Documentation](#documentation)
+[Leaves out](#what-it-leaves-out) · [Support](#support-and-status)
 
 ## Quick start
 
@@ -104,7 +104,8 @@ func run(ctx context.Context) (err error) {
 	}
 	// Cleanup runs even when ctx is the reason the program is leaving.
 	defer func() {
-		if cleanup := server.Kill(context.WithoutCancel(ctx)); !errors.Is(cleanup, tmux.ErrNoServer) {
+		cleanup := server.Kill(context.WithoutCancel(ctx))
+		if !errors.Is(cleanup, tmux.ErrNoServer) {
 			err = errors.Join(err, cleanup)
 		}
 	}()
@@ -216,12 +217,18 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-filter"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-filter"},
+	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
@@ -358,7 +365,8 @@ the filters that run in Go and the helpers that apply them.
 
 Unlike Python libtmux's in-place `.refresh()`, `Refresh` asks tmux again and
 returns a replacement; the record you called it on stays as it was.
-[`Window.Refresh`][tmux-window-refresh] and [`Pane.Refresh`][tmux-pane-refresh] work alike:
+[`Window.Refresh`][tmux-window-refresh] and
+[`Pane.Refresh`][tmux-pane-refresh] work alike:
 
 <!-- docs:refresh -->
 
@@ -428,10 +436,17 @@ func ExamplePane_WaitForText() {
 			return errors.Join(err, os.RemoveAll(directory))
 		}
 		defer func() {
-			cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			cleanup, cancel := context.WithTimeout(
+				context.Background(),
+				5*time.Second,
+			)
 			defer cancel()
-			if err := server.Kill(cleanup); err != nil && !errors.Is(err, tmux.ErrNoServer) {
-				runErr = errors.Join(runErr, fmt.Errorf("stop server at %s: %w", directory, err))
+			killErr := server.Kill(cleanup)
+			if killErr != nil && !errors.Is(killErr, tmux.ErrNoServer) {
+				runErr = errors.Join(
+					runErr,
+					fmt.Errorf("stop server at %s: %w", directory, killErr),
+				)
 				return
 			}
 			runErr = errors.Join(runErr, os.RemoveAll(directory))
@@ -569,7 +584,9 @@ if err := pane.SendKeys(ctx, tmux.SendKeysRequest{Command: &text}); err != nil {
 	return fmt.Errorf("send keys: %w", err)
 }
 // Capture reads one moment, so wait for the typed line to show first.
-if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{Text: text}); err != nil {
+if _, err := pane.WaitForText(ctx, tmux.WaitForTextRequest{
+	Text: text,
+}); err != nil {
 	return fmt.Errorf("wait for text: %w", err)
 }
 lines, err := pane.Capture(ctx, tmux.CapturePaneRequest{})
@@ -745,17 +762,26 @@ func start() error {
 
 // run accepts injected server state so tests can isolate the example.
 func run(ctx context.Context, server tmux.Server) (err error) {
-	session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "libtmux-planned"})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionRequest{Name: "libtmux-planned"},
+	)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			time.Second,
+		)
 		defer cleanupCancel()
 		err = errors.Join(err, session.Kill(cleanupCtx))
 	}()
 
-	window, err := session.NewWindow(ctx, tmux.NewWindowRequest{Name: new("planned")})
+	window, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowRequest{Name: new("planned")},
+	)
 	if err != nil {
 		return fmt.Errorf("create window: %w", err)
 	}
@@ -776,7 +802,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	for index, argv := range preview {
 		if argv == nil {
-			fmt.Printf("step %d: rendered when the split has reported its pane\n", index)
+			fmt.Printf(
+				"step %d: rendered when the split has reported its pane\n",
+				index,
+			)
 			continue
 		}
 		fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
@@ -789,10 +818,17 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 		fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
 			dispatch.Ops, dispatch.Reason)
 	}
-	fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+	fmt.Printf(
+		"operations: %d, tmux invocations: %d\n",
+		plan.Len(),
+		len(dispatches),
+	)
 	if len(dispatches) >= plan.Len() {
-		return fmt.Errorf("%d operations took %d tmux invocations, want fewer than one each",
-			plan.Len(), len(dispatches))
+		return fmt.Errorf(
+			"%d operations took %d tmux invocations, want fewer than one each",
+			plan.Len(),
+			len(dispatches),
+		)
 	}
 
 	result, err := plan.Run(ctx, server)
@@ -813,7 +849,10 @@ func run(ctx context.Context, server tmux.Server) (err error) {
 	}
 	read := result.Ops[len(result.Ops)-1]
 	if got := read.Stdout; len(got) != 1 || got[0] != "editor" {
-		return fmt.Errorf("the read reported %q, want the title the plan set", got)
+		return fmt.Errorf(
+			"the read reported %q, want the title the plan set",
+			got,
+		)
 	}
 	return nil
 }
@@ -894,7 +933,10 @@ if err != nil {
 }
 for index, argv := range preview {
 	if argv == nil {
-		fmt.Printf("step %d: rendered when the split has reported its pane\n", index)
+		fmt.Printf(
+			"step %d: rendered when the split has reported its pane\n",
+			index,
+		)
 		continue
 	}
 	fmt.Printf("step %d: tmux %s\n", index, strings.Join(argv, " "))
@@ -907,7 +949,11 @@ for _, dispatch := range dispatches {
 	fmt.Printf("tmux invocation carrying steps %v, ends because it %s\n",
 		dispatch.Ops, dispatch.Reason)
 }
-fmt.Printf("operations: %d, tmux invocations: %d\n", plan.Len(), len(dispatches))
+fmt.Printf(
+	"operations: %d, tmux invocations: %d\n",
+	plan.Len(),
+	len(dispatches),
+)
 ```
 
 <!-- docs:end -->
@@ -1130,7 +1176,8 @@ Reference: [pkg.go.dev](https://pkg.go.dev/github.com/libtmux/libtmux-go/tmux/tm
 
 [`tmuxtest.NewServer`][tmuxtest-newserver] gives a test of tmux itself a server
 of its own. It goes in a package whose `TestMain` calls
-[`tmuxtest.Main`][tmuxtest-main], as in [the test above](#testing-your-own-code):
+[`tmuxtest.Main`][tmuxtest-main], as in
+[the test above](#testing-your-own-code):
 
 <!-- docs:new-server -->
 
@@ -1138,7 +1185,9 @@ of its own. It goes in a package whose `TestMain` calls
 // Given: ctx context.Context; t *testing.T
 server := tmuxtest.NewServer(ctx, t)
 
-session, err := server.NewSession(ctx, tmux.NewSessionRequest{Name: "under-test"})
+session, err := server.NewSession(ctx, tmux.NewSessionRequest{
+	Name: "under-test",
+})
 if err != nil {
 	t.Fatal(err)
 }
@@ -1229,60 +1278,19 @@ period, so pin an exact version. Not recommended for production.
   core's plain `vN`; pin the ones you want. Each module keeps a changelog beside
   its `go.mod`.
 
-## Documentation
+[Reference][go-reference] · [pkg.go.dev][tmux-package] · [`tmux/`](tmux/) ·
+[Contracts](tmux/docs/contracts.md) · [`examples/`](examples/) ·
+[`DESIGN.md`](DESIGN.md) · [`BENCHMARKS.md`](BENCHMARKS.md)
 
-The package documentation is the reference, written to be read start to
-finish:
+[`CHANGELOG.md`](CHANGELOG.md) · [Contributing](.github/CONTRIBUTING.md) ·
+[AI policy][ai-policy] · [Citation](CITATION.cff) · [MIT License](LICENSE)
 
-```console
-$ go doc github.com/libtmux/libtmux-go/tmux
-```
+Part of the [libtmux.org](https://libtmux.org/) family alongside Python
+[`libtmux`](https://github.com/tmux-python/libtmux), sibling
+[language ports](https://github.com/libtmux), and [tmux][tmux].
 
-It opens with a task index and maps each tmux command to its method:
-`kill-pane` is [`Pane.Kill`][tmux-pane-kill], `rename-session` is
-[`Session.Rename`][tmux-session-rename].
-
-| | |
-| --- | --- |
-| [Reference](https://libtmux.org/en/go/latest/reference/) | Every exported identifier, method, and field, one page each |
-| [`tmux/`](tmux/) | How the library is shaped: records, naming, options, errors |
-| [`tmux/docs/contracts.md`](tmux/docs/contracts.md) | What the library promises: the tmux version check |
-| [`examples/`](examples/) | Runnable programs, one per topic, each with a page of notes |
-| [`DESIGN.md`](DESIGN.md) | The conventions this package holds itself to, and the bakeoffs behind them |
-| [`BENCHMARKS.md`](BENCHMARKS.md) | What each way of reaching tmux costs |
-| [`CHANGELOG.md`](CHANGELOG.md) | What each release of the tmux module changed, and the changes that span modules |
-| [`workspace/CHANGELOG.md`](workspace/CHANGELOG.md) | What each release of `workspace` changed |
-| [`mcp/CHANGELOG.md`](mcp/CHANGELOG.md) | What each release of `mcp` changed |
-| [`SECURITY.md`](SECURITY.md) | What this software executes, and how to report a hole in it |
-| [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) | The gates a change has to pass, and where the writing rules live |
-| [`WRITING.md`](.github/WRITING.md) | How this repository writes: docs, the changelog, commits |
-| [`AGENTS.md`](AGENTS.md) | Which of the above applies to what you are changing |
-
-## AI policy
-
-Use these packages with AI tools as you like. When contributing, check what you
-submit and wait for a maintainer's invitation before preparing a pull request.
-See the [AI policy](https://libtmux.org/en/meta/ai-policy/), also kept as
-[AI_POLICY.md](https://github.com/libtmux/.github/blob/HEAD/AI_POLICY.md).
-
-## Attribution
-
-Please use the following BibTeX template to cite libtmux-go in scientific
-discourse:
-
-```bibtex
-@misc{libtmux-go,
-   author = {Tony Narlock},
-   year = {2026},
-   note = {https://libtmux.org/en/go/},
-   title = {libtmux-go: Go wrapper for tmux}
-}
-```
-
-## License
-
-MIT. See [`LICENSE`](LICENSE).
-
+[ai-policy]: https://libtmux.org/en/meta/ai-policy/
+[go-reference]: https://libtmux.org/en/go/latest/reference/
 [libtmux-mcp-command]: https://pkg.go.dev/github.com/libtmux/libtmux-go/mcp/cmd/libtmux-mcp
 [mcp-readme]: https://github.com/libtmux/libtmux-go/tree/master/mcp
 [mcp-tools]: https://github.com/libtmux/libtmux-go/blob/master/mcp/TOOLS.md
@@ -1331,7 +1339,6 @@ MIT. See [`LICENSE`](LICENSE).
 [tmux-session-opencontrol]: https://libtmux.org/en/go/latest/reference/tmux-session-opencontrol/
 [tmux-session-opennotifications]: https://libtmux.org/en/go/latest/reference/tmux-session-opennotifications/
 [tmux-session-refresh]: https://libtmux.org/en/go/latest/reference/tmux-session-refresh/
-[tmux-session-rename]: https://libtmux.org/en/go/latest/reference/tmux-session-rename/
 [tmux-session-run]: https://libtmux.org/en/go/latest/reference/tmux-session-run/
 [tmux-session-setmouse]: https://libtmux.org/en/go/latest/reference/tmux-session-setmouse/
 [tmux-session]: https://libtmux.org/en/go/latest/reference/tmux-session/
