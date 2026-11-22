@@ -106,12 +106,17 @@ class LaneError(Exception):
 
 
 def with_prefix(environ: Mapping[str, str], prefix: str) -> dict[str, str]:
-    """Copy the environment with a tmux installation first on PATH.
+    """Copy the environment with a tmux installation first on PATH and in LIBTMUX_TEST_TMUX.
 
-    >>> with_prefix({"PATH": "/usr/bin"}, "/opt/tmux")["PATH"]
-    '/opt/tmux/bin:/usr/bin'
+    >>> env = with_prefix({"PATH": "/usr/bin"}, "/opt/tmux")
+    >>> env["PATH"], env["LIBTMUX_TEST_TMUX"]
+    ('/opt/tmux/bin:/usr/bin', '/opt/tmux/bin/tmux')
     """
-    return {**environ, "PATH": f"{prefix}/bin{os.pathsep}{environ.get('PATH', '')}"}
+    return {
+        **environ,
+        "PATH": f"{prefix}/bin{os.pathsep}{environ.get('PATH', '')}",
+        "LIBTMUX_TEST_TMUX": f"{prefix}/bin/tmux",
+    }
 
 
 def reported(binary: str, environ: Mapping[str, str]) -> str:

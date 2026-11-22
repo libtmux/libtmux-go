@@ -208,12 +208,29 @@ One tmux is not enough. The supported range is a claim the README makes, and
 a release can lack what another has. In tmux 3.4, `split-window -p` reads the
 value of `-l` and fails with `size missing`, while 3.3a and 3.5 take `-p`; the
 fix is [tmux commit bd29a48b5](https://github.com/tmux/tmux/commit/bd29a48b56ae649d425fd6939d60f75d79d767da),
-released in 3.5. Everything above runs against whichever tmux is on `PATH`, so
-run the supported releases before anything ships.
+released in 3.5. Everything above runs against `LIBTMUX_TEST_TMUX` when set,
+falling back to `LIBTMUX_TMUX` and then whichever `tmux` is on `PATH`; an empty
+or whitespace-only value counts as unset. Published `tmux`, `workspace`, and
+`mcp` entrypoints ignore `LIBTMUX_TEST_TMUX` (`libtmux-mcp` keeps
+`LIBTMUX_TMUX_BIN`). Run a single build directly with `LIBTMUX_TEST_TMUX`:
+
+```console
+$ LIBTMUX_TEST_TMUX=/path/to/tmux go test ./...
+```
+
+On releases below 3.7, pair it with `run_tests.py` so fixed-output examples for
+newer features are omitted:
+
+```console
+$ LIBTMUX_TEST_TMUX=/path/to/3.3a/tmux \
+    uv run scripts/test-module/run_tests.py workspace
+```
+
+Run the supported releases before anything ships.
 
 `scripts/matrix/matrix.py` runs every compatible module suite against each
 supported release, given a directory of tmux builds with `<version>/bin/tmux`
-inside it.
+inside it, setting `LIBTMUX_TEST_TMUX` for each cell.
 
 - Every module runs across the whole 3.3a-through-3.8 range, with the feature
   example omissions above.

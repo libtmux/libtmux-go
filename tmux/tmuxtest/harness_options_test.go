@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -129,4 +130,106 @@ func TestNewServerWithOptionsScrubsInheritedTmuxEnvironment(t *testing.T) {
 			t.Fatalf("ProcessEnvironment() retained selector variable %q", key)
 		}
 	}
+}
+
+func TestNewServerSelectsExecutableFromTestTmuxEnvironment(t *testing.T) {
+	baseline := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{})
+	realBinary := baseline.Executable()
+
+	writeProxy := func(t *testing.T, directory, name, logPath string) string {
+		t.Helper()
+		path := filepath.Join(directory, name)
+		script := "#!/bin/sh\nprintf 'ran\\n' >> " + strconv.Quote(logPath) + "\nexec " + strconv.Quote(realBinary) + " \"$@\"\n"
+		if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("LIBTMUX_TEST_TMUX wins over LIBTMUX_TMUX and PATH", func(t *testing.T) {
+		pathDir := t.TempDir()
+		pathLog := filepath.Join(t.TempDir(), "path.log")
+		_ = writeProxy(t, pathDir, "tmux", pathLog)
+
+		legacyLog := filepath.Join(t.TempDir(), "legacy.log")
+		legacyProxy := writeProxy(t, t.TempDir(), "legacy-tmux", legacyLog)
+
+		selectedLog := filepath.Join(t.TempDir(), "selected.log")
+		selectedProxy := writeProxy(t, t.TempDir(), "selected-tmux", selectedLog)
+
+		t.Setenv("PATH", pathDir+string(os.PathListSeparator)+"/bin")
+		t.Setenv("LIBTMUX_TMUX", legacyProxy)
+		t.Setenv("LIBTMUX_TEST_TMUX", selectedProxy)
+
+		server := tmuxtest.NewServer(context.Background(), t)
+		if server.Executable() != selectedProxy {
+			t.Fatalf("server.Executable() = %q, want %q", server.Executable(), selectedProxy)
+		}
+		if _, err := os.Stat(selectedLog); err != nil {
+			t.Fatalf("selected LIBTMUX_TEST_TMUX binary did not run: %v", err)
+		}
+		for _, untouched := range []string{legacyLog, pathLog} {
+			if _, err := os.Stat(untouched); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("fallback binary %s ran when LIBTMUX_TEST_TMUX was set", untouched)
+			}
+		}
+	})
+
+	for _, blank := range []struct {
+		name  string
+		value string
+	}{
+		{"empty", ""},
+		{"whitespace", " \t\n"},
+	} {
+		t.Run("blank LIBTMUX_TEST_TMUX ("+blank.name+") falls back to LIBTMUX_TMUX then PATH", func(t *testing.T) {
+			pathDir := t.TempDir()
+			pathLog := filepath.Join(t.TempDir(), "path.log")
+			pathProxy := writeProxy(t, pathDir, "tmux", pathLog)
+
+			legacyLog := filepath.Join(t.TempDir(), "legacy.log")
+			legacyProxy := writeProxy(t, t.TempDir(), "legacy-tmux", legacyLog)
+
+			t.Setenv("PATH", pathDir+string(os.PathListSeparator)+"/bin")
+			t.Setenv("LIBTMUX_TEST_TMUX", blank.value)
+			t.Setenv("LIBTMUX_TMUX", legacyProxy)
+
+			withLegacy := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{})
+			if withLegacy.Executable() != legacyProxy {
+				t.Fatalf("Executable() with legacy fallback = %q, want %q", withLegacy.Executable(), legacyProxy)
+			}
+
+			t.Setenv("LIBTMUX_TMUX", blank.value)
+			fromPath := tmuxtest.NewServer(context.Background(), t)
+			if fromPath.Executable() != pathProxy {
+				t.Fatalf("Executable() with blank test vars = %q, want %q", fromPath.Executable(), pathProxy)
+			}
+			if _, err := os.Stat(pathLog); err != nil {
+				t.Fatalf("PATH binary did not run when test vars were blank: %v", err)
+			}
+		})
+	}
+
+	t.Run("explicit ServerOptions.Binary overrides LIBTMUX_TEST_TMUX", func(t *testing.T) {
+		selectedLog := filepath.Join(t.TempDir(), "selected.log")
+		selectedProxy := writeProxy(t, t.TempDir(), "selected-tmux", selectedLog)
+
+		explicitLog := filepath.Join(t.TempDir(), "explicit.log")
+		explicitProxy := writeProxy(t, t.TempDir(), "explicit-tmux", explicitLog)
+
+		t.Setenv("LIBTMUX_TEST_TMUX", selectedProxy)
+		server := tmuxtest.NewServerWithOptions(context.Background(), t, tmuxtest.ServerOptions{
+			Binary:         explicitProxy,
+			InitialSession: &tmux.NewSessionRequest{Name: "explicit"},
+		})
+		if server.Executable() != explicitProxy {
+			t.Fatalf("server.Executable() = %q, want %q", server.Executable(), explicitProxy)
+		}
+		if _, err := os.Stat(explicitLog); err != nil {
+			t.Fatalf("explicit Binary did not run: %v", err)
+		}
+		if _, err := os.Stat(selectedLog); !errors.Is(err, os.ErrNotExist) {
+			t.Fatal("LIBTMUX_TEST_TMUX ran despite explicit ServerOptions.Binary")
+		}
+	})
 }

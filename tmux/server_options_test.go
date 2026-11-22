@@ -392,6 +392,43 @@ func TestNewServerRejectsMissingExecutableEagerly(t *testing.T) {
 	}
 }
 
+func TestNewServerIgnoresTestTmuxEnvironment(t *testing.T) {
+	pathDirectory := t.TempDir()
+	pathBinary := filepath.Join(pathDirectory, "tmux")
+	if err := os.Symlink(testExecutable(t), pathBinary); err != nil {
+		t.Fatal(err)
+	}
+	decoy := filepath.Join(t.TempDir(), "test-only-tmux")
+	if err := os.Symlink(testExecutable(t), decoy); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", pathDirectory)
+	t.Setenv("LIBTMUX_TEST_TMUX", decoy)
+	t.Setenv("LIBTMUX_TMUX", decoy)
+
+	inherited, err := NewServer(ServerOptions{})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	if inherited.Executable() != filepath.Clean(pathBinary) {
+		t.Fatalf("inherited Executable() = %q, want %q from PATH", inherited.Executable(), pathBinary)
+	}
+
+	explicitEnv, err := NewServer(ServerOptions{
+		ProcessEnvironment: []string{
+			"PATH=" + pathDirectory,
+			"LIBTMUX_TEST_TMUX=" + decoy,
+			"LIBTMUX_TMUX=" + decoy,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewServer(ProcessEnvironment) error = %v", err)
+	}
+	if explicitEnv.Executable() != filepath.Clean(pathBinary) {
+		t.Fatalf("explicit ProcessEnvironment Executable() = %q, want %q from PATH", explicitEnv.Executable(), pathBinary)
+	}
+}
+
 func TestServerWithSocketPathPreservesFrozenExecutionBinding(t *testing.T) {
 	t.Parallel()
 

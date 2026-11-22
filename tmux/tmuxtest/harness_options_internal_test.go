@@ -320,3 +320,47 @@ func TestCaptureNewWindowRequestCopiesReferencedValues(t *testing.T) {
 		t.Fatalf("captured environment = %q, want before", got)
 	}
 }
+
+func TestConfiguredTestTmuxPrecedenceAndBlankValues(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name        string
+		environment []string
+		want        string
+		wantOK      bool
+	}{
+		{"neither set", []string{"PATH=/usr/bin"}, "", false},
+		{"LIBTMUX_TEST_TMUX empty", []string{"LIBTMUX_TEST_TMUX="}, "", false},
+		{"LIBTMUX_TEST_TMUX whitespace", []string{"LIBTMUX_TEST_TMUX= \t\n"}, "", false},
+		{"LIBTMUX_TMUX fallback", []string{"LIBTMUX_TMUX=/opt/legacy/tmux"}, "/opt/legacy/tmux", true},
+		{"LIBTMUX_TMUX whitespace", []string{"LIBTMUX_TMUX=  "}, "", false},
+		{
+			"LIBTMUX_TEST_TMUX wins over LIBTMUX_TMUX",
+			[]string{"LIBTMUX_TMUX=/opt/legacy/tmux", "LIBTMUX_TEST_TMUX=/opt/test/tmux"},
+			"/opt/test/tmux",
+			true,
+		},
+		{
+			"whitespace LIBTMUX_TEST_TMUX falls back to LIBTMUX_TMUX",
+			[]string{"LIBTMUX_TEST_TMUX= \t ", "LIBTMUX_TMUX=/opt/legacy/tmux"},
+			"/opt/legacy/tmux",
+			true,
+		},
+		{
+			"duplicate entries keep last value",
+			[]string{"LIBTMUX_TEST_TMUX=/opt/first/tmux", "LIBTMUX_TEST_TMUX=  "},
+			"",
+			false,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := configuredTestTmux(test.environment)
+			if got != test.want || ok != test.wantOK {
+				t.Errorf("configuredTestTmux() = (%q, %t), want (%q, %t)", got, ok, test.want, test.wantOK)
+			}
+		})
+	}
+}

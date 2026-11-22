@@ -12,13 +12,40 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// layoutRoundTripTmuxBinary opts this test into a tmux 3.8 or later binary.
-// The MCP server's command connection is a control client, and tmux hands a
-// control client the classic layout grammar unless it requested the JSON
-// shape - which only 3.8+ has - so this test is a no-op below that floor.
-// Unset, it falls back to whatever "tmux" resolves to on PATH and skips
-// there too if that is not new enough.
+// layoutRoundTripTmuxBinary is the legacy variable that opted this test into a
+// tmux 3.8 or later binary before LIBTMUX_TEST_TMUX.
 const layoutRoundTripTmuxBinary = "LIBTMUX_GO_TEST_TMUX38_BIN"
+
+func selectedLayoutTestTmux() string {
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", layoutRoundTripTmuxBinary} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func TestSelectedLayoutTestTmuxPrecedence(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		test   string
+		legacy string
+		want   string
+	}{
+		{"neither set", "", "", ""},
+		{"blank LIBTMUX_TEST_TMUX falls back to legacy", " \t", "/opt/tmux-3.8/bin/tmux", "/opt/tmux-3.8/bin/tmux"},
+		{"blank both", "  ", "\t", ""},
+		{"LIBTMUX_TEST_TMUX wins over legacy", "/opt/selected/tmux", "/opt/tmux-3.8/bin/tmux", "/opt/selected/tmux"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("LIBTMUX_TEST_TMUX", test.test)
+			t.Setenv(layoutRoundTripTmuxBinary, test.legacy)
+			if got := selectedLayoutTestTmux(); got != test.want {
+				t.Errorf("selectedLayoutTestTmux() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
 
 // The MCP server reads window_layout through a control connection.
 // Before the control connection requested JSON layouts (tmux.controlDialect,
@@ -30,7 +57,7 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	binary := os.Getenv(layoutRoundTripTmuxBinary)
+	binary := selectedLayoutTestTmux()
 	request := tmux.NewSessionRequest{Name: "work"}
 	target := tmuxtest.NewServerWithOptions(ctx, t, tmuxtest.ServerOptions{
 		Binary: binary, InitialSession: &request,
@@ -45,8 +72,8 @@ func TestSelectLayoutRoundTripIsExactOnTmux38(t *testing.T) {
 	}
 	if !version.AtLeast(minimum) {
 		t.Skipf(
-			"tmux %s predates the JSON layout shape (3.8); set %s to a newer tmux",
-			version, layoutRoundTripTmuxBinary,
+			"tmux %s predates the JSON layout shape (3.8); set LIBTMUX_TEST_TMUX to a newer tmux",
+			version,
 		)
 	}
 

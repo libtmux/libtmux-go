@@ -29,7 +29,9 @@ def main() -> int:
         for name, value in os.environ.items():
             if name == "TMUX_TMPDIR":
                 append(env_log, f"tmpdir {value}")
-            elif name == "TMUX" or name.startswith(("TMUX_", "LIBTMUX_SOCKET")):
+            elif name == "LIBTMUX_TEST_TMUX":
+                append(env_log, f"test_tmux {value}")
+            elif name in ("TMUX", "LIBTMUX_TMUX") or name.startswith(("TMUX_", "LIBTMUX_SOCKET")):
                 append(env_log, f"env {name}")
     if os.environ.get("MATRIX_TEST_STALE_SOCKET"):
         stale = socket.socket(socket.AF_UNIX)

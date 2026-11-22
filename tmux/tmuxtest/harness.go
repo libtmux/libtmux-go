@@ -101,7 +101,10 @@ import (
 // ServerOptions configures a harness-owned [tmux.Server]. All inputs are copied
 // before filesystem or process operations, so callers retain ownership.
 type ServerOptions struct {
-	// Binary is the tmux executable. An empty value resolves tmux from PATH.
+	// Binary is the tmux executable.
+	// An empty value uses LIBTMUX_TEST_TMUX, falling back to LIBTMUX_TMUX and
+	// then resolving tmux from PATH.
+	// An empty or whitespace-only variable counts as unset.
 	Binary string
 	// Config is appended to the harness-owned config file; it cannot replace the
 	// private file that prevents user configuration from loading.
@@ -256,6 +259,11 @@ var suiteEnvironment = []string{"TMPDIR", "GOTMPDIR", "TMUX_TMPDIR"}
 // to the server a command was typed inside and to the pane it targets.
 const socketSelectorPrefix = "LIBTMUX_SOCKET"
 
+const (
+	testTmuxVariable       = "LIBTMUX_TEST_TMUX"
+	legacyTestTmuxVariable = "LIBTMUX_TMUX"
+)
+
 // SuiteRootTagVariable names the environment variable that tags a suite's
 // temporary root. go test runs packages in parallel and every suite among them
 // creates a root beside the others, so a test spawning a child suite sets this
@@ -271,10 +279,11 @@ func suiteRootPrefix() string {
 
 // Main runs the one-call package lifecycle for tmuxtest. It prepares short
 // temporary paths, redirects [suiteEnvironment] into them, clears the
-// variables that select a server outside them, runs m, cleans registered
-// servers, restores the environment, and returns the final status. It returns
-// 2 without running m when the environment would still reach a server outside
-// the suite.
+// variables that select a server outside them, stages LIBTMUX_TEST_TMUX (or
+// LIBTMUX_TMUX) first on PATH when set, runs m, cleans registered servers,
+// restores the environment, and returns the final status. It returns 2 without
+// running m when a configured test executable cannot be resolved or the
+// environment would still reach a server outside the suite.
 //
 // After m returns, Main scans the whole suite root for sockets and stops each
 // server still answering on one with kill-server. Such a server is a test's
@@ -290,12 +299,21 @@ func Main(m *testing.M) int {
 }
 
 func runSuite(run func() int) int {
+	var suiteTmux string
+	if _, configured := configuredTestTmux(os.Environ()); configured {
+		resolved, err := resolveTestTmux()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, harnessFailure("resolve tmux executable", err))
+			return 2
+		}
+		suiteTmux = resolved
+	}
 	root, err := os.MkdirTemp(shortTempBase(), suiteRootPrefix())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, harnessFailure("create short temporary root", err))
 		return 2
 	}
-	restoreEnvironment, err := replaceSuiteEnvironment(root)
+	restoreEnvironment, err := replaceSuiteEnvironment(root, suiteTmux)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, harnessFailure("redirect the suite environment", err))
 		_ = os.RemoveAll(root)
@@ -330,7 +348,10 @@ func runSuite(run func() int) int {
 			code = 1
 		}
 	}
-	tmuxPath, _ := exec.LookPath("tmux")
+	tmuxPath := suiteTmux
+	if tmuxPath == "" {
+		tmuxPath, _ = resolveTestTmux()
+	}
 	leaks := stopLeakedServers(root, tmuxPath)
 	if message := leaks.message(); message != "" {
 		fmt.Fprintln(os.Stderr, message)
@@ -419,13 +440,9 @@ func newServerWithOptions(
 	binary := options.Binary
 	if binary == "" {
 		var err error
-		binary, err = exec.LookPath("tmux")
+		binary, err = resolveTestTmux()
 		if err != nil {
 			t.Fatal(harnessFailure("resolve tmux executable", err))
-		}
-		binary, err = filepath.Abs(binary)
-		if err != nil {
-			t.Fatal(harnessFailure("resolve tmux executable path", err))
 		}
 	}
 	root, err := activeSuiteRoot()
@@ -841,13 +858,58 @@ func scrubTmuxEnvironment(environment []string) []string {
 	return cleaned
 }
 
+// configuredTestTmux returns the first non-blank test executable variable in
+// environment: LIBTMUX_TEST_TMUX, else LIBTMUX_TMUX. Duplicate entries keep
+// their last value, matching os.Getenv.
+func configuredTestTmux(environment []string) (string, bool) {
+	for _, variable := range []string{testTmuxVariable, legacyTestTmuxVariable} {
+		if value, found := lastEnvironmentValue(environment, variable); found && strings.TrimSpace(value) != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func lastEnvironmentValue(environment []string, key string) (string, bool) {
+	var (
+		last  string
+		found bool
+	)
+	for _, entry := range environment {
+		name, value, hasEquals := strings.Cut(entry, "=")
+		if hasEquals && name == key {
+			last, found = value, true
+		}
+	}
+	return last, found
+}
+
+func resolveTestTmux() (string, error) {
+	binary := "tmux"
+	if configured, ok := configuredTestTmux(os.Environ()); ok {
+		binary = configured
+	}
+	resolved, err := exec.LookPath(binary)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(resolved)
+}
+
+func prependPathEntry(directory, current string) string {
+	if current == "" {
+		return directory
+	}
+	return directory + string(os.PathListSeparator) + current
+}
+
 // replaceSuiteEnvironment points every variable in [suiteEnvironment] at root,
-// clears the variables [ambientTmuxNames] finds, and returns one call that
-// restores all of them. A variable that cannot be set undoes the ones already
-// replaced, so a failure leaves the environment as it was found rather than
-// half redirected.
-func replaceSuiteEnvironment(root string) (func() error, error) {
-	restores := make([]func() error, 0, len(suiteEnvironment))
+// stages suiteTmux first on PATH when non-empty, clears the variables
+// [ambientTmuxNames] finds, and returns one call that restores all of them. A
+// variable that cannot be set undoes the ones already replaced, so a failure
+// leaves the environment as it was found rather than half redirected.
+func replaceSuiteEnvironment(root, suiteTmux string) (func() error, error) {
+	restores := make([]func() error, 0, len(suiteEnvironment)+1)
 	restore := func() error {
 		var first error
 		for _, undo := range slices.Backward(restores) {
@@ -862,6 +924,23 @@ func replaceSuiteEnvironment(root string) (func() error, error) {
 		if err != nil {
 			_ = restore()
 			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		restores = append(restores, undo)
+	}
+	if suiteTmux != "" {
+		binDirectory := filepath.Join(root, "bin")
+		if err := os.Mkdir(binDirectory, 0o700); err != nil {
+			_ = restore()
+			return nil, fmt.Errorf("create suite bin directory: %w", err)
+		}
+		if err := os.Symlink(suiteTmux, filepath.Join(binDirectory, "tmux")); err != nil {
+			_ = restore()
+			return nil, fmt.Errorf("stage suite tmux: %w", err)
+		}
+		undo, err := replaceEnvironment("PATH", prependPathEntry(binDirectory, os.Getenv("PATH")))
+		if err != nil {
+			_ = restore()
+			return nil, fmt.Errorf("PATH: %w", err)
 		}
 		restores = append(restores, undo)
 	}

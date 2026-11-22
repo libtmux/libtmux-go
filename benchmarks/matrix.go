@@ -87,8 +87,9 @@ func cleanEnvironment() []string {
 	environment := os.Environ()
 	kept := make([]string, 0, len(environment))
 	for _, entry := range environment {
-		switch strings.SplitN(entry, "=", 2)[0] {
-		case "TMUX", "TMUX_PANE", "TMUX_TMPDIR":
+		name := strings.SplitN(entry, "=", 2)[0]
+		if name == "TMUX" || name == "TMUX_PANE" || name == "TMUX_TMPDIR" ||
+			strings.HasPrefix(name, "LIBTMUX_SOCKET") {
 			continue
 		}
 		kept = append(kept, entry)

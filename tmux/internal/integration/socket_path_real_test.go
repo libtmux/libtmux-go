@@ -308,7 +308,7 @@ func TestEnvironmentSocketVariablesSteerAServerThatNamesNoSocket(t *testing.T) {
 			if _, err := os.Stat(test.wantSocket); err != nil {
 				t.Fatalf("the variable did not put the server on its socket: %v", err)
 			}
-			named := exec.CommandContext(ctx, "tmux", append(test.clientFlags, "list-sessions", "-F", "#{session_name}")...)
+			named := exec.CommandContext(ctx, testTmuxBinary(t), append(test.clientFlags, "list-sessions", "-F", "#{session_name}")...)
 			output, err := named.Output()
 			if err != nil || strings.TrimSpace(string(output)) != "viaenv" {
 				t.Fatalf("a client naming the socket lists %q (%v), want the session", output, err)
@@ -348,7 +348,7 @@ func defaultSandboxSocket(t *testing.T) string {
 func bareTmuxSessions(ctx context.Context, t *testing.T) []string {
 	t.Helper()
 
-	output, err := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", "#{session_name}").Output()
+	output, err := exec.CommandContext(ctx, testTmuxBinary(t), "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil {
 		if _, exited := errors.AsType[*exec.ExitError](err); exited {
 			return nil

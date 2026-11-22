@@ -26,12 +26,7 @@ func TestMain(m *testing.M) {
 // It takes about a second: the program starts work that sleeps for one, so
 // that there is something to inspect while it runs.
 func TestAgentWorkflowPrintsItsPublishedOutput(t *testing.T) {
-	server, err := tmux.NewServer(tmux.ServerOptions{
-		SocketPath: filepath.Join(t.TempDir(), "s"), ConfigFile: os.DevNull,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{})
 	tmuxtest.RequireVersion(t.Context(), t, server, tmux.MinimumConnectionVersion)
 	// The program drives whatever tmux it is pointed at, with that tmux's own
 	// configuration and shell. A home with neither, and a plain shell, is the
@@ -42,10 +37,13 @@ func TestAgentWorkflowPrintsItsPublishedOutput(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
 	// Unset rather than empty: the server refuses input when it cannot tell
 	// whether it is running in a pane, and an empty TMUX is that.
-	for _, name := range []string{"TMUX", "TMUX_PANE"} {
-		t.Setenv(name, "")
-		if err := os.Unsetenv(name); err != nil {
-			t.Fatal(err)
+	for _, entry := range os.Environ() {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == "TMUX" || name == "TMUX_PANE" || strings.HasPrefix(name, "LIBTMUX_SOCKET") {
+			t.Setenv(name, value)
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	t.Setenv(tmuxmcp.ToolsetsEnvironmentVariable, "inspect,manage,execute")
@@ -59,7 +57,7 @@ func TestAgentWorkflowPrintsItsPublishedOutput(t *testing.T) {
 		left, _ := filepath.Glob(filepath.Join(sockets, "tmux-*", "*"))
 		for _, socket := range left {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = exec.CommandContext(ctx, "tmux", "-S", socket, "kill-server").Run()
+			_ = exec.CommandContext(ctx, server.Executable(), "-S", socket, "kill-server").Run()
 			cancel()
 		}
 		_ = os.RemoveAll(sockets)

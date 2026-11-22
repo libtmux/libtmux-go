@@ -479,6 +479,48 @@ const hostileConfig = "set -g base-index 5\n" +
 	"set -g pane-base-index 5\n" +
 	"set-hook -g after-new-session 'new-window -d'\n"
 
+func resolvePasteTmux() (string, error) {
+	binary := "tmux"
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			binary = value
+			break
+		}
+	}
+	resolved, err := exec.LookPath(binary)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(resolved)
+}
+
+func pasteRunEnvironment(base []string, home, sockets, binDir string) []string {
+	environment := make([]string, 0, len(base)+4)
+	currentPath := ""
+	for _, entry := range base {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == "TMUX" || name == "TMUX_PANE" || strings.HasPrefix(name, "LIBTMUX_SOCKET") ||
+			name == "HOME" || name == "XDG_CONFIG_HOME" || name == "TMUX_TMPDIR" || name == "PATH" {
+			if name == "PATH" {
+				currentPath = value
+			}
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	stagedPath := binDir
+	if currentPath != "" {
+		stagedPath += string(os.PathListSeparator) + currentPath
+	}
+	return append(
+		environment,
+		"PATH="+stagedPath,
+		"HOME="+home,
+		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
+		"TMUX_TMPDIR="+sockets,
+	)
+}
+
 // TestPastedProgramsBuildAndRun takes every quoted program back out of the
 // Markdown, puts it alone in an empty module, builds it, runs it, and holds
 // what it prints to the output block published beside it. A program in a
@@ -486,8 +528,9 @@ const hostileConfig = "set -g base-index 5\n" +
 // and is held here to being one file.
 func TestPastedProgramsBuildAndRun(t *testing.T) {
 	root, absRoot := repositoryRoot(t)
-	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Fatalf("a pasted program is only proven by running it, and no tmux is on PATH: %v", err)
+	tmuxBinary, err := resolvePasteTmux()
+	if err != nil {
+		t.Fatalf("a pasted program is only proven by running it, and no tmux is available: %v", err)
 	}
 
 	seen := map[string]bool{}
@@ -529,7 +572,7 @@ func TestPastedProgramsBuildAndRun(t *testing.T) {
 			seen[program.source+"\x00"+program.body+"\x00"+printed] = true
 			t.Run(program.source, func(t *testing.T) {
 				t.Parallel()
-				pasteAndRun(t, absRoot, program, printed, isTest)
+				pasteAndRun(t, absRoot, tmuxBinary, program, printed, isTest)
 			})
 		}
 	}
@@ -554,7 +597,7 @@ func programFiles(t *testing.T, root, directory string) []string {
 	return names
 }
 
-func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed string, isTest bool) {
+func pasteAndRun(t *testing.T, absRoot, tmuxBinary string, program wholeBlock, printed string, isTest bool) {
 	t.Helper()
 	dir := t.TempDir()
 	name := "main.go"
@@ -594,6 +637,13 @@ func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed strin
 			t.Fatal(err)
 		}
 	}
+	binDir := filepath.Join(dir, "bin")
+	if err := os.Mkdir(binDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(tmuxBinary, filepath.Join(binDir, "tmux")); err != nil {
+		t.Fatal(err)
+	}
 	// t.TempDir names the subtest, and a socket path may hold only 103 bytes,
 	// of which macOS's per-user TMPDIR alone takes about sixty, so the sockets
 	// go under /tmp where there is one.
@@ -605,7 +655,7 @@ func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { killServersAndRemove(sockets) })
+	t.Cleanup(func() { killServersAndRemove(sockets, tmuxBinary) })
 
 	var arguments []string
 	if isTest {
@@ -613,9 +663,7 @@ func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed strin
 	}
 	run := exec.CommandContext(ctx, binary, arguments...)
 	run.Dir = dir
-	run.Env = append(os.Environ(),
-		"HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
-		"TMUX_TMPDIR="+sockets, "TMUX=", "TMUX_PANE=")
+	run.Env = pasteRunEnvironment(os.Environ(), home, sockets, binDir)
 	var stdout, stderr bytes.Buffer
 	run.Stdout, run.Stderr = &stdout, &stderr
 	if err := run.Run(); err != nil {
@@ -629,17 +677,44 @@ func pasteAndRun(t *testing.T, absRoot string, program wholeBlock, printed strin
 
 // killServersAndRemove ends whatever tmux a pasted program left behind before
 // its socket directory goes.
-func killServersAndRemove(sockets string) {
+func killServersAndRemove(sockets, tmuxBinary string) {
 	_ = filepath.WalkDir(sockets, func(candidate string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.Type()&fs.ModeSocket == 0 {
 			return nil
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = exec.CommandContext(ctx, "tmux", "-S", candidate, "kill-server").Run()
+		_ = exec.CommandContext(ctx, tmuxBinary, "-S", candidate, "kill-server").Run()
 		return nil
 	})
 	_ = os.RemoveAll(sockets)
+}
+
+func TestPasteRunEnvironmentRemovesAmbientSelectorsAndPrependsStagedTmux(t *testing.T) {
+	t.Parallel()
+
+	env := pasteRunEnvironment([]string{
+		"PATH=/usr/bin",
+		"TMUX=/tmp/decoy,1,0",
+		"TMUX_PANE=%3",
+		"LIBTMUX_SOCKET=decoy",
+		"LIBTMUX_SOCKET_PATH=/tmp/decoy.sock",
+		"LIBTMUX_SOCKET_NAME=legacy",
+		"KEEP=1",
+	}, "/tmp/home", "/tmp/sockets", "/tmp/staged/bin")
+
+	for _, entry := range env {
+		name, _, _ := strings.Cut(entry, "=")
+		if name == "TMUX" || name == "TMUX_PANE" || strings.HasPrefix(name, "LIBTMUX_SOCKET") {
+			t.Errorf("pasteRunEnvironment retained %s", name)
+		}
+	}
+	if !slices.Contains(env, "PATH=/tmp/staged/bin"+string(os.PathListSeparator)+"/usr/bin") {
+		t.Errorf("pasteRunEnvironment PATH missing staged bin: %q", env)
+	}
+	if !slices.Contains(env, "KEEP=1") || !slices.Contains(env, "TMUX_TMPDIR=/tmp/sockets") {
+		t.Errorf("pasteRunEnvironment dropped expected entries: %q", env)
+	}
 }
 
 // TestPublishedOutputIsComparedByATest holds every docs:output block to a

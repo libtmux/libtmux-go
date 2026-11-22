@@ -10,14 +10,34 @@ import (
 	"time"
 )
 
+func configuredLiveTestTmux() (string, bool) {
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
 // OpenControl checks the daemon before it attaches and binds the checked
 // handle, so a connection carries the version it was checked at even when the
 // session value came from a server that never probed one. The literal-command
 // gates read that version; without it they have nothing to compare.
 func TestOpenControlBindsTheVersionItChecked(t *testing.T) {
-	binary, err := exec.LookPath("tmux")
+	candidate, explicit := configuredLiveTestTmux()
+	if !explicit {
+		candidate = "tmux"
+	}
+	binary, err := exec.LookPath(candidate)
 	if err != nil {
+		if explicit {
+			t.Fatal(err)
+		}
 		t.Skip("tmux is not installed")
+	}
+	binary, err = filepath.Abs(binary)
+	if err != nil {
+		t.Fatal(err)
 	}
 	output, err := exec.Command(binary, "-V").Output()
 	if err != nil {

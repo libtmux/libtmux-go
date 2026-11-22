@@ -48,7 +48,14 @@ func newProcessCounter(directory string) (*processCounter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("make proxy directory absolute: %w", err)
 	}
-	executable, err := exec.LookPath("tmux")
+	candidate := "tmux"
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			candidate = value
+			break
+		}
+	}
+	executable, err := exec.LookPath(candidate)
 	if err != nil {
 		return nil, fmt.Errorf("resolve real tmux executable: %w", err)
 	}

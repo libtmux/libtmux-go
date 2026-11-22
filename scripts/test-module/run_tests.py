@@ -10,7 +10,7 @@
 MODULE is a directory named in go.work's `use` block, relative to the repository
 root. An `Example` function has no `t.Skip`, so a release that lacks the feature an
 example prints is named to `go test -skip` instead. The tmux that decides is
-`$LIBTMUX_TMUX`, or `tmux` on PATH.
+`$LIBTMUX_TEST_TMUX`, `$LIBTMUX_TMUX`, or `tmux` on PATH.
 """
 
 import os
@@ -91,6 +91,23 @@ def skip_pattern(module: str, version: str) -> str:
     return skip
 
 
+def selected_tmux(environ: Mapping[str, str]) -> str:
+    r"""Choose the tmux executable under test.
+
+    >>> selected_tmux({})
+    'tmux'
+    >>> selected_tmux({"LIBTMUX_TEST_TMUX": " \t ", "LIBTMUX_TMUX": "/opt/tmux"})
+    '/opt/tmux'
+    >>> selected_tmux({"LIBTMUX_TEST_TMUX": "/custom/tmux", "LIBTMUX_TMUX": "/opt/tmux"})
+    '/custom/tmux'
+    """
+    for name in ("LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"):
+        value = environ.get(name, "")
+        if value.strip():
+            return value
+    return "tmux"
+
+
 def tmux_version(binary: str) -> str:
     """Return the release a tmux executable reports, without the leading name."""
     reported = bounded.run(
@@ -122,11 +139,14 @@ def run(argv: Sequence[str], environ: Mapping[str, str]) -> int:
     if module not in MODULES:
         print(f"test-module: unknown module: {module}", file=sys.stderr)
         return 1
+    selected = selected_tmux(environ)
     try:
-        version = tmux_version(environ.get("LIBTMUX_TMUX") or "tmux")
+        version = tmux_version(selected)
     except (OSError, subprocess.SubprocessError) as error:
         print(f"test-module: cannot read the tmux version: {error}", file=sys.stderr)
         return 1
+    if os.sep in selected and not Path(selected).is_absolute():
+        os.environ["LIBTMUX_TEST_TMUX"] = str(Path(selected).resolve())
     arguments, skip = command(module, version, flags)
     if skip:
         print(f"test-module: tmux {version}; feature examples omitted: {skip}", flush=True)

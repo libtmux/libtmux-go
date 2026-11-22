@@ -20,6 +20,27 @@ import (
 )
 
 func TestMain(m *testing.M) { os.Exit(tmuxtest.Main(m)) }
+
+func testTmuxBinary(t testing.TB) string {
+	t.Helper()
+	candidate := "tmux"
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			candidate = value
+			break
+		}
+	}
+	resolved, err := exec.LookPath(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
 func run(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var out, diagnostic bytes.Buffer
@@ -832,10 +853,7 @@ func TestLoadColorPreflightAnd256Colors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	binary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	binary := testTmuxBinary(t)
 	dir := t.TempDir()
 	calls := filepath.Join(dir, "calls")
 	wrapper := write(t, dir, "tmux", "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$TMUX_WORKSPACE_TEST_CALLS\"\nexec \"$TMUX_WORKSPACE_TEST_TMUX\" \"$@\"\n")
@@ -1120,10 +1138,7 @@ func TestReadinessWaitsForPrompt(t *testing.T) {
 // screen. A shim tmux on PATH records every dispatched command; the last
 // select-layout for the window must precede the last send-keys.
 func TestNoLayoutChangeFollowsAPanesOwnCommand(t *testing.T) {
-	realTmux, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Skip("tmux not on PATH")
-	}
+	realTmux := testTmuxBinary(t)
 	server := tmuxtest.NewServerWithOptions(t.Context(), t, tmuxtest.ServerOptions{FixedShell: true})
 	shimDir := t.TempDir()
 	log := filepath.Join(shimDir, "argv.log")

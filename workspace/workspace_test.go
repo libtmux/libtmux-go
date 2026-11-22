@@ -22,6 +22,26 @@ func TestMain(m *testing.M) {
 	os.Exit(tmuxtest.Main(m))
 }
 
+func testTmuxBinary(t testing.TB) string {
+	t.Helper()
+	candidate := "tmux"
+	for _, variable := range []string{"LIBTMUX_TEST_TMUX", "LIBTMUX_TMUX"} {
+		if value := os.Getenv(variable); strings.TrimSpace(value) != "" {
+			candidate = value
+			break
+		}
+	}
+	resolved, err := exec.LookPath(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs, err := filepath.Abs(resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
 func mustNewServer(t testing.TB, options tmux.ServerOptions) tmux.Server {
 	t.Helper()
 
@@ -167,10 +187,7 @@ func TestBuildOwnsTheConnectionAfterItsColdBootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	invocations := filepath.Join(t.TempDir(), "invocations")
 	proxy := filepath.Join(t.TempDir(), "tmux")
 	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
@@ -341,10 +358,7 @@ func TestBuildIntoUsesTheMaterializedSessionsTransport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	proxy := filepath.Join(t.TempDir(), "tmux")
 	if err := os.Symlink(realBinary, proxy); err != nil {
 		t.Fatalf("link tmux proxy: %v", err)
@@ -1228,10 +1242,7 @@ func TestBuildIntoSendsCommandsLiterallyAndSuppressesHistory(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	dir := t.TempDir()
 	recorded := filepath.Join(dir, "invocations")
 	proxy := filepath.Join(dir, "tmux")
@@ -1295,10 +1306,7 @@ func TestBuildIntoAppliesOptionsInNameOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	dir := t.TempDir()
 	recorded := filepath.Join(dir, "invocations")
 	proxy := filepath.Join(dir, "tmux")

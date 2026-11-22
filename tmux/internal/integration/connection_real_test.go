@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -33,10 +32,7 @@ func requireNoDetachOnDestroy(t *testing.T, server tmux.Server) {
 func TestNewSessionConnectionQualifiesColdDaemonBeforeAttach(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	realBinary, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal(err)
-	}
+	realBinary := testTmuxBinary(t)
 	invocations := filepath.Join(t.TempDir(), "invocations")
 	proxy := filepath.Join(t.TempDir(), "tmux")
 	if err := os.WriteFile(proxy, []byte(`#!/bin/sh
