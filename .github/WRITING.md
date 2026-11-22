@@ -1,97 +1,41 @@
 # Writing
 
-This file governs user-facing prose, comments, errors, help, changelogs,
-release notes, Markdown, and commit messages. [CONTRIBUTING.md](CONTRIBUTING.md)
-governs development workflow.
-
-## Voice
-
-Use present tense. Lead with the subject and observable behavior, then stop.
-Keep decision history and rejected alternatives in the commit message.
-
-| Instead of | Prefer |
-| --- | --- |
-| "We added..." | "`Foo` now supports..." |
-| "powerful", "seamless" | state the capability |
-| "easy", "simple" | omit |
-| "robust" | name the handled failure |
-| "comprehensive" | name what is covered |
-| "optimized" | give the measured change |
-| "various fixes" | name the affected components |
-| "please note", "under the hood" | state the observable fact |
-| "leverage", "utilize" | "use" |
-| "best practices" | name the practice |
-
-Delete introductions that only announce the paragraph. Do not use promotional
-claims, conversational filler, unexplained emoji, or tool metadata.
+This file adds Go, `go doc`, and multi-module rules to the shared organization
+writing guide in
+[`libtmux/.github/WRITING.md`](https://github.com/libtmux/.github/blob/main/WRITING.md),
+which governs voice, plain CommonMark, `console` code blocks,
+[README shape](https://github.com/libtmux/central/blob/master/docs/decisions/0005-readme-shape.md),
+the three-gate source-comment ceiling, slop prevention, and commit and
+pull-request format. [CONTRIBUTING.md](CONTRIBUTING.md) governs development
+workflow.
 
 ## README
 
-The README explains the project; pkg.go.dev explains the API. Cover, in order:
+The README explains the project; [pkg.go.dev](https://pkg.go.dev/) explains the
+API. Follow the shared README shape, with these Go conventions:
 
-1. What the project does and why someone would use it.
-2. Installation.
-3. The smallest honest example, including error handling.
-4. Defaults, failure behavior, and support policy.
-5. Important non-goals.
-
-Commands must run literally on a clean machine. Claims must be falsifiable. A
-performance claim includes a number and its reproduction command. Do not
-duplicate package documentation or list features already clear from the API.
-
-A package page keeps one order: the install command, the release status,
-Contents, the sections, and See also, whose first row is the reference. It
-has one example a reader can paste and run, with the command that runs it and
-what it prints.
-
-A section about a call is headed by that call in a code span, linked to its
-reference page, then a colon and a short title:
+- A package page keeps one order: install command, release status, `Contents`,
+  task sections, and `See also` (whose first row is the reference), with one
+  paste-and-run example and what it prints.
+- Head a call section with that call in a code span linked to its `libtmux.org`
+  reference page, then a colon and a short title:
 
 ```text
 ### [`Session.Rename`][tmux-session-rename]: a change returns a new record
 ```
 
-A function or a type carries its package (`tmux.NewServer`), and a method or
-a field carries its type (`Session.Rename`). A page about expressions may
-head a section with the expression itself (`tmux.PaneActiveIs(true)`). Under
-the heading come the code and then what it prints. Link an API name in prose
-the first time a section uses it.
-
-## README shape
-
-A README reads at a glance. A paragraph is the exception.
-
-- The header is the logo block, a centred title, and a badge row: CI, the
-  registry version when the package is published, the libtmux.org docs, and the
-  license. A badge links only a page that returns 200.
-- A `##` section is a task in the reader's words, such as "Find sessions,
-  windows, and panes".
-- A `###` heading is one API: its name in a code span linked to its libtmux.org
-  reference page, then a colon and its job in plain words.
-- Under a heading go a line or two naming linked sibling APIs, the example, what
-  it prints, at most one short note, and a `More:` link to the guide.
-- No paragraph runs past three lines. A list of facts is a bullet list.
-- No feature inventory. The sections and their examples show what exists.
-- A requirement is a floor a reader can act on: "tmux 3.3a or newer", "Go 1.26
-  or newer". Leave out the patch version of the toolchain you used, narration of
-  the CI matrix, and kernel details; link the page that holds them.
-- Cut what a reader assumes or never needs: that examples are tested, how the
-  docs are built, what the checks cover, and "evidence", "qualification" and
-  "contract" boilerplate.
-- Packages keep their table, then one heading per package linking its source
-  directory, a one-line description, and a line of links: API reference,
-  registry, changelog.
-- "What it leaves out" and "Support and status" are short bold-lead bullets.
-- An example starts with its imports. Where a section quotes excerpts, its first
-  example is a whole program or test file, and later excerpts continue from it.
-- An example starts its own tmux server through the library, does its work, and
-  stops the server through the library on the way out. A README never asks the
-  reader to run `tmux` to set up or clean up.
-- Every displayed example comes from a file CI builds and runs;
-  [CONTRIBUTING.md](CONTRIBUTING.md#generated-documentation) has the markers.
-- The README shows each headline feature the library has, with an example under
-  an API heading: queries and filters, the planner, command chaining, the
-  optimization switches, and control mode.
+- Functions and types carry their package (`tmux.NewServer`); methods and fields
+  carry their type (`Session.Rename`). Expression pages may head a section with
+  the expression (`tmux.PaneActiveIs(true)`). Link an API name in prose the
+  first time a section uses it.
+- State actionable floors (`Go 1.26 or newer`, `tmux 3.3a or newer`) and keep
+  packages in a table followed by one `###` heading per package linking its
+  source directory, reference, and changelog.
+- Go blocks between `docs:` markers are generated from compiled, CI-executed
+  files. Edit the `.go` source and run `go generate ./...` rather than editing
+  Markdown fences by hand; see
+  [CONTRIBUTING.md](CONTRIBUTING.md#generated-documentation). A README holds no
+  Go outside them.
 
 ## Doc comments
 
@@ -117,38 +61,13 @@ under `go test` and render beside the declaration.
 
 ## Source comments
 
-Keep a source comment only when all three answers are yes:
+Apply the three-gate source-comment policy (`Loss`, standard-library ceiling,
+`Upkeep`) in
+[`libtmux/.github/WRITING.md`](https://github.com/libtmux/.github/blob/main/WRITING.md#source-comments).
 
-- **Loss:** Would deleting it make a maintainer rediscover an invariant,
-  constraint, failure mode, or non-obvious intent?
-- **Elite:** Would a mature standard-library project state it this directly and
-  at this length, without arguing or narrating?
-- **Upkeep:** Will it remain true without hand-syncing values owned by this
-  code, such as counts, offsets, or paths?
-
-Aim for one or two lines. Keep upstream quirks, protocol and compatibility
-constraints, ordering and concurrency requirements, performance trade-offs,
-and explanations for code that looks wrong but is required. A short algorithm
-sketch is useful when local operations do not reveal the whole.
-
-Delete comments that:
-
-- translate the next lines into English;
-- repeat names, types, defaults, or control flow;
-- justify or apologize for a choice instead of stating its constraint;
-- speculate about future work or preserve version-control history;
-- cite tickets, line numbers, file counts, bare commits, or local paths;
-- say "currently", "for now", or another fact likely to rot.
-
-Public doc comments and examples may include minimal usage, parameter, return,
-and error guidance. They still must be concise and maintainable. Preserve every
-comment that records an invariant, protocol constraint, platform quirk, or
-upstream workaround.
-
-Tool directives are exempt and must not be reformatted:
-`//go:build`, `//go:generate`, and `//nolint:`. Generated-doc and example
-markers are also exempt:
-`// docs:<name>`, `// docs:end`, and `// Output:`.
+Tool directives are exempt and must not be reformatted: `//go:build`,
+`//go:generate`, and `//nolint:`. Generated-doc and example markers are also
+exempt: `// docs:<name>`, `// docs:end`, and `// Output:`.
 
 ## Error messages
 
@@ -188,18 +107,14 @@ grouped by affected component rather than change type:
 Lead with a literal identifier and a concrete verb: add, fix, remove,
 deprecate, support, require, `now`, or `no longer`. Use one to three sentences.
 State changed defaults and incompatibilities explicitly, with the migration in
-the same bullet.
-
-Do not sell a fix, describe effort, or include an invisible refactor. Mention
-old behavior only when it explains a published break, and mechanism only when
-callers can observe it. Add entries under `## Unreleased`; the maintainer
-assigns versions.
+the same bullet. Omit invisible refactors; add entries under `## Unreleased` and
+let the maintainer assign versions.
 
 Each published module keeps its own `CHANGELOG.md` beside its `go.mod`, and an
 entry goes in the file of the module it changes: `workspace/CHANGELOG.md` for
 `workspace`, `mcp/CHANGELOG.md` for `mcp`, and the root `CHANGELOG.md` for the
-tmux module (`tmux`, `tmux/tmuxtest` and `tmuxq`). A change that spans modules,
-such as documentation, CI, release tooling, `examples` or `internal/tools`,
+tmux module (`tmux`, `tmux/tmuxtest`, and `tmuxq`). A change that spans modules,
+such as documentation, CI, release tooling, `examples`, or `internal/tools`,
 goes in the root file. The modules are tagged together, so a release heading
 names the tags of its release, and a release with nothing for a module says
 ``No entries for `workspace`.`` under it.
@@ -207,102 +122,18 @@ names the tags of its release, and a release with nothing for a module says
 ## Release notes
 
 Release notes brief an upgrader; they do not repeat the ledger. Lead with the
-two or three changes worth noticing. For each, state the change, its
-implication, and any required action. Identify API, behavior, performance,
-operational, and migration effects; say when no action is required.
+two or three changes worth noticing, stating each change, its implication, and
+any required action (or when none is required).
 
 A retracted release gets a `retract` directive in `go.mod` and a same-day note.
 A security fix names its GHSA or CVE and is filed with the Go vulnerability
 database. [Go's release notes](https://go.dev/doc/go1.24) are the model.
 
-## Markdown
-
-Use plain CommonMark. Do not use GitHub alert blocks such as `> [!NOTE]`; state
-the fact in prose. Tables, badges, and links are allowed.
-
-Wrap repository Markdown at 80 columns. Do not hard-wrap pull-request or issue
-bodies because GitHub renders those newlines as line breaks.
-
-## Code blocks
-
-A code block is one paste-and-run action. Executed examples are exempt.
-
-- Put one command in each block. An explicit `&&`, `;`, or `\` continuation is
-  one command.
-- Put explanations in prose above the block, not shell comments inside it.
-- Give each command in a menu its own block and prose lead-in.
-- Mark shell commands as `console` and prefix them with `$ `.
-- Split long commands with `\`, one flag or flag-value pair per line, with
-  positional arguments last.
-
-Show the last ten commits as a graph:
-
-```console
-$ git log \
-    --max-count=10 \
-    --graph \
-    --oneline
-```
-
-Go blocks between `docs:` markers are generated. Edit their source, not the
-Markdown block; [CONTRIBUTING.md](CONTRIBUTING.md#generated-documentation) has
-the markers and the tests behind them. A README holds no Go outside them.
-
 ## Commits
 
-```text
-Scope(type[detail]): concise description
-
-why: Explanation of necessity or impact.
-
-what:
-- Specific technical changes made
-- Focused on a single topic
-```
-
-Keep subjects to 50 characters, excluding a trailing `(#NN)`, and body lines
-to 72. Use an imperative verb phrase. Separate `why:` and `what:` with a blank
-line. Put rationale and rejected alternatives here rather than in source
-comments.
-
-Each commit contains one logical change. Do not use `wip` or "address review"
-as subjects. Common subject forms include `feat`, `fix`, `refactor`, `docs`,
-`chore`, `test`, `style`, `go(deps)`, `go(deps[dev])`, and
-`ai(rules[AGENTS])`.
-
-```text
-Pane(feat[send_keys]): Add a literal flag
-
-why: Send characters without tmux interpreting them.
-
-what:
-- Add a Literal field to SendKeysRequest
-- Pass -l when it is set
-```
-
-Use a heredoc to preserve formatting:
-
-```console
-$ git commit -m "$(cat <<'EOF'
-Scope(feat[detail]): Concise description
-
-why: Explanation of the change.
-
-what:
-- First change
-- Second change
-EOF
-)"
-```
-
-### Release commits
-
-Never create or push tags; a tag triggers publication and belongs to the owner.
-Use `Tag v<version>` as the release commit subject, without the normal scoped
-format.
-
-## Review for slop
-
-Remove AI signatures, filler, diff narration, branch-internal history, ownerless
-TODOs, unused future-proofing, debug artifacts, and coded labels such as `[R1]`
-or `Option B`. Keep only concrete behavior, constraints, and trade-offs.
+Follow `Scope(type[detail]): concise description` (50-character subject,
+72-character body lines, `why:` and `what:` separated by a blank line) from
+[`libtmux/.github/WRITING.md`](https://github.com/libtmux/.github/blob/main/WRITING.md#commits-and-pull-requests).
+Common Go scopes and types include `Pane(feat[send_keys])`, `go(deps)`,
+`go(deps[dev])`, and `ai(rules[AGENTS])`. Release commits use `Tag v<version>`
+without the scoped prefix; never create or push tags except as the maintainer.

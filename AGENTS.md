@@ -38,7 +38,8 @@ subprocess transport, the checked-in generators, and `internal/integration`.
 - Building, testing, linting, the Go floor, the tmux matrix, and pull requests:
   [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)
 - Anything under `mcp/`: [mcp/AGENTS.md](mcp/AGENTS.md)
-- Reporting or assessing a vulnerability: [SECURITY.md](SECURITY.md)
+- Reporting or assessing a vulnerability:
+  [`libtmux/.github/SECURITY.md`](https://github.com/libtmux/.github/blob/main/SECURITY.md)
 
 Each of those is the single home for its subject. Where a rule seems to be
 stated twice, the file listed above is the one that governs.
