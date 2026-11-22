@@ -136,6 +136,15 @@ startup pins the qualified Unix socket in a private directory before `-C`; it
 fails if the filesystem cannot hard-link that socket. The carrier is removed
 once the client is registered.
 
+## Waiting for a program to exit
+
+Unpatched tmux builds before 3.6 linked with `libutempter` can leave a pane's
+exit status unset until another child exits. [`Running.Wait`][tmux-running-wait]
+asks tmux to reap again and can return
+[`ErrOutcomeUnrecorded`][tmux-erroutcomeunrecorded] if the outcome stays
+unavailable. Use tmux 3.6+ or a build with the
+[upstream fix](https://github.com/tmux/tmux/commit/fa5f3cef3d651b0eb9abfa77fc37ccade81679b5).
+
 ## Waiting for pane text
 
 [`Pane.WaitForText`][tmux-pane-waitfortext] polls on every supported release
@@ -180,6 +189,8 @@ is the push-based wait and needs 3.7.
 [contract-version]: #the-tmux-version-check
 [tmux-errversiontoolow]: https://libtmux.org/en/go/latest/reference/tmux-errversiontoolow/
 [tmux-server-version]: https://libtmux.org/en/go/latest/reference/tmux-server-version/
+[tmux-running-wait]: https://libtmux.org/en/go/latest/reference/tmux-running-wait/
+[tmux-erroutcomeunrecorded]: https://libtmux.org/en/go/latest/reference/tmux-erroutcomeunrecorded/
 [tmux-unsupportedpolicy]: https://libtmux.org/en/go/latest/reference/tmux-unsupportedpolicy/
 [tmux-pane-waitfortext]: https://libtmux.org/en/go/latest/reference/tmux-pane-waitfortext/
 [tmux-paneobservation-waitfor]: https://libtmux.org/en/go/latest/reference/tmux-paneobservation-waitfor/
